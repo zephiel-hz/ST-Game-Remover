@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>SGR</AssemblyName>
+    <RootNamespace>SGR</RootNamespace>
+    <Product>SGR by Vamola</Product>
+    <ApplicationIcon>SGR.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Tambahkan properti versi di bawah ini -->
+    <Version>1.0.7</Version>
+    <AssemblyVersion>1.0.7.0</AssemblyVersion>
+    <FileVersion>1.0.7.0</FileVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="SGR.ico" />
+  </ItemGroup>
+
+</Project>

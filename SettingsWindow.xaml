@@ -1,0 +1,176 @@
+<Window x:Class="SteamPluginManager.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wc="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="Settings" 
+        Height="500" Width="750"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource BackgroundBrush}"
+        Foreground="{DynamicResource ForegroundBrush}">
+    
+    <WindowChrome.WindowChrome>
+        <wc:WindowChrome CaptionHeight="0"
+                          ResizeBorderThickness="0"
+                          CornerRadius="12"
+                          GlassFrameThickness="0"
+                          UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+    
+    <Window.Resources>
+        <!-- Button Control Template matching MainWindow style -->
+        <ControlTemplate x:Key="SettingsButtonTemplate" TargetType="Button">
+            <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="root" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                    <Setter TargetName="root" Property="Opacity" Value="0.95"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter TargetName="root" Property="Opacity" Value="0.8"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter TargetName="root" Property="Opacity" Value="0.6"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <!-- Border Style for Settings Sections -->
+        <Style x:Key="SettingsSectionBorder" TargetType="Border">
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="20"/>
+            <Setter Property="Margin" Value="0,0,0,20"/>
+            <Setter Property="Background" Value="{DynamicResource BackgroundBrush}"/>
+        </Style>
+
+        <!-- TextBlock Style for Section Titles -->
+        <Style x:Key="SettingsSectionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+        </Style>
+
+        <!-- TextBlock Style for Regular Text -->
+        <Style x:Key="SettingsText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+        </Style>
+    </Window.Resources>
+    
+    <Grid>
+        <DockPanel Margin="20">
+            <!-- Title Bar Area -->
+            <Border DockPanel.Dock="Top" 
+                    Margin="0,0,0,20"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="0,0,0,1"
+                    Padding="0,0,0,20">
+                <TextBlock Text="SETTINGS" 
+                           FontSize="28" 
+                           FontWeight="Bold" 
+                           Foreground="{DynamicResource ForegroundBrush}"/>
+            </Border>
+            
+            <!-- Close Button at Bottom -->
+            <StackPanel DockPanel.Dock="Bottom"
+                        Orientation="Horizontal" 
+                        HorizontalAlignment="Right"
+                        Margin="0,25,0,0">
+                <Button x:Name="CloseButton"
+                        Content="CLOSE" 
+                        Width="120" 
+                        Height="38"
+                        Padding="8,6"
+                        Background="{DynamicResource PrimaryButtonBrush}"
+                        Foreground="{DynamicResource ForegroundBrush}"
+                        BorderThickness="0"
+                        FontWeight="SemiBold"
+                        FontSize="12"
+                        Click="CloseButton_Click"
+                        Cursor="Hand"
+                        Template="{StaticResource SettingsButtonTemplate}"/>
+            </StackPanel>
+
+            <!-- Content Area -->
+            <ScrollViewer VerticalScrollBarVisibility="Auto" DockPanel.Dock="Top">
+                <StackPanel>
+                    <!-- Cache Section -->
+                    <Border Style="{StaticResource SettingsSectionBorder}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="CACHE" Style="{StaticResource SettingsSectionTitle}"/>
+                                <TextBlock x:Name="CacheSizeText"
+                                           Text="0 KB of Cache" 
+                                           Style="{StaticResource SettingsText}"/>
+                            </StackPanel>
+
+                            <Button Grid.Column="1"
+                                    Content="CLEAR CACHE" 
+                                    Width="140" 
+                                    Height="36"
+                                    Padding="8,6"
+                                    Background="{DynamicResource PrimaryButtonBrush}"
+                                    Foreground="{DynamicResource ForegroundBrush}"
+                                    BorderThickness="0"
+                                    FontWeight="SemiBold"
+                                    FontSize="11"
+                                    Click="ClearCacheButton_Click"
+                                    Cursor="Hand"
+                                    VerticalAlignment="Center"
+                                    Margin="20,0,0,0"
+                                    Template="{StaticResource SettingsButtonTemplate}"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- About Section -->
+                    <Border Style="{StaticResource SettingsSectionBorder}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="ABOUT" Style="{StaticResource SettingsSectionTitle}"/>
+                                <TextBlock x:Name="VersionText"
+                                           Text="Version 1.0.0" 
+                                           Style="{StaticResource SettingsText}"/>
+                                <TextBlock x:Name="CreatedByText"
+                                           Text="Created by: Zephiel" 
+                                           Margin="0,4,0,0"
+                                           Style="{StaticResource SettingsText}"/>
+                            </StackPanel>
+
+                            <Button Grid.Column="1"
+                                    Content="CHECK FOR UPDATE" 
+                                    Width="160" 
+                                    Height="36"
+                                    Padding="8,6"
+                                    Background="{DynamicResource PrimaryButtonBrush}"
+                                    Foreground="{DynamicResource ForegroundBrush}"
+                                    BorderThickness="0"
+                                    FontWeight="SemiBold"
+                                    FontSize="11"
+                                    Click="CheckUpdateButton_Click"
+                                    Cursor="Hand"
+                                    VerticalAlignment="Center"
+                                    Margin="20,0,0,0"
+                                    Template="{StaticResource SettingsButtonTemplate}"/>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+    </Grid>
+</Window>

@@ -1,0 +1,107 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <SolidColorBrush x:Key="BackgroundBrush" Color="#FFFFFF"/>
+  <SolidColorBrush x:Key="ForegroundBrush" Color="#000000"/>
+  <SolidColorBrush x:Key="BorderBrush" Color="#CCCCCC"/>
+  <SolidColorBrush x:Key="DangerButtonBrush" Color="#E74C3C"/>
+  <SolidColorBrush x:Key="PrimaryButtonBrush" Color="#3498DB"/>
+  <SolidColorBrush x:Key="SuccessButtonBrush" Color="#2ECC71"/>
+  <SolidColorBrush x:Key="WarningButtonBrush" Color="#F39C12"/>
+  <SolidColorBrush x:Key="PurpleButtonBrush" Color="#9B59B6"/>
+  <SolidColorBrush x:Key="HoverBrush" Color="#F5F5F5"/>
+  <SolidColorBrush x:Key="SelectedBrush" Color="#D0E8FF"/>
+  <SolidColorBrush x:Key="HeaderBackgroundBrush" Color="#F8F9FA"/>
+  <SolidColorBrush x:Key="CardBackgroundBrush" Color="#FFFFFF"/>
+  <SolidColorBrush x:Key="InputBackgroundBrush" Color="#FFFFFF"/>
+  <SolidColorBrush x:Key="InputForegroundBrush" Color="#000000"/>
+  <SolidColorBrush x:Key="ComboBoxBackgroundBrush" Color="#FFFFFF"/>
+  <SolidColorBrush x:Key="ComboBoxForegroundBrush" Color="#000000"/>
+  <SolidColorBrush x:Key="ComboBoxItemForegroundBrush" Color="#000000"/>
+  <SolidColorBrush x:Key="PlaceholderBrush" Color="#888888"/>
+  <SolidColorBrush x:Key="AlternatingRowBrush" Color="#FAFAFA"/>
+
+  <Style TargetType="GridSplitter">
+    <Setter Property="Background" Value="#1F000000" />
+    <Setter Property="Width" Value="5" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+  </Style>
+
+  <Style TargetType="ListViewItem">
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource BackgroundBrush}"/>
+    <Setter Property="Margin" Value="0"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ListViewItem">
+          <Border Background="{TemplateBinding Background}"
+                  BorderBrush="{DynamicResource BorderBrush}"
+                  BorderThickness="0"
+                  CornerRadius="0"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter/>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+    <Style.Triggers>
+      <Trigger Property="IsMouseOver" Value="True">
+        <Setter Property="Background" Value="{DynamicResource HoverBrush}"/>
+      </Trigger>
+      <DataTrigger Binding="{Binding IsSelected}" Value="True">
+        <Setter Property="Background" Value="{DynamicResource SelectedBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+      </DataTrigger>
+      <!-- Alternating row colors to match dark theme layout -->
+      <Trigger Property="ItemsControl.AlternationIndex" Value="0">
+        <Setter Property="Background" Value="{DynamicResource BackgroundBrush}"/>
+      </Trigger>
+      <Trigger Property="ItemsControl.AlternationIndex" Value="1">
+        <Setter Property="Background" Value="{DynamicResource AlternatingRowBrush}"/>
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
+  <!-- GridViewColumnHeader Style to mirror dark theme layout -->
+  <Style TargetType="GridViewColumnHeader">
+    <Setter Property="Background" Value="{DynamicResource HeaderBackgroundBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+    <Setter Property="BorderThickness" Value="0,0,1,1"/>
+    <Setter Property="Padding" Value="8,6"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="FontSize" Value="12"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="GridViewColumnHeader">
+          <Border Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+    <Style.Triggers>
+      <Trigger Property="IsMouseOver" Value="True">
+        <Setter Property="Background" Value="{DynamicResource HoverBrush}"/>
+      </Trigger>
+      <!-- Collapse the auto-generated padding column at the far right -->
+      <Trigger Property="Role" Value="Padding">
+        <Setter Property="Width" Value="0"/>
+        <Setter Property="Visibility" Value="Collapsed"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Margin" Value="0"/>
+        <Setter Property="BorderThickness" Value="0"/>
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style TargetType="ComboBoxItem">
+    <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource ComboBoxItemForegroundBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+  </Style>
+</ResourceDictionary>

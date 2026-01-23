@@ -1,0 +1,1270 @@
+﻿<Window x:Class="SteamPluginManager.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wc="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:local="clr-namespace:SteamPluginManager" xmlns:helpers="clr-namespace:SteamPluginManager.Helpers" xmlns:sys="clr-namespace:System;assembly=mscorlib"
+        Title="ST Game Remover" Height="700" Width="1200"
+        WindowStyle="None" ResizeMode="CanResize"
+        MaxHeight="{Binding Source={x:Static SystemParameters.MaximizedPrimaryScreenHeight}}"
+        MaxWidth="{Binding Source={x:Static SystemParameters.MaximizedPrimaryScreenWidth}}"
+        Background="{DynamicResource BackgroundBrush}"
+        Foreground="{DynamicResource ForegroundBrush}"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown"
+        AllowDrop="True">
+    <WindowChrome.WindowChrome>
+        <wc:WindowChrome CaptionHeight="0"
+                          ResizeBorderThickness="7"
+                          CornerRadius="12"
+                          GlassFrameThickness="0"
+                          UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        <helpers:WidthToColumnsConverter x:Key="WidthToColumnsConverter"/>
+        <!-- Global UI scale: lower values make the UI feel more compact/airy -->
+        <sys:Double x:Key="UI_Scale">0.95</sys:Double>
+        
+        <!-- Window control button style -->
+        <Style x:Key="WindowButton" TargetType="Button">
+            <Setter Property="Width" Value="40"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="root" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                <Setter TargetName="root" Property="Opacity" Value="0.95"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="root" Property="Opacity" Value="0.8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="CloseWindowButton" BasedOn="{StaticResource WindowButton}" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="root" Property="Background" Value="{DynamicResource DangerButtonBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter TargetName="root" Property="Opacity" Value="0.95"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="root" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- Cool Header Text Effect -->
+        <DropShadowEffect x:Key="HeaderTextEffect" 
+                          Color="#000000" 
+                          BlurRadius="8" 
+                          ShadowDepth="2" 
+                          Opacity="0.3"/>
+        
+        <!-- Cool Header Text Brush -->
+        <LinearGradientBrush x:Key="HeaderTextBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#FF6B73FF" Offset="0"/>
+            <GradientStop Color="#FF9A4DFF" Offset="0.5"/>
+            <GradientStop Color="#FF4ECDC4" Offset="1"/>
+        </LinearGradientBrush>
+        
+        <!-- Running Gradient Animation -->
+        <Storyboard x:Key="RunningGradientStoryboard" RepeatBehavior="Forever">
+            <ColorAnimation Storyboard.TargetName="HeaderTextBlock" 
+                           Storyboard.TargetProperty="(TextBlock.Foreground).(LinearGradientBrush.GradientStops)[0].(GradientStop.Color)"
+                           From="#FF6B73FF" To="#FF9A4DFF" Duration="0:0:1.5">
+                <ColorAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseInOut"/>
+                </ColorAnimation.EasingFunction>
+            </ColorAnimation>
+            <ColorAnimation Storyboard.TargetName="HeaderTextBlock" 
+                           Storyboard.TargetProperty="(TextBlock.Foreground).(LinearGradientBrush.GradientStops)[0].(GradientStop.Color)"
+                           From="#FF9A4DFF" To="#FF4ECDC4" Duration="0:0:1.5"
+                           BeginTime="0:0:1.5">
+                <ColorAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseInOut"/>
+                </ColorAnimation.EasingFunction>
+            </ColorAnimation>
+            <ColorAnimation Storyboard.TargetName="HeaderTextBlock" 
+                           Storyboard.TargetProperty="(TextBlock.Foreground).(LinearGradientBrush.GradientStops)[0].(GradientStop.Color)"
+                           From="#FF4ECDC4" To="#FF6B73FF" Duration="0:0:1.5"
+                           BeginTime="0:0:3">
+                <ColorAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseInOut"/>
+                </ColorAnimation.EasingFunction>
+            </ColorAnimation>
+            
+            <ColorAnimation Storyboard.TargetName="HeaderTextBlock" 
+                           Storyboard.TargetProperty="(TextBlock.Foreground).(LinearGradientBrush.GradientStops)[1].(GradientStop.Color)"
+                           From="#FF9A4DFF" To="#FF4ECDC4" Duration="0:0:1.5">
+                <ColorAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseInOut"/>
+                </ColorAnimation.EasingFunction>
+            </ColorAnimation>
+            <ColorAnimation Storyboard.TargetName="HeaderTextBlock" 
+                           Storyboard.TargetProperty="(TextBlock.Foreground).(LinearGradientBrush.GradientStops)[1].(GradientStop.Color)"
+                           From="#FF4ECDC4" To="#FF6B73FF" Duration="0:0:1.5"
+                           BeginTime="0:0:1.5">
+                <ColorAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseInOut"/>
+                </ColorAnimation.EasingFunction>
+            </ColorAnimation>
+            <ColorAnimation Storyboard.TargetName="HeaderTextBlock" 
+                           Storyboard.TargetProperty="(TextBlock.Foreground).(LinearGradientBrush.GradientStops)[1].(GradientStop.Color)"
+                           From="#FF6B73FF" To="#FF9A4DFF" Duration="0:0:1.5"
+                           BeginTime="0:0:3">
+                <ColorAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseInOut"/>
+                </ColorAnimation.EasingFunction>
+            </ColorAnimation>
+            
+            <ColorAnimation Storyboard.TargetName="HeaderTextBlock" 
+                           Storyboard.TargetProperty="(TextBlock.Foreground).(LinearGradientBrush.GradientStops)[2].(GradientStop.Color)"
+                           From="#FF4ECDC4" To="#FF6B73FF" Duration="0:0:1.5">
+                <ColorAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseInOut"/>
+                </ColorAnimation.EasingFunction>
+            </ColorAnimation>
+            <ColorAnimation Storyboard.TargetName="HeaderTextBlock" 
+                           Storyboard.TargetProperty="(TextBlock.Foreground).(LinearGradientBrush.GradientStops)[2].(GradientStop.Color)"
+                           From="#FF6B73FF" To="#FF9A4DFF" Duration="0:0:1.5"
+                           BeginTime="0:0:1.5">
+                <ColorAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseInOut"/>
+                </ColorAnimation.EasingFunction>
+            </ColorAnimation>
+            <ColorAnimation Storyboard.TargetName="HeaderTextBlock" 
+                           Storyboard.TargetProperty="(TextBlock.Foreground).(LinearGradientBrush.GradientStops)[2].(GradientStop.Color)"
+                           From="#FF9A4DFF" To="#FF4ECDC4" Duration="0:0:1.5"
+                           BeginTime="0:0:3">
+                <ColorAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseInOut"/>
+                </ColorAnimation.EasingFunction>
+            </ColorAnimation>
+        </Storyboard>
+        
+        <!-- Smooth Theme Transition Storyboard -->
+        <Storyboard x:Key="ThemeTransitionStoryboard" x:Name="ThemeTransitionAnimation">
+            <!-- Simplified theme transition without Root reference -->
+        </Storyboard>
+
+        <!-- Animated Theme Toggle Style -->
+        <Style x:Key="ThemeToggleStyle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="60"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid>
+                            <!-- Track -->
+                            <Border x:Name="Track" CornerRadius="16" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"/>
+                            <!-- Active color overlay for smooth color transition -->
+                            <Border x:Name="ActiveOverlay" CornerRadius="16" Background="{DynamicResource PrimaryButtonBrush}" Opacity="0"/>
+
+                            <!-- Thumb -->
+                            <Grid x:Name="Thumb" Width="28" Height="28" Margin="2" HorizontalAlignment="Left">
+                                <Grid.RenderTransform>
+                                    <TranslateTransform X="0"/>
+                                </Grid.RenderTransform>
+                                <Border CornerRadius="14" Background="{DynamicResource CardBackgroundBrush}">
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="0" Opacity="0.3"/>
+                                    </Border.Effect>
+                                </Border>
+                                <Grid>
+                                    <Grid.RenderTransform>
+                                        <ScaleTransform x:Name="ThumbContentScale" ScaleX="1" ScaleY="1"/>
+                                    </Grid.RenderTransform>
+                                    <Viewbox Stretch="Uniform">
+                                        <Grid Width="16" Height="16">
+                                            <!-- Sun: glow + core + rays -->
+                                            <Grid x:Name="SunIcon" Opacity="0">
+                                                <Ellipse x:Name="SunGlow" Width="16" Height="16" Opacity="0.85">
+                                                    <Ellipse.Fill>
+                                                        <RadialGradientBrush GradientOrigin="0.4,0.4" Center="0.5,0.5" RadiusX="0.6" RadiusY="0.6">
+                                                            <GradientStop Color="#FFFFF0B3" Offset="0"/>
+                                                            <GradientStop Color="#FFFFD07A" Offset="0.55"/>
+                                                            <GradientStop Color="#00FFC04D" Offset="1"/>
+                                                        </RadialGradientBrush>
+                                                    </Ellipse.Fill>
+                                                </Ellipse>
+                                                <Ellipse Width="10" Height="10" Fill="#FFF5C97A" Stroke="{DynamicResource ForegroundBrush}" StrokeThickness="0.8"/>
+                                                <Path Data="M8,0 L8,2 M8,14 L8,16 M0,8 L2,8 M14,8 L16,8 M2.3,2.3 L3.8,3.8 M12.2,12.2 L13.7,13.7 M2.3,13.7 L3.8,12.2 M12.2,3.8 L13.7,2.3" Stroke="{DynamicResource ForegroundBrush}" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                            </Grid>
+
+                                            <!-- Moon: crescent + star with soft glow -->
+                                            <Grid x:Name="MoonIcon" Opacity="1">
+                                                <Grid.Effect>
+                                                    <DropShadowEffect Color="#90FFFFFF" BlurRadius="10" ShadowDepth="0" Opacity="0.6"/>
+                                                </Grid.Effect>
+                                                <Path Fill="{DynamicResource ForegroundBrush}" Data="M10.5,8.5 A5.5,5.5 0 1,1 5,3 A4.5,4.5 0 1,0 10.5,8.5 Z"/>
+                                                <Path Fill="{DynamicResource ForegroundBrush}" Data="M14,4 A1,1 0 1 1 12,4 A1,1 0 1 1 14,4 Z"/>
+                                            </Grid>
+                                        </Grid>
+                                    </Viewbox>
+                                </Grid>
+                            </Grid>
+
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CheckStates">
+                                    <VisualState x:Name="Unchecked">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Thumb" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" To="0" Duration="0:0:0.35">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <SineEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="SunIcon" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.28">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <SineEase EasingMode="EaseInOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="MoonIcon" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.28">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <SineEase EasingMode="EaseInOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="ActiveOverlay" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.30">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <SineEase EasingMode="EaseInOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Checked">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Thumb" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" To="28" Duration="0:0:0.35">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <SineEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="SunIcon" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.28">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <SineEase EasingMode="EaseInOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="MoonIcon" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.28">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <SineEase EasingMode="EaseInOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="ActiveOverlay" Storyboard.TargetProperty="Opacity" To="0.25" Duration="0:0:0.30">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <SineEase EasingMode="EaseInOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </VisualState>
+                                </VisualStateGroup>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal"/>
+                                    <VisualState x:Name="MouseOver">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Track" Storyboard.TargetProperty="Opacity" To="0.95" Duration="0:0:0.12"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Track" Storyboard.TargetProperty="Opacity" To="0.9" Duration="0:0:0.12"/>
+                                            <DoubleAnimation Storyboard.TargetName="ThumbContentScale" Storyboard.TargetProperty="ScaleX" To="0.96" Duration="0:0:0.08" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="ThumbContentScale" Storyboard.TargetProperty="ScaleY" To="0.96" Duration="0:0:0.08" AutoReverse="True"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Track" Storyboard.TargetProperty="Opacity" To="0.6" Duration="0:0:0.12"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Game Card Style: used by each card in the grid -->
+        <Style x:Key="GameCardStyle" TargetType="Border">
+            <Setter Property="MinWidth" Value="220"/>
+            <Setter Property="MaxWidth" Value="360"/>
+            <Setter Property="MinHeight" Value="220"/>
+            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Margin" Value="8"/>
+            <Setter Property="Padding" Value="12,12,12,16"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="VerticalAlignment" Value="Stretch"/>
+            <!-- Make cards visible on light backgrounds by using the theme border and a subtle shadow -->
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <!-- Subtle default shadow for light theme; hover state increases opacity -->
+                    <DropShadowEffect Color="#000000" BlurRadius="8" ShadowDepth="0" Opacity="0.06"/>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource HoverBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource PrimaryButtonBrush}"/>
+                    <Setter Property="Effect">
+                        <Setter.Value>
+                            <DropShadowEffect Color="#000000" BlurRadius="16" ShadowDepth="0" Opacity="0.35"/>
+                        </Setter.Value>
+                    </Setter>
+                    <Setter Property="RenderTransform">
+                        <Setter.Value>
+                            <ScaleTransform ScaleX="1.01" ScaleY="1.01"/>
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+
+                <!-- Visual state when item is selected -->
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource PrimaryButtonBrush}"/>
+                    <Setter Property="BorderThickness" Value="2"/>
+                    <Setter Property="Background" Value="{DynamicResource SelectedBrush}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource PrimaryButtonBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="20,8"/>
+            <Setter Property="Margin" Value="4"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="root" Background="{TemplateBinding Background}" 
+                                CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" 
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="root" Property="Opacity" Value="0.95"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="root" Property="Opacity" Value="0.9"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.6"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource InputForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4">
+                            <ScrollViewer x:Name="PART_ContentHost" 
+                                          Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Orientation="Horizontal">
+                            <Grid Width="18" Height="18">
+                                <Border x:Name="box" CornerRadius="4"
+                                        Background="{DynamicResource InputBackgroundBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        BorderThickness="1"/>
+                                <Path x:Name="check"
+                                      Data="M 3 10 L 7 14 L 15 5"
+                                      Stroke="White" StrokeThickness="2"
+                                      StrokeEndLineCap="Round" StrokeStartLineCap="Round"
+                                      Visibility="Collapsed"/>
+                            </Grid>
+                            <ContentPresenter Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="box" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="box" Property="Background" Value="{DynamicResource PrimaryButtonBrush}"/>
+                                <Setter TargetName="box" Property="BorderBrush" Value="{DynamicResource PrimaryButtonBrush}"/>
+                                <Setter TargetName="check" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.6"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="10"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="{TemplateBinding Background}">
+                            <Track x:Name="PART_Track" IsDirectionReversed="true">
+                                <Track.Thumb>
+                                    <Thumb Background="{DynamicResource BorderBrush}"/>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern ComboBox Style -->
+        <Style TargetType="ComboBox">
+            <Setter Property="Background" Value="{DynamicResource ComboBoxBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ComboBoxForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="MinWidth" Value="120"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Border x:Name="Border" 
+                                    Background="{TemplateBinding Background}" 
+                                    BorderBrush="{TemplateBinding BorderBrush}" 
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="8">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="32"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <!-- Content area with proper padding -->
+                                    <ContentPresenter Grid.Column="0"
+                                                      x:Name="ContentSite"
+                                                      IsHitTestVisible="False"
+                                                      Content="{TemplateBinding SelectionBoxItem}"
+                                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                      ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                                      Margin="12,0,8,0"
+                                                      VerticalAlignment="Center"
+                                                      HorizontalAlignment="Left"
+                                                      TextElement.Foreground="{TemplateBinding Foreground}"/>
+                                    
+                                    <!-- Full-width clickable area -->
+                                    <ToggleButton Grid.Column="0"
+                                                  Grid.ColumnSpan="2"
+                                                  x:Name="ToggleButton"
+                                                  Background="Transparent"
+                                                  BorderThickness="0"
+                                                  Focusable="False"
+                                                  IsChecked="{Binding Path=IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                                  ClickMode="Press"
+                                                  HorizontalAlignment="Stretch"
+                                                  VerticalAlignment="Stretch"
+                                                  Margin="0">
+                                        <ToggleButton.Template>
+                                            <ControlTemplate TargetType="ToggleButton">
+                                                <Border Background="{TemplateBinding Background}" 
+                                                        CornerRadius="8"/>
+                                            </ControlTemplate>
+                                        </ToggleButton.Template>
+                                    </ToggleButton>
+                                    
+                                    <!-- Arrow icon overlay -->
+                                    <Path Grid.Column="1"
+                                          x:Name="Arrow"
+                                          Data="M 0 0 L 4 4 L 8 0 Z"
+                                          Fill="{DynamicResource ForegroundBrush}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Margin="0,2,0,0"
+                                          IsHitTestVisible="False">
+                                        <Path.RenderTransform>
+                                            <RotateTransform x:Name="ArrowRotate" Angle="0" CenterX="4" CenterY="2"/>
+                                        </Path.RenderTransform>
+                                    </Path>
+                                </Grid>
+                            </Border>
+                            
+                            <Popup x:Name="Popup"
+                                   Placement="Bottom"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   PopupAnimation="Slide">
+                                <Border x:Name="DropDownBorder"
+                                        Background="{DynamicResource CardBackgroundBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="8"
+                                        Margin="0,4,0,0"
+                                        MinWidth="{TemplateBinding ActualWidth}"
+                                        MaxHeight="200">
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="#000000" BlurRadius="12" ShadowDepth="2" Opacity="0.3"/>
+                                    </Border.Effect>
+                                    <ScrollViewer Margin="0,4" SnapsToDevicePixels="True">
+                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource PrimaryButtonBrush}"/>
+                                <Setter TargetName="Border" Property="Opacity" Value="0.95"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.6"/>
+                            </Trigger>
+                            <Trigger Property="IsDropDownOpen" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="ArrowRotate"
+                                                             Storyboard.TargetProperty="Angle"
+                                                             To="180"
+                                                             Duration="0:0:0.2">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="ArrowRotate"
+                                                             Storyboard.TargetProperty="Angle"
+                                                             To="0"
+                                                             Duration="0:0:0.2">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern ComboBoxItem Style -->
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource ComboBoxItemForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="ItemBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="6"
+                                Margin="4,2">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource PrimaryButtonBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ListViewItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="Padding" Value="6,8"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListViewItem">
+                        <Border Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <!-- Use GridViewRowPresenter so columns align with GridView headers -->
+                            <GridViewRowPresenter 
+                                Content="{TemplateBinding Content}" 
+                                Columns="{Binding Path=View.Columns, RelativeSource={RelativeSource AncestorType=ListView}}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource HoverBrush}"/>
+                </Trigger>
+                <Trigger Property="ItemsControl.AlternationIndex" Value="1">
+                    <Setter Property="Background" Value="{DynamicResource AlternatingRowBrush}"/>
+                </Trigger>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource SelectedBrush}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Navbar Button Style -->
+        <Style x:Key="NavButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="15,12"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="NavButtonBorder" 
+                                Background="{TemplateBinding Background}" 
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Left" 
+                                              VerticalAlignment="Center"
+                                              Content="{TemplateBinding Content}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="NavButtonBorder" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="NavButtonBorder" Property="Opacity" Value="0.8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Active Navbar Button Style -->
+        <Style x:Key="ActiveNavButtonStyle" TargetType="Button" BasedOn="{StaticResource NavButtonStyle}">
+            <Setter Property="Background" Value="{DynamicResource PrimaryButtonBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+    </Window.Resources>
+
+        <Grid x:Name="RootGrid" Margin="12" AllowDrop="True" DragEnter="RootGrid_DragEnter" DragOver="RootGrid_DragOver" Drop="RootGrid_Drop">
+        <Grid.LayoutTransform>
+            <ScaleTransform ScaleX="{DynamicResource UI_Scale}" ScaleY="{DynamicResource UI_Scale}"/>
+        </Grid.LayoutTransform>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Top Window Controls Bar (separate card) -->
+        <Border x:Name="TitleBarArea" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="1" Background="{DynamicResource CardBackgroundBrush}" 
+                CornerRadius="10" Padding="4" Margin="0,0,0,8">
+            <Grid MouseLeftButtonDown="TitleBarArea_MouseLeftButtonDown">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <Button x:Name="MinimizeButton" Style="{StaticResource WindowButton}" Click="MinimizeButton_Click" ToolTip="{DynamicResource Window.Minimize}">
+                        <Path Data="M 3 14 L 17 14" Stroke="{DynamicResource ForegroundBrush}" StrokeThickness="1.6" StrokeStartLineCap="Square" StrokeEndLineCap="Square"/>
+                    </Button>
+                    <Button x:Name="MaximizeButton" Style="{StaticResource WindowButton}" Click="MaximizeButton_Click" ToolTip="{DynamicResource Window.MaxRestore}">
+                        <Path x:Name="MaxIcon" Data="M 5 5 L 15 5 L 15 15 L 5 15 Z" Stroke="{DynamicResource ForegroundBrush}" StrokeThickness="1.6" Fill="Transparent"/>
+                    </Button>
+                    <Button x:Name="CloseButtonWin" Style="{StaticResource CloseWindowButton}" Click="CloseButtonWin_Click" ToolTip="{DynamicResource Window.Close}">
+                        <Path Data="M 5 5 L 15 15 M 15 5 L 5 15" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        
+
+        <!-- Header Section -->
+        <Border x:Name="HeaderBorder" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="1" Background="{DynamicResource HeaderBackgroundBrush}" 
+                CornerRadius="10" Padding="12" Margin="0,0,0,8">
+            <Border.Effect>
+                <DropShadowEffect Color="#000000" BlurRadius="12" ShadowDepth="0" Opacity="0.35"/>
+            </Border.Effect>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Top row: Title and App Controls (responsive) -->
+                <Grid Grid.Row="0" Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock x:Name="HeaderTextBlock" Grid.Column="0" Text="{DynamicResource App.Title}" 
+                               FontSize="28" FontWeight="Bold" 
+                               FontFamily="Segoe UI Black"
+                               Foreground="{StaticResource HeaderTextBrush}"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               Effect="{StaticResource HeaderTextEffect}"/>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <Button x:Name="SettingsButton" Content="⚙" Width="30" Height="30" Margin="0,0,10,0"
+                                Background="{DynamicResource PrimaryButtonBrush}"
+                                Foreground="{DynamicResource ForegroundBrush}"
+                                BorderThickness="0" FontSize="16" FontWeight="Bold"
+                                Click="SettingsButton_Click" ToolTip="{DynamicResource Tooltip.Settings}" Cursor="Hand"/>
+                        <ComboBox x:Name="LangSelector" Width="140" Height="32" Margin="0,0,10,0"
+                                  VerticalAlignment="Center"
+                                  SelectionChanged="LangSelector_SelectionChanged"
+                                  ToolTip="{DynamicResource Tooltip.Language}">
+                            <ComboBoxItem Content="{DynamicResource Language.English}" Tag="en"/>
+                            <ComboBoxItem Content="{DynamicResource Language.Chinese}" Tag="zh"/>
+                        </ComboBox>
+                        <ToggleButton x:Name="ThemeToggle" Style="{StaticResource ThemeToggleStyle}" 
+                                      ToolTip="{DynamicResource Tooltip.Theme}" Checked="ThemeToggle_Checked" Unchecked="ThemeToggle_Unchecked"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Bottom row: Search and Action Buttons -->
+                <Grid Grid.Row="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBox x:Name="SearchBox" Width="300" Height="36"
+                             Text="{DynamicResource Search.Placeholder}"
+                             GotFocus="SearchBox_GotFocus"
+                             LostFocus="SearchBox_LostFocus"
+                             TextChanged="SearchBox_TextChanged"
+                             VerticalContentAlignment="Center"/>
+
+                    <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="10,0,0,0">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Width="130" Height="28" Padding="8,4" Click="RestoreBackup_Click" Background="{DynamicResource WarningButtonBrush}">
+                                <TextBlock Text="{DynamicResource Action.RestoreBackup}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                            </Button>
+                            <Button Width="130" Height="28" Padding="8,4" Click="RestartSteam_Click" Background="{DynamicResource PrimaryButtonBrush}">
+                                <TextBlock Text="{DynamicResource Action.RestartSteam}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                            </Button>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+                
+                <ProgressBar Grid.Row="2" x:Name="BusyBar"
+                             Height="4"
+                             Margin="0,10,0,0"
+                             IsIndeterminate="True"
+                             Foreground="{DynamicResource PrimaryButtonBrush}"
+                             Background="{DynamicResource BorderBrush}"
+                             Visibility="{Binding IsBusy, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}"/>
+            </Grid>
+        </Border>
+
+        <!-- Main Content: Left Sidebar + Cards -->
+
+
+        <!-- Content Area: Game Cards -->
+        <Border x:Name="CardsArea" Grid.Row="2" Grid.Column="0" Background="{DynamicResource CardBackgroundBrush}" CornerRadius="10" Padding="12,12,12,6">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <!-- Make log column Auto-sized and let the LogBorder define its width to prevent overlap on small windows -->
+                    <ColumnDefinition x:Name="LogColumn" Width="Auto" MinWidth="220" MaxWidth="420"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Top-left global toolbar -->
+                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,12">
+                    <Button Width="100" Height="28" Click="SelectAll_Click" ToolTip="{DynamicResource Tooltip.SelectAll}">
+                        <TextBlock Text="{DynamicResource Action.SelectAll}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    </Button>
+                    <Button Width="90" Height="28" Click="Refresh_Click" Margin="6,0,0,0" ToolTip="{DynamicResource Tooltip.RefreshGames}">
+                        <TextBlock Text="{DynamicResource Action.Refresh}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    </Button>
+
+                </StackPanel>
+
+                <!-- Selection toolbar (visible when items selected) -->
+                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Right" Visibility="{Binding IsAnyItemSelected, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,12">
+
+                    <Button Width="130" Height="28" Click="BackupSelected_Click" Background="{DynamicResource SuccessButtonBrush}" Margin="0,0,6,0">
+                        <TextBlock Text="{DynamicResource Action.BackupSelected}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    </Button>
+                    <Button Width="130" Height="28" Click="DeleteSelected_Click" Background="{DynamicResource DangerButtonBrush}" Margin="0,0,6,0">
+                        <TextBlock Text="{DynamicResource Action.DeleteSelected}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    </Button>
+                    <Button Width="110" Height="28" Click="SelectNone_Click" ToolTip="{DynamicResource Tooltip.ClearSelection}" Padding="10,4">
+                        <TextBlock Text="{DynamicResource Action.ClearSelection}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    </Button>
+                </StackPanel>
+
+                <ScrollViewer x:Name="CardsScrollViewer" Grid.Row="1" Grid.Column="0" VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
+                    <ItemsControl x:Name="GameCards" ItemsSource="{Binding Games}" Margin="0,0,20,0">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <!-- Bind to the scroll viewer width so column calculation reflects the actual available space -->
+                            <UniformGrid IsItemsHost="True" Columns="{Binding ActualWidth, ElementName=CardsScrollViewer, Converter={StaticResource WidthToColumnsConverter}, ConverterParameter=260}" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource GameCardStyle}" ClipToBounds="True" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" MouseLeftButtonUp="GameCard_MouseLeftButtonUp" Cursor="Hand">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Image area with placeholder fallback -->
+                                    <Border Grid.Row="0" Background="{DynamicResource BackgroundBrush}" CornerRadius="4" Margin="0,0,0,8">
+                                        <Grid>
+                                            <Image x:Name="CardImage" Source="{Binding ScreenshotUrl}" Stretch="Uniform" Margin="4" HorizontalAlignment="Center" VerticalAlignment="Center" MaxHeight="180">
+                                                <Image.Style>
+                                                    <Style TargetType="Image">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding ScreenshotUrl}" Value="">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding ScreenshotUrl}" Value="{x:Null}">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Image.Style>
+                                            </Image>
+
+                                            <!-- Selection checkbox overlay -->
+                                            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" Width="22" Height="22"
+                                                      HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6"
+                                                      ToolTip="{DynamicResource Tooltip.Select}" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"/>
+
+                                            <!-- Installed banner (visible when game is installed) -->
+                                            <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6" CornerRadius="6" Padding="6,3" Background="{DynamicResource SuccessButtonBrush}" Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVisibility}}">
+                                                <TextBlock Text="{DynamicResource Status.Installed}" Foreground="White" FontWeight="SemiBold" FontSize="12"/>
+                                            </Border>
+
+                                            <Grid x:Name="Placeholder" Background="{DynamicResource BorderBrush}">
+                                                <Grid.Style>
+                                                    <Style TargetType="Grid">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding ScreenshotUrl}" Value="">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding ScreenshotUrl}" Value="{x:Null}">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Grid.Style>
+                                                <TextBlock Text="{DynamicResource Label.NoImage}" Foreground="{DynamicResource ForegroundBrush}" Opacity="0.6" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+
+                                    <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="0,10,0,8" MinHeight="64">
+                                        <TextBlock Text="{Binding Name}" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,4" TextTrimming="CharacterEllipsis"/>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,6,0,0">
+                                            <TextBlock Text="{Binding Genre}" FontSize="12" Opacity="0.85" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Width="220" TextAlignment="Center"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+                <!-- Vertical splitter + Activity Log panel on the right column -->
+
+                <Border x:Name="LogBorder" Grid.Row="0" Grid.Column="1" Grid.RowSpan="3" Width="320" Background="{DynamicResource CardBackgroundBrush}" CornerRadius="8" Margin="8,8,0,8" Padding="8" MinWidth="220" MaxWidth="420" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Grid Grid.Row="0">
+                            <TextBlock Text="{DynamicResource Header.ActivityLog}" FontWeight="Bold" VerticalAlignment="Center" Foreground="{DynamicResource ForegroundBrush}"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+
+                                <Button Width="32" Height="28" Click="CopyLog_Click" Background="{DynamicResource PrimaryButtonBrush}" Margin="0,0,8,0" Padding="6" ToolTip="{DynamicResource Tooltip.CopyLog}">
+                                    <Viewbox Width="16" Height="16">
+                                        <Path Data="M 4 2 C 4 1.45 4.45 1 5 1 L 11 1 C 11.55 1 12 1.45 12 2 L 12 3 L 14 3 C 14.55 3 15 3.45 15 4 L 15 12 C 15 12.55 14.55 13 14 13 L 8 13 C 7.45 13 7 12.55 7 12 L 7 11 L 5 11 C 4.45 11 4 10.55 4 10 L 4 2 Z M 6 2 L 6 10 L 8 10 L 8 12 L 14 12 L 14 4 L 12 4 L 12 2 L 6 2 Z M 8 4 L 8 5 L 10 5 L 10 4 L 8 4 Z M 8 6 L 8 7 L 10 7 L 10 6 L 8 6 Z M 8 8 L 8 9 L 10 9 L 10 8 L 8 8 Z" Fill="{DynamicResource ForegroundBrush}"/>
+                                    </Viewbox>
+                                </Button>
+                                <Button Width="110" Height="28" Click="ClearLog_Click" Background="{DynamicResource PurpleButtonBrush}" Padding="8,4">
+                                    <TextBlock Text="{DynamicResource Action.ClearLog}" HorizontalAlignment="Center"/>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                        <TextBox x:Name="LogBox" Grid.Row="1" IsReadOnly="True" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Hidden" TextWrapping="Wrap" Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource ForegroundBrush}" BorderThickness="0" Padding="6" FontFamily="Consolas" VerticalAlignment="Stretch" AcceptsTab="True"/>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- Legacy Panels (kept hidden for compatibility) -->
+        <Border Grid.Row="2" Grid.Column="0" Visibility="Collapsed" x:Name="LegacyPanels">
+            <!-- Main Content -->
+            <Grid Grid.Row="2" Grid.Column="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="350"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="350"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Game List -->
+                <Border x:Name="GameListBorder" Grid.Column="0" Background="{DynamicResource CardBackgroundBrush}" 
+                        CornerRadius="10" Margin="0,0,15,0">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#000000" BlurRadius="16" ShadowDepth="0" Opacity="0.35"/>
+                    </Border.Effect>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Select All/None buttons above the list -->
+                        <Border Grid.Row="0" Background="{DynamicResource HeaderBackgroundBrush}" 
+                                CornerRadius="8,8,0,0" Padding="10,4">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button x:Name="RefreshBtn" Width="60" Height="24" Margin="2,0"
+                                        Click="Refresh_Click"
+                                        Background="{DynamicResource SuccessButtonBrush}"
+                                        Foreground="{DynamicResource ForegroundBrush}"
+                                        Padding="4,2" FontSize="10" FontWeight="SemiBold">
+                                    <TextBlock Text="{DynamicResource Action.Refresh}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                </Button>
+                                <Button x:Name="SelectAllBtn" Width="50" Height="24" Margin="2,0"
+                                        Click="SelectAll_Click"
+                                        Background="{DynamicResource PrimaryButtonBrush}"
+                                        Foreground="{DynamicResource ForegroundBrush}"
+                                        Padding="4,2" FontSize="10" FontWeight="SemiBold">
+                                    <TextBlock Text="{DynamicResource Label.All}" HorizontalAlignment="Center"/>
+                                </Button>
+                                <Button x:Name="SelectNoneBtn" Width="50" Height="24" Margin="2,0"
+                                        Click="SelectNone_Click"
+                                        Background="{DynamicResource DangerButtonBrush}"
+                                        Foreground="{DynamicResource ForegroundBrush}"
+                                        Padding="4,2" FontSize="10" FontWeight="SemiBold">
+                                    <TextBlock Text="{DynamicResource Label.None}" HorizontalAlignment="Center"/>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+
+                        <ListView x:Name="GameList" Grid.Row="1"
+                                  ItemsSource="{Binding Games}"
+                                  Foreground="{DynamicResource ForegroundBrush}"
+                                  Background="{DynamicResource BackgroundBrush}"
+                                  SelectionMode="Extended"
+                                  AlternationCount="2"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                  PreviewMouseLeftButtonUp="GameList_PreviewMouseLeftButtonUp"
+                                  SizeChanged="GameList_SizeChanged"
+                                  SelectionChanged="GameList_SelectionChanged"
+                                  MouseLeftButtonUp="GameList_MouseLeftButtonUp"
+                                  MouseLeave="GameList_MouseLeave">
+                            
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
+                                    <EventSetter Event="MouseEnter" Handler="GameListItem_MouseEnter"/>
+                                    <EventSetter Event="MouseLeave" Handler="GameListItem_MouseLeave"/>
+                                </Style>
+                            </ListView.ItemContainerStyle>
+
+                            <ListView.View>
+                                <GridView x:Name="GameGridView">
+                                    <GridViewColumn x:Name="SelectColumn" Width="40" Header="">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" 
+                                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                          Focusable="False"
+                                                          Checked="ItemCheckBox_Changed" Unchecked="ItemCheckBox_Changed"/>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                    <GridViewColumn x:Name="NameColumn" Header="{DynamicResource Label.GameName}">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Name}" 
+                                                           VerticalAlignment="Center" HorizontalAlignment="Left"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Foreground="{DynamicResource ForegroundBrush}" 
+                                                           FontSize="12" Margin="4,0"/>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                        
+                        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,10,10"
+                                    Visibility="{Binding IsAnyItemSelected, Converter={StaticResource BoolToVisibility}}">
+                            <Button Width="130" Height="28" Padding="8,4" Click="BackupSelected_Click" Background="{DynamicResource SuccessButtonBrush}">
+                                <TextBlock Text="{DynamicResource Action.BackupSelected}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                            </Button>
+                            <Button Width="130" Height="28" Padding="8,4" Click="DeleteSelected_Click" Background="{DynamicResource DangerButtonBrush}" Margin="5,0,0,0">
+                                <TextBlock Text="{DynamicResource Action.DeleteSelected}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                    <!-- Game Details Panel -->
+                    <Border x:Name="GameDetailsBorder" Grid.Column="2" Background="{DynamicResource CardBackgroundBrush}" 
+                        CornerRadius="10" Margin="15,0,0,0">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#000000" BlurRadius="16" ShadowDepth="0" Opacity="0.35"/>
+                    </Border.Effect>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Background="{DynamicResource HeaderBackgroundBrush}" 
+                                CornerRadius="8,8,0,0" Padding="10">
+                            <TextBlock Text="{DynamicResource Header.GameDetails}" 
+                                       FontWeight="Bold" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource ForegroundBrush}"/>
+                        </Border>
+
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="15">
+                            <Grid>
+                                <StackPanel x:Name="GameDetailsPanel" Visibility="Collapsed">
+                                    <!-- Screenshot -->
+                                    <Border Background="{DynamicResource InputBackgroundBrush}" 
+                                            CornerRadius="8" Margin="0,0,0,8" 
+                                            HorizontalAlignment="Stretch">
+                                        <Image x:Name="GameScreenshot" 
+                                               Stretch="Uniform" 
+                                               MaxHeight="200"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               Margin="5"/>
+                                    </Border>
+
+                                    <!-- Game Name -->
+                                    <TextBlock x:Name="GameDetailName" 
+                                               FontSize="20" 
+                                               FontWeight="Bold" 
+                                               Foreground="{DynamicResource ForegroundBrush}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,0,10"/>
+
+                                    <!-- App ID and Release Date -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                        <TextBlock Text="{DynamicResource Label.AppId}" 
+                                                   Foreground="{DynamicResource ForegroundBrush}" 
+                                                   Opacity="0.7" 
+                                                   Margin="0,0,5,0"/>
+                                        <TextBlock x:Name="GameDetailAppId" 
+                                                   Foreground="{DynamicResource ForegroundBrush}" 
+                                                   Margin="0,0,15,0"/>
+                                        <TextBlock x:Name="GameDetailReleaseDateLabel" 
+                                                   Text="{DynamicResource Label.ReleaseDate}" 
+                                                   Foreground="{DynamicResource ForegroundBrush}" 
+                                                   Opacity="0.7" 
+                                                   Margin="0,0,5,0"
+                                                   Visibility="Collapsed"/>
+                                        <TextBlock x:Name="GameDetailReleaseDate" 
+                                                   Foreground="{DynamicResource ForegroundBrush}"
+                                                   Visibility="Collapsed"/>
+                                    </StackPanel>
+
+                                    <!-- Publisher -->
+                                    <StackPanel x:Name="GameDetailPublisherPanel" Orientation="Horizontal" Margin="0,0,0,10" Visibility="Collapsed">
+                                        <TextBlock Text="{DynamicResource Label.Publisher}" 
+                                                   Foreground="{DynamicResource ForegroundBrush}" 
+                                                   Opacity="0.7" 
+                                                   Margin="0,0,5,0"/>
+                                        <TextBlock x:Name="GameDetailPublisher" 
+                                                   Foreground="{DynamicResource ForegroundBrush}" 
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+
+                                    <!-- DRM & Anti-Cheat -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                        <!-- DRM -->
+                                        <StackPanel x:Name="GameDetailDRMPanel" Orientation="Horizontal" Visibility="Collapsed">
+                                            <TextBlock Text="{DynamicResource Label.DRM}"
+                                                        Foreground="{DynamicResource ForegroundBrush}"
+                                                        Opacity="0.7"
+                                                        Margin="0,0,5,0"/>
+                                            <TextBlock x:Name="GameDetailDRM"
+                                                        TextWrapping="Wrap" Margin="0,0,15,0">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{DynamicResource WarningButtonBrush}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource Self}}" Value="Steam">
+                                                                <Setter Property="Foreground" Value="{DynamicResource SuccessButtonBrush}"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource Self}}" Value="Denuvo Anti-Tampering">
+                                                                <Setter Property="Foreground" Value="{DynamicResource DangerButtonBrush}"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </StackPanel>
+
+                                        <!-- Anti-Cheat -->
+                                        <StackPanel x:Name="GameDetailAntiCheatPanel" Orientation="Horizontal" Visibility="Collapsed">
+                                            <TextBlock Text="{DynamicResource Label.AntiCheat}"
+                                                        Foreground="{DynamicResource ForegroundBrush}"
+                                                        Opacity="0.7"
+                                                        Margin="0,0,5,0"/>
+                                            <TextBlock x:Name="GameDetailAntiCheat"
+                                                        Foreground="{DynamicResource ForegroundBrush}"
+                                                        TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                <!-- Genre -->
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <TextBlock Text="{DynamicResource Label.Genre}" 
+                                               Foreground="{DynamicResource ForegroundBrush}" 
+                                               Opacity="0.7" 
+                                               Margin="0,0,5,0"/>
+                                    <TextBlock x:Name="GameDetailGenre" 
+                                               Foreground="{DynamicResource ForegroundBrush}" 
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+
+                                <!-- Installation Status -->
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                    <TextBlock Text="{DynamicResource Label.InstallationStatus}" 
+                                               Foreground="{DynamicResource ForegroundBrush}" 
+                                               Opacity="0.7" 
+                                               Margin="0,0,5,0"/>
+                                    <TextBlock x:Name="GameDetailInstallationStatus" 
+                                               Foreground="{DynamicResource SuccessButtonBrush}" 
+                                               FontWeight="SemiBold"/>
+                                </StackPanel>
+
+                                    <!-- Description -->
+                                    <TextBlock Text="{DynamicResource Label.Description}" 
+                                               FontWeight="SemiBold" 
+                                               Foreground="{DynamicResource ForegroundBrush}" 
+                                               Margin="0,0,0,8"/>
+                                    <TextBlock x:Name="GameDetailDescription" 
+                                               TextWrapping="Wrap" 
+                                               Foreground="{DynamicResource ForegroundBrush}" 
+                                               Opacity="0.9"
+                                               LineHeight="20"
+                                               Margin="0,0,0,15"/>
+
+
+                                </StackPanel>
+                                
+                                <!-- Empty State -->
+                                <StackPanel x:Name="GameDetailsEmpty" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Label.SelectGameToViewDetails}" 
+                                               Foreground="{DynamicResource ForegroundBrush}" 
+                                               Opacity="0.5"
+                                               HorizontalAlignment="Center"
+                                               TextAlignment="Center"
+                                               TextWrapping="Wrap"
+                                               Margin="20"/>
+                                </StackPanel>
+                            </Grid>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+
+            </Grid>
+        </Border>
+
+        <!-- Footer -->
+        <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="1" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                Orientation="Horizontal" Margin="12,0,0,2">
+            <TextBlock x:Name="StatusText"
+                   Foreground="{DynamicResource ForegroundBrush}" FontSize="11" Opacity="0.85"/>
+        </StackPanel>
+        <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="1" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                Orientation="Horizontal" Margin="0,0,12,2">
+            <TextBlock Text="{DynamicResource Footer.CreatedBy}"
+                   Foreground="{DynamicResource ForegroundBrush}" FontSize="11" Opacity="0.7"/>
+            <TextBlock Text="{DynamicResource Footer.VersionPrefix}"
+                   Foreground="{DynamicResource ForegroundBrush}" FontSize="11" Opacity="0.7" Margin="5,0,0,0"/>
+            <TextBlock x:Name="VersionText"
+                   Foreground="{DynamicResource ForegroundBrush}" FontSize="11" Opacity="0.7"/>
+        </StackPanel>
+    </Grid>
+</Window>
