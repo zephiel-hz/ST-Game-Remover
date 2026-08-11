@@ -1,0 +1,69 @@
+# .NET build output and generated files
+bin/
+obj/
+Build/
+publish/
+*.pdb
+*.user
+*.suo
+*.csproj.user
+*.lscache
+*_wpftmp.csproj
+
+# Local Python environment and caches
+.venv/
+venv/
+env/
+Scripts/
+Documentation/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE and local workspace settings
+.vs/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/settings.json
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+Config/service-config.json
+Config/*-local.json
+Config/*-secret.json
+Config/*-secrets.json
+**/appsettings.Development.json
+**/appsettings.Local.json
+**/credentials.json
+**/token.json
+**/tokens.json
+**/*secret*
+**/*credential*
+**/*password*
+
+# Local data, caches, and generated exports
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.cache
+cache/
+data/
+logs/
+*.bak
+
+# Logs and diagnostic output
+*.log
+*.txt
+
+# OS metadata
+Thumbs.db
+Desktop.ini
+.DS_Store

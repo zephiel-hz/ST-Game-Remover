@@ -1,0 +1,279 @@
+<UserControl x:Class="SteamPluginManager.Views.VerifyTokenView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource BackgroundBrush}"
+             Foreground="{DynamicResource ForegroundBrush}">
+    <UserControl.Resources>
+        <DropShadowEffect x:Key="CardGlow" Color="#FF8A00" BlurRadius="42" ShadowDepth="0" Opacity="0.18"/>
+        <DropShadowEffect x:Key="SoftShadow" Color="#000000" BlurRadius="26" ShadowDepth="8" Opacity="0.28"/>
+
+        <Style x:Key="PremiumButtonStyle" TargetType="Button">
+            <Setter Property="Background">
+                <Setter.Value>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#FF8A00" Offset="0"/>
+                        <GradientStop Color="#FF9D1A" Offset="0.55"/>
+                        <GradientStop Color="#E66F00" Offset="1"/>
+                    </LinearGradientBrush>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Foreground" Value="#FFF7F1E7"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="Height" Value="54"/>
+            <Setter Property="Margin" Value="0,0,0,18"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="15"
+                                BorderBrush="#FFB455"
+                                BorderThickness="1"
+                                SnapsToDevicePixels="True"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#FF8A00" BlurRadius="18" ShadowDepth="0" Opacity="0.28"/>
+                            </Border.Effect>
+                            <Border.RenderTransform>
+                                <TranslateTransform X="0" Y="0"/>
+                            </Border.RenderTransform>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="#FF9D1A" Offset="0"/>
+                                            <GradientStop Color="#FFAF2F" Offset="0.55"/>
+                                            <GradientStop Color="#F07A00" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                                <Setter TargetName="border" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <TranslateTransform Y="-1"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="#E66F00" Offset="0"/>
+                                            <GradientStop Color="#D66500" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                                <Setter TargetName="border" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <TranslateTransform Y="1"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PremiumTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="#141826"/>
+            <Setter Property="Foreground" Value="#F7F4EB"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="BorderBrush" Value="#2F3748"/>
+            <Setter Property="BorderThickness" Value="1.2"/>
+            <Setter Property="Height" Value="56"/>
+            <Setter Property="Padding" Value="16,0,16,0"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="CaretBrush" Value="#FF8A00"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="14"
+                                SnapsToDevicePixels="True">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="0"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#4E5568"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#FF8A00"/>
+                                <Setter TargetName="Bd" Property="Background" Value="#1B2030"/>
+                                <Setter TargetName="Bd" Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect Color="#FF8A00" BlurRadius="22" ShadowDepth="0" Opacity="0.22"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Color="#0D1118" Offset="0"/>
+                <GradientStop Color="#141A24" Offset="0.55"/>
+                <GradientStop Color="#0C1119" Offset="1"/>
+            </LinearGradientBrush>
+        </Grid.Background>
+
+        <Rectangle Width="720" Height="720" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-180,-140,0,0" Opacity="0.24" IsHitTestVisible="False">
+            <Rectangle.Fill>
+                <RadialGradientBrush Center="0.4,0.3" RadiusX="0.75" RadiusY="0.75">
+                    <GradientStop Color="#FF8A00" Offset="0"/>
+                    <GradientStop Color="#00000000" Offset="1"/>
+                </RadialGradientBrush>
+            </Rectangle.Fill>
+        </Rectangle>
+
+        <Border Width="560" Height="400" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,-90" CornerRadius="180" Opacity="0.08" Background="#FF8A00" IsHitTestVisible="False"/>
+
+        <Path Data="M0,0 L320,0 L520,220" Stroke="#2A3140" StrokeThickness="1" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,80,64,0" Opacity="0.4" IsHitTestVisible="False"/>
+        <Path Data="M120,0 L0,220" Stroke="#FF8A00" StrokeThickness="1" Opacity="0.15" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="90,70,0,0" IsHitTestVisible="False"/>
+
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0">
+            <Border Width="560"
+                    MaxWidth="560"
+                    Padding="42"
+                    CornerRadius="30"
+                    BorderBrush="#2E3648"
+                    BorderThickness="1"
+                    Effect="{StaticResource CardGlow}">
+                <Border.RenderTransform>
+                    <TranslateTransform X="-110"/>
+                </Border.RenderTransform>
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#161B27" Offset="0"/>
+                        <GradientStop Color="#111522" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.Background>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0"
+                            Width="92"
+                            Height="92"
+                            CornerRadius="46"
+                            HorizontalAlignment="Center"
+                            Margin="0,0,0,24"
+                            Background="#181D2A"
+                            BorderBrush="#FF8A00"
+                            BorderThickness="1.2">
+                        <Border.Effect>
+                            <DropShadowEffect Color="#FF8A00" BlurRadius="24" ShadowDepth="0" Opacity="0.22"/>
+                        </Border.Effect>
+                        <Image Source="/Config/SGR.ico" Width="58" Height="58" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    </Border>
+
+                    <StackPanel Grid.Row="1" HorizontalAlignment="Center" Margin="0,0,0,18">
+                        <TextBlock FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="#FF8A00"
+                                   HorizontalAlignment="Center"
+                                   Text="SECURE ACCESS"
+                                   Margin="0,0,0,8"/>
+                        <TextBlock FontSize="30"
+                                   FontWeight="Bold"
+                                   Foreground="#F8F7F2"
+                                   HorizontalAlignment="Center">
+                            <Run Text="VERIFY YOUR "/>
+                            <Run Text="TOKEN" Foreground="#FF8A00"/>
+                        </TextBlock>
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="2"
+                               Text="Paste the token you received from the token panel to continue securely."
+                               FontSize="14"
+                               Foreground="#9BA4B7"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,28"
+                               LineHeight="22"/>
+
+                    <TextBox x:Name="TokenInput"
+                             Grid.Row="3"
+                             Style="{StaticResource PremiumTextBoxStyle}"
+                             Margin="0,0,0,18"/>
+
+                    <Button x:Name="VerifyButton"
+                            Grid.Row="4"
+                            Click="VerifyButton_Click"
+                            Style="{StaticResource PremiumButtonStyle}"
+                            Margin="0,0,0,18">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <TextBlock Text="✓"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       Margin="0,0,8,0"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="Verify Token" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <Grid x:Name="LoadingGrid"
+                          Grid.Row="5"
+                          Visibility="Collapsed"
+                          HorizontalAlignment="Center"
+                          Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Ellipse Grid.Column="0" Width="18" Height="18" Stroke="#FF8A00" StrokeThickness="2" Margin="0,0,8,0"/>
+                        <TextBlock x:Name="LoadingText"
+                                   Grid.Column="1"
+                                   VerticalAlignment="Center"
+                                   Foreground="#C7CEDF"
+                                   FontSize="12"/>
+                    </Grid>
+
+                    <TextBlock x:Name="StatusMessage"
+                               Grid.Row="6"
+                               FontSize="12"
+                               TextWrapping="Wrap"
+                               Foreground="#C7CEDF"
+                               Margin="0,0,0,16"
+                               TextAlignment="Center"/>
+
+                    <Border Grid.Row="7"
+                            Margin="0,8,0,0"
+                            Padding="0,16,0,0"
+                            BorderBrush="#2A3140"
+                            BorderThickness="0,1,0,0">
+                        <TextBlock HorizontalAlignment="Center"
+                                   FontSize="13"
+                                   Foreground="#9BA4B7">
+                            <Run Text="Don't have a token? "/>
+                            <Hyperlink Click="OnClickHere" Foreground="#FF8A00" TextDecorations="None">
+                                <Run Text="Click here"/>
+                            </Hyperlink>
+                        </TextBlock>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

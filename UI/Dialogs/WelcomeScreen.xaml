@@ -1,0 +1,379 @@
+<Window x:Class="SteamPluginManager.WelcomeScreen"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Welcome to HZ Lua Manager"
+        Height="700" Width="900"
+        Background="Transparent"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="WS_Background" Color="#070A0F"/>
+        <SolidColorBrush x:Key="WS_Surface" Color="#121722"/>
+        <SolidColorBrush x:Key="WS_SurfaceLight" Color="#1A2130"/>
+        <SolidColorBrush x:Key="WS_Border" Color="#2D364A"/>
+        <SolidColorBrush x:Key="WS_Text" Color="#F5F7FB"/>
+        <SolidColorBrush x:Key="WS_TextMuted" Color="#8E97A8"/>
+        <SolidColorBrush x:Key="WS_Accent" Color="#FF8A00"/>
+        <SolidColorBrush x:Key="WS_AccentDark" Color="#E66F00"/>
+        <SolidColorBrush x:Key="WS_AccentSoft" Color="#FF9D1A"/>
+
+        <LinearGradientBrush x:Key="WS_HeaderGradient" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#0E131C" Offset="0"/>
+            <GradientStop Color="#121722" Offset="1"/>
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="WS_CardGlow" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#1D2536" Offset="0"/>
+            <GradientStop Color="#111723" Offset="1"/>
+        </LinearGradientBrush>
+
+        <DropShadowEffect x:Key="CardShadow" Color="#000000" BlurRadius="24" ShadowDepth="0" Opacity="0.45"/>
+
+        <Storyboard x:Key="FadeInAnimation">
+            <DoubleAnimation Storyboard.TargetProperty="Opacity" Storyboard.TargetName="RootContainer" From="0" To="1" Duration="0:0:0.7">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+
+        <Style x:Key="PrimaryCTAButton" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="MinWidth" Value="180"/>
+            <Setter Property="Height" Value="46"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="24,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="BtnRoot"
+                                CornerRadius="14"
+                                Background="{StaticResource WS_Accent}"
+                                SnapsToDevicePixels="True"
+                                Effect="{StaticResource CardShadow}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Margin="22,0"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="BtnRoot" Property="Background" Value="{StaticResource WS_AccentSoft}"/>
+                                <Setter TargetName="BtnRoot" Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect Color="#FF8A00" BlurRadius="18" ShadowDepth="0" Opacity="0.35"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="BtnRoot" Property="Background" Value="{StaticResource WS_AccentDark}"/>
+                                <Setter TargetName="BtnRoot" Property="Opacity" Value="0.9"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ModernCheckBoxStyle" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource WS_Text}"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border x:Name="CheckBorder"
+                                    Width="20"
+                                    Height="20"
+                                    CornerRadius="6"
+                                    Background="#141B27"
+                                    BorderBrush="#334155"
+                                    BorderThickness="1"
+                                    Margin="0,0,10,0"
+                                    SnapsToDevicePixels="True">
+                                <Grid>
+                                    <Path x:Name="CheckGlyph"
+                                          Data="M 3 10 L 7 14 L 16 5"
+                                          Stroke="#FF8A00"
+                                          StrokeThickness="2"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round"
+                                          Visibility="Collapsed"/>
+                                </Grid>
+                            </Border>
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CheckGlyph" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="CheckBorder" Property="Background" Value="#1E2431"/>
+                                <Setter TargetName="CheckBorder" Property="BorderBrush" Value="#FF8A00"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="CheckBorder" Property="BorderBrush" Value="#FF9D1A"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="{StaticResource WS_Background}" CornerRadius="32" Padding="0" SnapsToDevicePixels="True">
+        <Grid x:Name="RootContainer" Opacity="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0"
+                    Background="{StaticResource WS_HeaderGradient}"
+                    Padding="32,24,32,20"
+                    CornerRadius="32,32,0,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Margin="0,4,0,0">
+                        <TextBlock FontSize="30" FontWeight="Bold" Foreground="{StaticResource WS_Text}" Margin="0,0,0,8">
+                            <Run Text="Welcome to "/>
+                            <Run Text="HZ" Foreground="{StaticResource WS_Accent}"/>
+                            <Run Text=" Lua Manager"/>
+                        </TextBlock>
+                        <TextBlock Text="A polished application for managing, organizing, and unlocking your Steam games."
+                                   FontSize="14"
+                                   Foreground="{StaticResource WS_TextMuted}"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Left"
+                                   HorizontalAlignment="Left"
+                                   MaxWidth="620"/>
+                    </StackPanel>
+
+                    <Button Grid.Column="1"
+                            x:Name="CloseButton"
+                            Width="40" Height="40"
+                            Background="#161B27"
+                            BorderThickness="1"
+                            BorderBrush="#334155"
+                            Foreground="{StaticResource WS_TextMuted}"
+                            Click="CloseButton_Click"
+                            Cursor="Hand"
+                            ToolTip="Close"
+                            Margin="16,0,0,0">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="10">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="#202634"/>
+                                        <Setter Property="Foreground" Value="{StaticResource WS_Text}"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <TextBlock Text="✕" FontSize="18" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="1" Padding="32,18,32,16">
+                <StackPanel>
+                    <Border Background="{StaticResource WS_CardGlow}"
+                            BorderBrush="#263041"
+                            BorderThickness="1"
+                            CornerRadius="28"
+                            Padding="20"
+                            Margin="0,0,0,16"
+                            Effect="{StaticResource CardShadow}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="220"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0"
+                                    Width="150"
+                                    Height="150"
+                                    CornerRadius="28"
+                                    Background="#0E121B"
+                                    BorderBrush="#2B3546"
+                                    BorderThickness="1"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Padding="10">
+                                <Grid>
+                                    <Ellipse Width="96" Height="96"
+                                             Fill="#FF8A00"
+                                             Opacity="0.16"/>
+                                    <Ellipse Width="74" Height="74"
+                                             Stroke="#FF8A00"
+                                             StrokeThickness="1.4"
+                                             Opacity="0.55"/>
+                                    <Image Source="../../../Config/SGR.ico"
+                                           Stretch="UniformToFill"
+                                           VerticalAlignment="Center"
+                                           HorizontalAlignment="Center"
+                                           Margin="6"/>
+                                </Grid>
+                            </Border>
+
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="18,0,0,0">
+                                <Border Background="#151D2C"
+                                        BorderBrush="#2F3B4E"
+                                        BorderThickness="1"
+                                        CornerRadius="24"
+                                        Padding="10,6"
+                                        HorizontalAlignment="Left"
+                                        Margin="0,0,0,10">
+                                    <TextBlock Text="FEATURED EXPERIENCE"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="#FF9D1A"/>
+                                </Border>
+                                <TextBlock Text="Powerful features, refined presentation"
+                                           FontSize="20"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource WS_Text}"
+                                           Margin="0,0,0,8"/>
+                                <TextBlock Text="{DynamicResource Welcome.Description}"
+                                           FontSize="13"
+                                           Foreground="{StaticResource WS_TextMuted}"
+                                           TextWrapping="Wrap"
+                                           LineHeight="20"
+                                           Margin="0,0,0,14"/>
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <Border Grid.Row="0" Grid.Column="0"
+                                            Background="#141B27"
+                                            BorderBrush="#2B3546"
+                                            BorderThickness="1"
+                                            CornerRadius="20"
+                                            Padding="10"
+                                            Margin="0,0,6,6">
+                                        <StackPanel>
+                                            <TextBlock Text="Fast workflow"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{StaticResource WS_Text}"/>
+                                            <TextBlock Text="{DynamicResource Welcome.Feature1}"
+                                                       FontSize="12"
+                                                       Foreground="{StaticResource WS_TextMuted}"
+                                                       TextWrapping="Wrap"
+                                                       Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Row="0" Grid.Column="1"
+                                            Background="#141B27"
+                                            BorderBrush="#2B3546"
+                                            BorderThickness="1"
+                                            CornerRadius="20"
+                                            Padding="10"
+                                            Margin="6,0,0,6">
+                                        <StackPanel>
+                                            <TextBlock Text="Safe &amp; secure"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{StaticResource WS_Text}"/>
+                                            <TextBlock Text="{DynamicResource Welcome.Feature2}"
+                                                       FontSize="12"
+                                                       Foreground="{StaticResource WS_TextMuted}"
+                                                       TextWrapping="Wrap"
+                                                       Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                            Background="#141B27"
+                                            BorderBrush="#2B3546"
+                                            BorderThickness="1"
+                                            CornerRadius="20"
+                                            Padding="10"
+                                            Margin="0,6,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Built for enthusiasts"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{StaticResource WS_Text}"/>
+                                            <TextBlock Text="{DynamicResource Welcome.Feature3}"
+                                                       FontSize="12"
+                                                       Foreground="{StaticResource WS_TextMuted}"
+                                                       TextWrapping="Wrap"
+                                                       Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Background="#10141D"
+                            BorderBrush="#253041"
+                            BorderThickness="1"
+                            CornerRadius="20"
+                            Padding="12"
+                            HorizontalAlignment="Center">
+                        <TextBlock x:Name="VersionText"
+                                   FontSize="12"
+                                   Foreground="#8B95A8"
+                                   TextAlignment="Center"/>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="2"
+                    Background="{StaticResource WS_HeaderGradient}"
+                    BorderBrush="#243041"
+                    BorderThickness="0,1,0,0"
+                    Padding="32,16,32,16"
+                    CornerRadius="0,0,32,32">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <CheckBox x:Name="DontShowAgainCheckBox"
+                                  Style="{StaticResource ModernCheckBoxStyle}"
+                                  VerticalAlignment="Center"
+                                  Margin="0,0,8,0"/>
+                        <TextBlock Text="{DynamicResource Welcome.DontShowAgain}"
+                                   Foreground="{StaticResource WS_TextMuted}"
+                                   FontSize="13"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <Button Grid.Column="1"
+                            x:Name="GetStartedButton"
+                            Style="{StaticResource PrimaryCTAButton}"
+                            Content="{DynamicResource Welcome.GetStarted}"
+                            Click="GetStartedButton_Click"/>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

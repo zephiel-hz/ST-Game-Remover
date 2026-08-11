@@ -1,0 +1,86 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Segoe MDL2 Assets glyphs used as TextBlock text -->
+  <sys:String x:Key="Icon.Back" xmlns:sys="clr-namespace:System;assembly=mscorlib">&#xE72B;</sys:String>
+  <sys:String x:Key="Icon.Forward" xmlns:sys="clr-namespace:System;assembly=mscorlib">&#xE72A;</sys:String>
+  <sys:String x:Key="Icon.Plus" xmlns:sys="clr-namespace:System;assembly=mscorlib">&#xE710;</sys:String>
+  <sys:String x:Key="Icon.Check" xmlns:sys="clr-namespace:System;assembly=mscorlib">&#xE73E;</sys:String>
+  <sys:String x:Key="Icon.Delete" xmlns:sys="clr-namespace:System;assembly=mscorlib">&#xE74D;</sys:String>
+  <sys:String x:Key="Icon.Refresh" xmlns:sys="clr-namespace:System;assembly=mscorlib">&#xE72C;</sys:String>
+  <sys:String x:Key="Icon.Download" xmlns:sys="clr-namespace:System;assembly=mscorlib">&#xE896;</sys:String>
+  <sys:String x:Key="Icon.Save" xmlns:sys="clr-namespace:System;assembly=mscorlib">&#xE74E;</sys:String>
+  <sys:String x:Key="Icon.Cancel" xmlns:sys="clr-namespace:System;assembly=mscorlib">&#xE711;</sys:String>
+  <sys:String x:Key="Icon.Copy" xmlns:sys="clr-namespace:System;assembly=mscorlib">&#xE8C8;</sys:String>
+  <sys:String x:Key="Icon.Pause" xmlns:sys="clr-namespace:System;assembly=mscorlib">&#xE769;</sys:String>
+  <sys:String x:Key="Icon.Play" xmlns:sys="clr-namespace:System;assembly=mscorlib">&#xE768;</sys:String>
+
+  <!-- Generic icon button style for SettingsView - larger 26x26 icon circle -->
+  <Style x:Key="IconButtonStyle" TargetType="Button">
+    <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
+    <Setter Property="Padding" Value="8,6" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
+              <Border Width="26" Height="26" CornerRadius="13" Background="{DynamicResource ButtonIconBackground}" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,8,0">
+                <TextBlock Text="{TemplateBinding Tag}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource ForegroundBrush}" FontSize="12" FontFamily="Segoe MDL2 Assets"/>
+              </Border>
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="root" Property="Background" Value="{DynamicResource HoverBrush}"/>
+              <Setter TargetName="root" Property="Opacity" Value="0.95"/>
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="root" Property="Opacity" Value="0.8"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter TargetName="root" Property="Opacity" Value="0.6"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- Compact Icon Button Style for all other views - smaller 20x20 icon circle -->
+  <Style x:Key="CompactIconButtonStyle" TargetType="Button">
+    <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
+    <Setter Property="Padding" Value="8,6" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
+              <Border Width="20" Height="20" CornerRadius="10" Background="{DynamicResource ButtonIconBackground}" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,8,0">
+                <TextBlock Text="{TemplateBinding Tag}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource ForegroundBrush}" FontSize="11" FontFamily="Segoe MDL2 Assets"/>
+              </Border>
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="root" Property="Background" Value="{DynamicResource HoverBrush}"/>
+              <Setter TargetName="root" Property="Opacity" Value="0.95"/>
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="root" Property="Opacity" Value="0.8"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter TargetName="root" Property="Opacity" Value="0.6"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+</ResourceDictionary>

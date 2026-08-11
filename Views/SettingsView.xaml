@@ -1,0 +1,520 @@
+<UserControl x:Class="SteamPluginManager.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" 
+             d:DesignHeight="600" d:DesignWidth="800"
+             Background="{DynamicResource BackgroundBrush}"
+             Foreground="{DynamicResource ForegroundBrush}">
+    
+    <UserControl.Resources>
+        <!-- Button Control Template -->
+        <ControlTemplate x:Key="SettingsButtonTemplate" TargetType="Button">
+            <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <Border Width="26" Height="26" CornerRadius="13" Background="{DynamicResource ButtonIconBackground}" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,8,0">
+                        <TextBlock Text="{TemplateBinding Tag}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource ForegroundBrush}" FontSize="12" FontFamily="Segoe MDL2 Assets"/>
+                    </Border>
+                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="root" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                    <Setter TargetName="root" Property="Opacity" Value="0.95"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter TargetName="root" Property="Opacity" Value="0.8"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter TargetName="root" Property="Opacity" Value="0.6"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <!-- Border Style for Settings Sections -->
+        <Style x:Key="SettingsSectionBorder" TargetType="Border">
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="20"/>
+            <Setter Property="Margin" Value="0,0,0,20"/>
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
+        </Style>
+
+        <!-- TextBlock Style for Section Titles -->
+        <Style x:Key="SettingsSectionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+        </Style>
+
+        <!-- TextBlock Style for Regular Text -->
+        <Style x:Key="SettingsText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+        </Style>
+        
+        <!-- ComboBox Style for Language Selector -->
+        <Style x:Key="SettingsComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton Name="DropDownToggle"
+                                         Grid.Column="0"
+                                         IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                         ClickMode="Press"
+                                         Background="{TemplateBinding Background}"
+                                         BorderBrush="{TemplateBinding BorderBrush}"
+                                         BorderThickness="{TemplateBinding BorderThickness}"
+                                         Foreground="{TemplateBinding Foreground}"
+                                         Padding="0">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Name="toggleBorder"
+                                               Background="{TemplateBinding Background}"
+                                               BorderBrush="{TemplateBinding BorderBrush}"
+                                               BorderThickness="{TemplateBinding BorderThickness}"
+                                               CornerRadius="4"
+                                               Padding="{TemplateBinding Padding}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="28"/>
+                                                </Grid.ColumnDefinitions>
+                                                <ContentPresenter Grid.Column="0"
+                                                                 Content="{TemplateBinding Content}"
+                                                                 Margin="8,0,0,0"
+                                                                 VerticalAlignment="Center"/>
+                                                <TextBlock Grid.Column="1"
+                                                          Text="▼"
+                                                          Foreground="{TemplateBinding Foreground}"
+                                                          HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"
+                                                          FontSize="10"
+                                                          Margin="0,2,4,0"/>
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="toggleBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                                <Setter TargetName="toggleBorder" Property="Opacity" Value="0.9"/>
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter TargetName="toggleBorder" Property="Opacity" Value="0.8"/>
+                                            </Trigger>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="toggleBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                                <ContentPresenter Name="contentPresenter"
+                                                 Content="{TemplateBinding SelectionBoxItem}"
+                                                 ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                 ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"/>
+                            </ToggleButton>
+                            <Popup Name="PART_Popup"
+                                  AllowsTransparency="True"
+                                  IsOpen="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                  Placement="Bottom"
+                                  PopupAnimation="Fade"
+                                  Margin="0,2,0,0">
+                                <Border Background="{DynamicResource CardBackgroundBrush}"
+                                       BorderBrush="{DynamicResource AccentBrush}"
+                                       BorderThickness="1"
+                                       CornerRadius="4"
+                                       Padding="4">
+                                    <ScrollViewer CanContentScroll="True"
+                                                 MinWidth="{Binding ActualWidth, ElementName=DropDownToggle}"
+                                                 MaxHeight="150">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- ComboBoxItem Style -->
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="itemBorder"
+                               Background="{TemplateBinding Background}"
+                               Padding="{TemplateBinding Padding}"
+                               CornerRadius="3"
+                               Margin="2">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <DockPanel Margin="20,20,20,20">
+        <!-- Title Bar Area -->
+        <Border DockPanel.Dock="Top" 
+                Margin="0,0,0,20"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="0,0,0,20">
+            <TextBlock x:Name="SettingsTitle"
+                       FontSize="28" 
+                       FontWeight="Bold" 
+                       Foreground="{DynamicResource ForegroundBrush}"/>
+        </Border>
+        
+        <!-- Close Button at Bottom -->
+        <StackPanel DockPanel.Dock="Bottom"
+                    Orientation="Horizontal" 
+                    HorizontalAlignment="Right"
+                    Margin="0,25,0,0">
+            <Button x:Name="BackButton"
+                    Width="120" 
+                    Height="38"
+                    Padding="8,6"
+                    Background="{DynamicResource PrimaryButtonBrush}"
+                    Foreground="White"
+                    BorderThickness="0"
+                    FontWeight="SemiBold"
+                    FontSize="12"
+                    Click="BackToDashboard_Click"
+                    Cursor="Hand"
+                    Template="{StaticResource SettingsButtonTemplate}"
+                    Tag="{StaticResource Icon.Back}">
+                <TextBlock x:Name="BackButtonText" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+            </Button>
+        </StackPanel>
+
+        <!-- Content Area -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" DockPanel.Dock="Top">
+            <StackPanel>
+                <!-- Steamtools Status Section -->
+                <Border Style="{StaticResource SettingsSectionBorder}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock x:Name="SettingsSteamtoolsTitle" Style="{StaticResource SettingsSectionTitle}" Text="STEAMTOOLS STATUS"/>
+                            <TextBlock x:Name="SteamtoolsStatusText" Style="{StaticResource SettingsText}" Text="Not installed"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
+                                <Button x:Name="SteamtoolsUpdateButton"
+                                    Width="Auto"
+                                    MinWidth="100"
+                                    Height="36"
+                                    Padding="8,6"
+                                    Background="{DynamicResource AccentBrush}"
+                                    Foreground="White"
+                                    BorderThickness="0"
+                                    FontWeight="SemiBold"
+                                    FontSize="11"
+                                    Click="SteamtoolsUpdateButton_Click"
+                                    Cursor="Hand"
+                                    VerticalAlignment="Center"
+                                    Visibility="Collapsed"
+                                    Margin="0,0,8,0"
+                                    Template="{StaticResource SettingsButtonTemplate}"
+                                    Tag="{StaticResource Icon.Download}">
+                                <TextBlock x:Name="SteamtoolsUpdateButtonText" VerticalAlignment="Center" HorizontalAlignment="Center" Text="UPDATE"/>
+                            </Button>
+
+                            <Button 
+                                x:Name="SteamtoolsActionButton"
+                                Width="140"
+                                Height="36"
+                                Padding="8,6"
+                                Background="{DynamicResource PrimaryButtonBrush}"
+                                Foreground="White"
+                                BorderThickness="0"
+                                FontWeight="SemiBold"
+                                FontSize="11"
+                                Click="SteamtoolsActionButton_Click"
+                                Cursor="Hand"
+                                VerticalAlignment="Center"
+                                Template="{StaticResource SettingsButtonTemplate}"
+                                Tag="{StaticResource Icon.Plus}">
+                                <TextBlock x:Name="SteamtoolsActionButtonText" VerticalAlignment="Center" HorizontalAlignment="Center" Text="INSTALL"/>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Overlay shown during install/uninstall operations -->
+                <Grid x:Name="SteamtoolsOverlayGrid" Background="#80000000" Visibility="Collapsed" Panel.ZIndex="100">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="450">
+                        <!-- Progress Card -->
+                        <Border Background="{DynamicResource CardBackgroundBrush}" CornerRadius="10" Padding="24" Effect="{DynamicResource DropShadowEffect}">
+                            <StackPanel>
+                                <!-- Title -->
+                                <TextBlock x:Name="SteamtoolsOverlayText" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,12" Text="Installing Steamtools..."/>
+                                
+                                <!-- Status Text -->
+                                <TextBlock x:Name="SteamtoolsOverlayStatus" FontSize="12" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,0,16" TextWrapping="Wrap" Text="Initializing..."/>
+                                
+                                <!-- Progress Bar -->
+                                <ProgressBar x:Name="SteamtoolsOverlayProgress" Height="6" Background="{DynamicResource BorderBrush}" Foreground="{DynamicResource SuccessButtonBrush}" Margin="0,0,0,12" IsIndeterminate="True"/>
+                                
+                                <!-- Step Indicator -->
+                                <StackPanel x:Name="SteamtoolsStepsPanel" Margin="0,0,0,0">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                        <TextBlock x:Name="SteamtoolsStep1Icon" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{DynamicResource MutedForegroundBrush}" Text="&#xE7BA;" Margin="0,0,8,0"/>
+                                        <TextBlock x:Name="SteamtoolsStep1Text" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Text="Stopping Steam..."/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                        <TextBlock x:Name="SteamtoolsStep2Icon" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{DynamicResource MutedForegroundBrush}" Text="&#xE7BA;" Margin="0,0,8,0"/>
+                                        <TextBlock x:Name="SteamtoolsStep2Text" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Text="Removing modifications..."/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                        <TextBlock x:Name="SteamtoolsStep3Icon" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{DynamicResource MutedForegroundBrush}" Text="&#xE7BA;" Margin="0,0,8,0"/>
+                                        <TextBlock x:Name="SteamtoolsStep3Text" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Text="Cleaning registry..."/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock x:Name="SteamtoolsStep4Icon" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{DynamicResource MutedForegroundBrush}" Text="&#xE7BA;" Margin="0,0,8,0"/>
+                                        <TextBlock x:Name="SteamtoolsStep4Text" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Text="Restarting Steam..."/>
+                                    </StackPanel>
+                                </StackPanel>
+                                
+                                <!-- Result Notification (Hidden by default) -->
+                                <Border x:Name="SteamtoolsResultNotification" Visibility="Collapsed" Background="{DynamicResource CardBackgroundBrush}" CornerRadius="8" Padding="16" Margin="0,16,0,0" BorderBrush="{DynamicResource SuccessButtonBrush}" BorderThickness="2">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock x:Name="SteamtoolsResultIcon" FontFamily="Segoe MDL2 Assets" FontSize="20" Text="&#xE73E;" Foreground="{DynamicResource SuccessButtonBrush}" Margin="0,0,8,0"/>
+                                        <TextBlock x:Name="SteamtoolsResultMessage" FontSize="12" Foreground="{DynamicResource ForegroundBrush}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+                <!-- Language Selection -->
+                <Border Style="{StaticResource SettingsSectionBorder}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock x:Name="SettingsLanguageTitle" Style="{StaticResource SettingsSectionTitle}"/>
+                            <TextBlock x:Name="SettingsLanguageDesc"
+                                       Style="{StaticResource SettingsText}"/>
+                        </StackPanel>
+
+                        <ComboBox Grid.Column="1"
+                                  x:Name="LangSelector"
+                                  Width="120" 
+                                  Height="36"
+                                  VerticalAlignment="Center"
+                                  Margin="20,0,0,0"
+                                  Style="{StaticResource SettingsComboBoxStyle}">
+                            <ComboBoxItem>English</ComboBoxItem>
+                            <ComboBoxItem>中文</ComboBoxItem>
+                        </ComboBox>
+                    </Grid>
+                </Border>
+
+                <!-- Theme Selection -->
+                <Border Style="{StaticResource SettingsSectionBorder}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock x:Name="SettingsThemeTitle" Style="{StaticResource SettingsSectionTitle}"/>
+                            <TextBlock x:Name="SettingsThemeDesc"
+                                       Style="{StaticResource SettingsText}"/>
+                        </StackPanel>
+
+                        <ComboBox Grid.Column="1"
+                                  x:Name="ThemeSelector"
+                                  Width="120" 
+                                  Height="36"
+                                  VerticalAlignment="Center"
+                                  Margin="20,0,0,0"
+                                  Style="{StaticResource SettingsComboBoxStyle}"
+                                  SelectionChanged="ThemeSelector_SelectionChanged">
+                            <ComboBoxItem x:Name="DarkThemeOption"/>
+                            <ComboBoxItem x:Name="LightThemeOption"/>
+                        </ComboBox>
+                    </Grid>
+                </Border>
+
+                <!-- Cache Section -->
+                <Border Style="{StaticResource SettingsSectionBorder}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock x:Name="SettingsCacheTitle" Style="{StaticResource SettingsSectionTitle}"/>
+                            <TextBlock x:Name="CacheSizeText"
+                                       Style="{StaticResource SettingsText}"/>
+                            <TextBlock x:Name="SettingsCacheDesc"
+                                       Style="{StaticResource SettingsText}"
+                                       Foreground="{DynamicResource BorderBrush}"
+                                       FontSize="11"
+                                       Margin="0,4,0,0"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="1"
+                            Width="140" 
+                            Height="36"
+                            Padding="8,6"
+                            Background="{DynamicResource PrimaryButtonBrush}"
+                            Foreground="White"
+                            BorderThickness="0"
+                            FontWeight="SemiBold"
+                            FontSize="11"
+                            Click="ClearCacheButton_Click"
+                            Cursor="Hand"
+                            VerticalAlignment="Center"
+                            Margin="20,0,0,0"
+                            Template="{StaticResource SettingsButtonTemplate}"
+                            Tag="{StaticResource Icon.Delete}">
+                            <TextBlock x:Name="ClearCacheButtonText" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <!-- Performance Section -->
+                <Border Style="{StaticResource SettingsSectionBorder}">
+                    <StackPanel>
+                        <TextBlock x:Name="SettingsPerformanceTitle" Style="{StaticResource SettingsSectionTitle}"/>
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock x:Name="SettingsHardwareAccelLabel"
+                                           Style="{StaticResource SettingsText}"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock x:Name="SettingsHardwareAccelDesc"
+                                           Style="{StaticResource SettingsText}"
+                                           Foreground="{DynamicResource BorderBrush}"
+                                           FontSize="11"
+                                           Margin="0,4,0,0"/>
+                            </StackPanel>
+
+                            <CheckBox Grid.Column="1"
+                                      x:Name="HardwareAccelerationCheckBox"
+                                      VerticalAlignment="Center"
+                                      Width="20"
+                                      Height="20"
+                                      Margin="20,0,0,0"
+                                      Cursor="Hand"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Auto Update Section -->
+                <Border Style="{StaticResource SettingsSectionBorder}">
+                    <StackPanel>
+                        <TextBlock x:Name="SettingsAutoUpdateTitle" Style="{StaticResource SettingsSectionTitle}"/>
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock x:Name="SettingsAutoUpdateLabel"
+                                           Style="{StaticResource SettingsText}"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock x:Name="SettingsAutoUpdateDesc"
+                                           Style="{StaticResource SettingsText}"
+                                           Foreground="{DynamicResource BorderBrush}"
+                                           FontSize="11"
+                                           Margin="0,4,0,0"/>
+                            </StackPanel>
+
+                            <CheckBox Grid.Column="1"
+                                      x:Name="AutoUpdateCheckBox"
+                                      VerticalAlignment="Center"
+                                      Width="20"
+                                      Height="20"
+                                      Margin="20,0,0,0"
+                                      Cursor="Hand"
+                                      Checked="AutoUpdateCheckBox_Changed"
+                                      Unchecked="AutoUpdateCheckBox_Changed"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Allow 18+ Content Section -->
+                <Border Style="{StaticResource SettingsSectionBorder}">
+                    <StackPanel>
+                        <TextBlock x:Name="SettingsAllow18PlusTitle" Style="{StaticResource SettingsSectionTitle}"/>
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock x:Name="SettingsAllow18PlusLabel"
+                                           Style="{StaticResource SettingsText}"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock x:Name="SettingsAllow18PlusDesc"
+                                           Style="{StaticResource SettingsText}"
+                                           Foreground="{DynamicResource BorderBrush}"
+                                           FontSize="11"
+                                           Margin="0,4,0,0"/>
+                            </StackPanel>
+
+                            <CheckBox Grid.Column="1"
+                                      x:Name="Allow18PlusCheckBox"
+                                      VerticalAlignment="Center"
+                                      Width="20"
+                                      Height="20"
+                                      Margin="20,0,0,0"
+                                      Cursor="Hand"
+                                      Checked="Allow18PlusCheckBox_Changed"
+                                      Unchecked="Allow18PlusCheckBox_Changed"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

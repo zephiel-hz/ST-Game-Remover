@@ -1,0 +1,172 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+  <sys:String x:Key="App.Title">HZ Lua Manager</sys:String>
+  <sys:String x:Key="Header.ActivityLog">Activity Log</sys:String>
+  <sys:String x:Key="Action.ClearLog">Clear Log</sys:String>
+  <sys:String x:Key="Action.CopyLog">Copy Log</sys:String>
+  <sys:String x:Key="Action.Refresh">Refresh</sys:String>
+  <sys:String x:Key="Action.SelectAll">Select All</sys:String>
+  <sys:String x:Key="Action.ClearSelection">Clear Selection</sys:String>
+  <sys:String x:Key="Tooltip.SelectAll">Select all games</sys:String>
+  <sys:String x:Key="Tooltip.RefreshGames">Refresh games list</sys:String>
+  <sys:String x:Key="Tooltip.Select">Select</sys:String>
+  <sys:String x:Key="Action.ClearCache">Clear Cache</sys:String>
+  <sys:String x:Key="Action.DeleteSelected">Delete Selected</sys:String>
+  <sys:String x:Key="Action.RestartSteam">Restart Steam</sys:String>
+  <sys:String x:Key="Label.GameName">Game Name</sys:String>
+  <sys:String x:Key="Label.AppId">AppID</sys:String>
+  <sys:String x:Key="Label.Genre">Genre</sys:String>
+  <sys:String x:Key="Label.NoImage">No Image</sys:String>
+  <sys:String x:Key="Label.All">All</sys:String>
+  <sys:String x:Key="Label.None">None</sys:String>
+  <sys:String x:Key="Search.Placeholder">Search...</sys:String>
+  <sys:String x:Key="Tooltip.Settings">Open Settings</sys:String>
+  <sys:String x:Key="Tooltip.Theme">Toggle theme</sys:String>
+  <sys:String x:Key="Tooltip.CopyLog">Copy log to clipboard</sys:String>
+  <sys:String x:Key="Window.Minimize">Minimize</sys:String>
+  <sys:String x:Key="Window.MaxRestore">Maximize/Restore</sys:String>
+  <sys:String x:Key="Window.Close">Close</sys:String>
+  <sys:String x:Key="Footer.CreatedBy">Created by Zephiel © 2025</sys:String>
+  <sys:String x:Key="Footer.VersionPrefix"> | v</sys:String>
+  <sys:String x:Key="Language.English">English</sys:String>
+  <sys:String x:Key="Language.Chinese">中文</sys:String>
+  <sys:String x:Key="Tooltip.Language">Select Language</sys:String>
+  <sys:String x:Key="Dialog.Confirm">Confirm</sys:String>
+  <sys:String x:Key="Dialog.Warning">Warning</sys:String>
+  <sys:String x:Key="Dialog.Error">Error</sys:String>
+  <sys:String x:Key="Dialog.Question">Question</sys:String>
+  <sys:String x:Key="Dialog.DeleteConfirm">Delete {0} file(s) and their associated manifests?</sys:String>
+  <sys:String x:Key="Dialog.NoGameSelected">No game selected.</sys:String>
+
+  <sys:String x:Key="DeleteDialog.Title">Delete Options</sys:String>
+  <sys:String x:Key="DeleteDialog.Message">{0} item(s) selected. Choose what to do:</sys:String>
+  <sys:String x:Key="DeleteDialog.ManifestAndLua">Manifest &amp; Lua</sys:String>
+  <sys:String x:Key="DeleteDialog.Uninstall">Uninstall</sys:String>
+  <sys:String x:Key="DeleteDialog.Both">Both</sys:String>
+  <sys:String x:Key="DeleteDialog.Cancel">Cancel</sys:String>
+  <sys:String x:Key="DeleteDialog.Confirm.ManifestAndLua">Delete manifest and Lua files for {0} item(s)? This will not trigger Steam uninstall.</sys:String>
+  <sys:String x:Key="DeleteDialog.Confirm.Uninstall">Trigger uninstall for {0} item(s)? This will not delete manifest or Lua files.</sys:String>
+  <sys:String x:Key="DeleteDialog.Confirm.Both">Delete manifest and Lua files and trigger uninstall for {0} item(s)? This will remove files and start the uninstall process.</sys:String> 
+  <sys:String x:Key="Dialog.ClearCacheConfirm">Clear all cached game names? This will force the app to fetch fresh data from Steam.</sys:String>
+  <sys:String x:Key="Dialog.ClearCache">Clear Cache</sys:String>
+  <sys:String x:Key="Status.SelectedCount">Selected {0}/{1}</sys:String>
+  <sys:String x:Key="Tooltip.ClearSelection">Clear selection</sys:String>
+  <sys:String x:Key="Dialog.ResetComplete">Reset Complete</sys:String>
+  <sys:String x:Key="Dialog.WelcomeResetConfirm">Welcome screen preference has been reset.\n\nWould you like to show the welcome screen now?</sys:String>
+  <sys:String x:Key="Log.CopiedToClipboard">Log copied to clipboard.</sys:String>
+  <sys:String x:Key="Log.IsEmpty">Log is empty.</sys:String>
+  <sys:String x:Key="Log.FailedToCopy">Failed to copy log: {0}</sys:String>
+  <sys:String x:Key="Log.WelcomeReset">Welcome screen preference reset. It will show on next startup.</sys:String>
+
+  <sys:String x:Key="Action.BackupSelected">Backup Selected</sys:String>
+  <sys:String x:Key="Action.RestoreBackup">Restore Backup</sys:String>
+
+  <sys:String x:Key="Dialog.BackupTitle">Select backup location</sys:String>
+  <sys:String x:Key="Dialog.RestoreTitle">Select backup file to restore</sys:String>
+
+  <sys:String x:Key="Log.BackupSuccess">Backed up {0} items to {1}</sys:String>
+  <sys:String x:Key="Log.BackupFailed">Backup failed: {0}</sys:String>
+  <sys:String x:Key="Log.RestoreSuccess">Restored {0} Lua &amp; {1} manifests</sys:String>
+  <sys:String x:Key="Log.RestoreFailed">Restore failed: {0}</sys:String>
+  <sys:String x:Key="Log.DragDropComplete">Drag &amp; drop complete: {0} LUA file(s) and {1} manifest file(s) copied.</sys:String>
+
+  <sys:String x:Key="Welcome.Title">Welcome to HZ Lua Manager</sys:String>
+  <sys:String x:Key="Welcome.Subtitle">Manage and backup your Steam games with ease.</sys:String>
+  <sys:String x:Key="Welcome.Description">Powerful game management for Steam — fast, safe, and reliable.</sys:String>
+  <sys:String x:Key="Welcome.Feature1">Smart backup and restore for games</sys:String>
+  <sys:String x:Key="Welcome.Feature2">Fix online issues and bypass game protections</sys:String>
+  <sys:String x:Key="Welcome.Feature3">Handle manifest files and manage game data</sys:String>
+  <sys:String x:Key="Welcome.DontShowAgain">Don't show this welcome screen again — hides it on next startup.</sys:String>
+  <sys:String x:Key="Welcome.GetStarted">Get Started</sys:String>
+
+  <sys:String x:Key="Header.GameDetails">Game Details</sys:String>
+  <sys:String x:Key="Label.Description">Description</sys:String>
+  <sys:String x:Key="Label.ReleaseDate">Release Date</sys:String>
+  <sys:String x:Key="Label.Publisher">Publisher</sys:String>
+  <sys:String x:Key="Label.DRM">DRM</sys:String>
+  <sys:String x:Key="Label.AntiCheat">Anti-Cheat</sys:String>
+  <sys:String x:Key="DRM.Steam">Steam</sys:String>
+  <sys:String x:Key="Label.SelectGameToViewDetails">Select a game to view details</sys:String>
+  <sys:String x:Key="Action.OpenSteamStore">Open in Steam Store</sys:String>
+  <sys:String x:Key="Label.Loading">Loading</sys:String>
+  <sys:String x:Key="Label.NoDescriptionAvailable">No description available</sys:String>
+  <sys:String x:Key="Label.ErrorLoadingDetails">Error loading details</sys:String>
+  <sys:String x:Key="Label.InstallationStatus">Installation Status</sys:String>
+  <sys:String x:Key="Label.Drive">Drive</sys:String>
+  <sys:String x:Key="Status.Installed">Installed</sys:String>
+  <sys:String x:Key="Status.NotInstalled">Not Installed</sys:String>
+
+  <sys:String x:Key="Nav.Library">Library</sys:String>
+  <sys:String x:Key="Nav.BackupRestore">Backup &amp; Restore</sys:String>
+  <sys:String x:Key="Nav.Settings">Settings</sys:String>
+  <sys:String x:Key="Nav.Toggle">Toggle Navigation</sys:String>
+
+  <!-- Dashboard -->
+  <sys:String x:Key="Dashboard.Welcome">Welcome to HZ Lua Manager</sys:String>
+  <sys:String x:Key="Dashboard.Subtitle">HZ Lua Manager - Your comprehensive lua management solution</sys:String>
+  <sys:String x:Key="Dashboard.LuaTools">🕹 Lua Tools</sys:String>
+  <sys:String x:Key="Dashboard.GameLibrary">Game Library</sys:String>
+  <sys:String x:Key="Dashboard.GameLibraryDesc">View, manage, backup, and remove games</sys:String>
+  <sys:String x:Key="Dashboard.HZManifest">HZ Manifest</sys:String>
+  <sys:String x:Key="Dashboard.HZManifestDesc">Download lua &amp; manifest files</sys:String>
+  <sys:String x:Key="Dashboard.SystemTools">🛠️ System Tools</sys:String>
+  <sys:String x:Key="Dashboard.GameBypass">Game Bypass</sys:String>
+  <sys:String x:Key="Dashboard.GameBypassDesc">DRM Protection Bypass</sys:String>
+  <sys:String x:Key="Dashboard.Restore">Restore</sys:String>
+  <sys:String x:Key="Dashboard.RestoreDesc">Restore backed up lua and manifest</sys:String>
+  <sys:String x:Key="Dashboard.RestartSteam">🔄 Restart Steam</sys:String>
+  <sys:String x:Key="Dashboard.LaunchSteam">Launch Steam</sys:String>
+  <sys:String x:Key="Dashboard.RestartSteamDesc">Restart Steam client</sys:String>
+  <sys:String x:Key="Dashboard.LaunchSteamDesc">Start Steam client</sys:String>
+  <sys:String x:Key="Dashboard.Application">⚡ Application</sys:String>
+  <sys:String x:Key="Dashboard.Settings">Settings</sys:String>
+  <sys:String x:Key="Dashboard.CheckUpdates">Check Updates</sys:String>
+  <sys:String x:Key="Dashboard.About">About</sys:String>
+  <sys:String x:Key="Dashboard.SettingsDesc">Preferences</sys:String>
+  <sys:String x:Key="Dashboard.CheckUpdatesDesc">Check for updates</sys:String>
+  <sys:String x:Key="Dashboard.AboutDesc">Made by Zephiel</sys:String>
+  <sys:String x:Key="Dashboard.Tip">💡 Tip: Click any feature to get started</sys:String>
+  
+  <!-- Settings -->
+  <sys:String x:Key="Settings.Title">SETTINGS</sys:String>
+  <sys:String x:Key="Settings.Performance">PERFORMANCE</sys:String>
+  <sys:String x:Key="Settings.HardwareAccel">Hardware Acceleration</sys:String>
+  <sys:String x:Key="Settings.HardwareAccelDesc">May improve performance but could increase GPU usage. Restart required.</sys:String>
+  <sys:String x:Key="Settings.AutoUpdate">AUTO UPDATE</sys:String>
+  <sys:String x:Key="Settings.AutoUpdateLabel">Enable Auto-Update</sys:String>
+  <sys:String x:Key="Settings.AutoUpdateDesc">Automatically check for new versions when the app starts</sys:String>
+  <sys:String x:Key="Settings.Cache">CACHE</sys:String>
+  <sys:String x:Key="Settings.CacheInfo">Only unused cache will be cleared. Active game data is preserved.</sys:String>
+  <sys:String x:Key="Settings.Theme">THEME</sys:String>
+  <sys:String x:Key="Settings.ThemeDesc">Choose your preferred visual style</sys:String>
+  <sys:String x:Key="Settings.ThemeDark">Dark</sys:String>
+  <sys:String x:Key="Settings.ThemeLight">Light</sys:String>
+  <sys:String x:Key="Settings.Language">LANGUAGE</sys:String>
+  <sys:String x:Key="Settings.LanguageDesc">Select your preferred language</sys:String>
+  <sys:String x:Key="Settings.Back">BACK</sys:String>
+  <sys:String x:Key="Settings.ClearCache">CLEAR CACHE</sys:String>
+  <sys:String x:Key="Settings.SteamtoolsTitle">STEAMTOOLS STATUS</sys:String>
+  <sys:String x:Key="Settings.SteamtoolsStatus">Not installed</sys:String>
+  <sys:String x:Key="Settings.SteamtoolsAction">INSTALL</sys:String>
+  <sys:String x:Key="Settings.Allow18Plus">ALLOW 18+ CONTENT</sys:String>
+  <sys:String x:Key="Settings.Allow18PlusLabel">Allow Adult Content</sys:String>
+  <sys:String x:Key="Settings.Allow18PlusDesc">Show manifest files with nudity and sexual content</sys:String>
+  
+  <!-- GameLibrary -->
+  <sys:String x:Key="GameLibrary.Title">📚 Game Library</sys:String>
+  <sys:String x:Key="GameLibrary.Subtitle">Manage your Steam games</sys:String>
+  <sys:String x:Key="GameLibrary.SelectAll">Select All</sys:String>
+  <sys:String x:Key="GameLibrary.Refresh">Refresh</sys:String>
+  <sys:String x:Key="GameLibrary.Import">Import</sys:String>
+  <sys:String x:Key="GameLibrary.ActivityLogHeader">📋 Activity Log</sys:String>
+  <sys:String x:Key="GameLibrary.CopyLog">📋 Copy Log</sys:String>
+  <sys:String x:Key="GameLibrary.Backup">Backup</sys:String>
+  <sys:String x:Key="GameLibrary.Delete">🗑 Delete</sys:String>
+  <sys:String x:Key="GameLibrary.Clear">✕ Clear</sys:String>
+  <sys:String x:Key="GameLibrary.Installed">Installed</sys:String>
+  <sys:String x:Key="GameLibrary.Back">← Back</sys:String>
+  <sys:String x:Key="GameLibrary.SelectionCounter">{0}/{1} games selected</sys:String>
+  <sys:String x:Key="GameLibrary.NoActivityYet">No activity yet</sys:String>
+
+</ResourceDictionary>

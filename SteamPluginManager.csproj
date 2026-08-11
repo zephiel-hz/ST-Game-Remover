@@ -1,0 +1,51 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>SGR</AssemblyName>
+    <RootNamespace>SteamPluginManager</RootNamespace>
+    <Product>HZ Lua Manager</Product>
+    <ApplicationManifest>Config\app.manifest</ApplicationManifest>
+    <ApplicationIcon>Config\SGR.ico</ApplicationIcon>
+    <!-- Version info -->
+    <Version>2.2.0</Version>
+    <AssemblyVersion>2.2.0.0</AssemblyVersion>
+    <FileVersion>2.2.0.0</FileVersion>
+    <!-- Disable warnings for missing UI elements in XAML codebehind -->
+    <NoWarn>$(NoWarn);CS0246;CS0103;CA2022;CS8603;CS0234</NoWarn>
+    <!-- Performance optimizations (compatible with WPF) -->
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <TieredCompilation>true</TieredCompilation>
+    <TieredCompilationQuickJit>true</TieredCompilationQuickJit>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!-- Application icon removed temporarily to allow build when original icon is missing -->
+
+  <ItemGroup>
+    <None Include="Config\SGR.ico">
+      <Pack>True</Pack>
+    </None>
+    <None Include="Config\service-config.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <Content Include="Config\saweria-logo.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+    <ItemGroup>
+      <Resource Include="Config\SGR.ico" />
+      <Resource Include="Config\saweria-icon.png" />
+    </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+    <PackageReference Include="System.Management" Version="9.0.0" />
+  </ItemGroup>
+
+</Project>
