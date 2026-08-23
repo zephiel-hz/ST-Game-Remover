@@ -7,13 +7,19 @@ namespace SteamPluginManager
     {
         private const string RegistryKeyPath = @"Software\SteamPluginManager";
         private const string ThemeValueName = "ThemePreference";
+        public static readonly string[] AvailableThemes = { "Dark", "DarkBlue", "DarkGreen", "DarkPink", "DarkPurple", "DarkYellow", "DarkRed" };
 
-        public static void SaveThemePreference(bool isLightTheme)
+        public static string NormalizeThemeName(string? themeName)
+        {
+            return Array.IndexOf(AvailableThemes, themeName) >= 0 ? themeName! : "Dark";
+        }
+
+        public static void SaveThemePreference(string themeName)
         {
             try
             {
                 using var key = Registry.CurrentUser.CreateSubKey(RegistryKeyPath);
-                key?.SetValue(ThemeValueName, isLightTheme ? "Light" : "Dark");
+                key?.SetValue(ThemeValueName, themeName);
             }
             catch (Exception ex)
             {
@@ -21,14 +27,14 @@ namespace SteamPluginManager
             }
         }
 
-        public static bool? GetSavedThemePreference()
+        public static string? GetSavedThemePreference()
         {
             try
             {
                 using var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath);
                 if (key?.GetValue(ThemeValueName) is string themeValue)
                 {
-                    return themeValue == "Light";
+                    return NormalizeThemeName(themeValue);
                 }
             }
             catch (Exception ex)

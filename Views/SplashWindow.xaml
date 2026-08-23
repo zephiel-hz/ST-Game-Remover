@@ -47,15 +47,8 @@
                              Duration="0:0:1.3"
                              AutoReverse="True"
                              RepeatBehavior="Forever" />
-            <DoubleAnimation Storyboard.TargetName="SpinnerRotate"
-                             Storyboard.TargetProperty="Angle"
-                             From="0"
-                             To="360"
-                             Duration="0:0:1.6"
-                             RepeatBehavior="Forever" />
         </Storyboard>
 
-        <SolidColorBrush x:Key="AccentBrush">#FF8A00</SolidColorBrush>
     </Window.Resources>
 
     <Grid x:Name="RootGrid" Opacity="0">
@@ -63,16 +56,9 @@
             <ScaleTransform ScaleX="0.96" ScaleY="0.96" />
         </Grid.RenderTransform>
 
-        <Border CornerRadius="18">
-            <Border.Background>
-                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                    <GradientStop Color="#071018" Offset="0"/>
-                    <GradientStop Color="#0E1A25" Offset="0.6"/>
-                    <GradientStop Color="#08101A" Offset="1"/>
-                </LinearGradientBrush>
-            </Border.Background>
+        <Border CornerRadius="18" Background="{DynamicResource BackgroundBrush}">
             <Border.BorderBrush>
-                <SolidColorBrush Color="#33FF8A00"/>
+                <SolidColorBrush Color="#33000000"/>
             </Border.BorderBrush>
             <Border.BorderThickness>1.0</Border.BorderThickness>
             <Border.Effect>
@@ -87,7 +73,7 @@
                         Opacity="0.18"
                         CornerRadius="18"
                         Margin="-6"
-                        BorderBrush="#22FF8A00"
+                        BorderBrush="{DynamicResource AccentBrush}"
                         BorderThickness="2"
                         Background="Transparent" />
 
@@ -101,26 +87,23 @@
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,6">
                         <!-- Logo icon only -->
                         <Grid Width="92" Height="92">
-                            <Image x:Name="LogoImage" Width="56" Height="56" HorizontalAlignment="Center" VerticalAlignment="Center" Stretch="Uniform" RenderTransformOrigin="0.5,0.5">
+                            <Image x:Name="LogoImage" Width="56" Height="56" HorizontalAlignment="Center" VerticalAlignment="Center" Stretch="Uniform">
                                 <Image.Source>
                                     <BitmapImage UriSource="/Config/SGR.ico" CacheOption="OnLoad" />
                                 </Image.Source>
-                                <Image.RenderTransform>
-                                    <RotateTransform x:Name="SpinnerRotate" Angle="0" />
-                                </Image.RenderTransform>
                             </Image>
                             <Ellipse x:Name="LogoGlow" Width="84" Height="84" Fill="Transparent" Opacity="0.0" />
                         </Grid>
 
                         <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" FontSize="20" FontWeight="Bold">
-                            <Run Foreground="{StaticResource AccentBrush}" Text="HZ"/>
-                            <Run Foreground="#F8FAFC" Text=" Lua Manager"/>
+                            <Run Foreground="{DynamicResource AccentBrush}" Text="HZ"/>
+                            <Run Foreground="{DynamicResource ForegroundBrush}" Text=" Lua Manager"/>
                         </TextBlock>
                     </StackPanel>
 
-                    <TextBlock Text="Starting application..." Margin="0,8,0,0" FontSize="13" Foreground="#94A3B8" HorizontalAlignment="Center" />
+                    <TextBlock Text="Starting application..." Margin="0,8,0,0" FontSize="13" Foreground="{DynamicResource MutedForegroundBrush}" HorizontalAlignment="Center" />
 
-                    <Border Margin="0,12,0,4" CornerRadius="8" Width="420" Height="18" Background="#08121A" BorderBrush="#17212A" BorderThickness="1">
+                    <Border Margin="0,12,0,4" CornerRadius="8" Width="420" Height="18" Background="{DynamicResource InputBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
                         <ProgressBar x:Name="SplashProgress"
                                      Height="10"
                                      VerticalAlignment="Center"
@@ -128,24 +111,24 @@
                                      Maximum="100"
                                      Value="0"
                                      IsIndeterminate="False"
-                                     Background="#14212A"
-                                     Foreground="{StaticResource AccentBrush}"
+                                     Background="{DynamicResource ButtonBackgroundBrush}"
+                                     Foreground="{DynamicResource AccentBrush}"
                                      BorderThickness="0"/>
                     </Border>
 
                     <!-- Feature highlights -->
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,6,0,0">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,18,0">
-                            <Ellipse Width="8" Height="8" Fill="{StaticResource AccentBrush}" Opacity="0.9" Margin="0,0,8,0"/>
-                            <TextBlock Text="Fast updates" Foreground="#BBD1D9" FontSize="12"/>
+                            <Ellipse Width="8" Height="8" Fill="{DynamicResource AccentBrush}" Opacity="0.9" Margin="0,0,8,0"/>
+                            <TextBlock Text="Fast updates" Foreground="{DynamicResource MutedForegroundBrush}" FontSize="12"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,18,0">
-                            <Ellipse Width="8" Height="8" Fill="#9AA6B0" Opacity="0.45" Margin="0,0,8,0"/>
-                            <TextBlock Text="Built for gamers" Foreground="#BBD1D9" FontSize="12"/>
+                            <Ellipse Width="8" Height="8" Fill="{DynamicResource MutedForegroundBrush}" Opacity="0.45" Margin="0,0,8,0"/>
+                            <TextBlock Text="Built for gamers" Foreground="{DynamicResource MutedForegroundBrush}" FontSize="12"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Ellipse Width="8" Height="8" Fill="#9AA6B0" Opacity="0.45" Margin="0,0,8,0"/>
-                            <TextBlock Text="Lightweight" Foreground="#BBD1D9" FontSize="12"/>
+                            <Ellipse Width="8" Height="8" Fill="{DynamicResource MutedForegroundBrush}" Opacity="0.45" Margin="0,0,8,0"/>
+                            <TextBlock Text="Lightweight" Foreground="{DynamicResource MutedForegroundBrush}" FontSize="12"/>
                         </StackPanel>
                     </StackPanel>
                     </StackPanel>

@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media.Imaging;
 using System.Net.NetworkInformation;
 using System.Management;
 using System.Text.Json.Serialization;
@@ -17,7 +18,42 @@ namespace SteamPluginManager.Views
         public VerifyTokenView()
         {
             InitializeComponent();
+            VerifyLogoImage.Source = CreateThemeIcon();
+            App.ThemeChanged += ThemeChanged_Handler;
             Loaded += VerifyTokenView_Loaded;
+            Unloaded += VerifyTokenView_Unloaded;
+        }
+
+        private void ThemeChanged_Handler(object? sender, EventArgs e)
+        {
+            VerifyLogoImage.Source = CreateThemeIcon();
+        }
+
+        private static BitmapImage CreateThemeIcon()
+        {
+            var icon = new BitmapImage();
+            icon.BeginInit();
+            icon.UriSource = new Uri(App.GetThemeIconPath(), UriKind.Absolute);
+            icon.CacheOption = BitmapCacheOption.OnLoad;
+            icon.EndInit();
+            icon.Freeze();
+            return icon;
+        }
+
+        private void VerifyTokenView_Unloaded(object sender, RoutedEventArgs e)
+        {
+            App.ThemeChanged -= ThemeChanged_Handler;
+        }
+
+        public void SetToken(string token)
+        {
+            try
+            {
+                TokenInput.Text = token;
+                TokenInput.Focus();
+                TokenInput.CaretIndex = TokenInput.Text?.Length ?? 0;
+            }
+            catch { }
         }
 
         private void VerifyTokenView_Loaded(object sender, RoutedEventArgs e)
@@ -42,21 +78,15 @@ namespace SteamPluginManager.Views
 
         private void OnClickHere(object sender, RoutedEventArgs e)
         {
-            const string requestTokenUrl = "https://hzluamanager-get-token.lovable.app";
-            Logger.Log($"[VerifyTokenView] Click here link clicked - opening {requestTokenUrl}");
-
+            Logger.Log("[VerifyTokenView] Click here link clicked - opening in-app token generator");
             try
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = requestTokenUrl,
-                    UseShellExecute = true
-                });
+                WindowNavigator.NavigateToGenerateToken();
             }
             catch (Exception ex)
             {
-                Logger.Log($"[VerifyTokenView] Failed to open token request URL: {ex.Message}");
-                MessageBox.Show($"Unable to open the request page. Please visit: {requestTokenUrl}", "Open Link Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                Logger.Log($"[VerifyTokenView] Failed to open in-app token generator: {ex.Message}");
+                MessageBox.Show("Unable to open the token generator. Please visit: https://hzluamanager-get-token.lovable.app", "Open Link Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 

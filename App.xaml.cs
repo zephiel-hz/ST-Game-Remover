@@ -9,6 +9,8 @@ namespace SteamPluginManager
     public partial class App : Application
     {
         public static event EventHandler? LanguageChanged;
+        public static event EventHandler? ThemeChanged;
+        public static string ThemeIconFileName { get; private set; } = "SGR.ico";
         private Mutex? _singleInstanceMutex;
         private Views.SplashWindow? _splashWindow;
 
@@ -19,6 +21,18 @@ namespace SteamPluginManager
                 LanguageChanged?.Invoke(Application.Current, EventArgs.Empty);
             }
             catch { }
+        }
+
+        public static void RaiseThemeChanged()
+        {
+            try { ThemeChanged?.Invoke(Application.Current, EventArgs.Empty); } catch { }
+        }
+
+        public static string GetThemeIconPath() => Path.Combine(AppContext.BaseDirectory, "Config", ThemeIconFileName);
+
+        public static void SetThemeIcon(string themeName)
+        {
+            ThemeIconFileName = GetThemeIconFileName(themeName);
         }
 
         protected override void OnStartup(StartupEventArgs e)
@@ -107,8 +121,7 @@ namespace SteamPluginManager
         {
             try
             {
-                var saved = ThemePreferences.GetSavedThemePreference();
-                bool useLight = saved ?? false;
+                var themeName = ThemePreferences.GetSavedThemePreference() ?? "Dark";
                 var app = Application.Current;
                 ResourceDictionary? existing = null;
                 foreach (var dict in app.Resources.MergedDictionaries)
@@ -121,7 +134,8 @@ namespace SteamPluginManager
                 }
                 if (existing != null) app.Resources.MergedDictionaries.Remove(existing);
 
-                string themeFile = useLight ? "Themes/Light.xaml" : "Themes/Dark.xaml";
+                string themeFile = $"Themes/{themeName}.xaml";
+                SetThemeIcon(themeName);
                 var themeDict = new ResourceDictionary { Source = new Uri(themeFile, UriKind.Relative) };
                 app.Resources.MergedDictionaries.Add(themeDict);
             }
@@ -129,6 +143,21 @@ namespace SteamPluginManager
             {
                 try { Logger.Log($"Failed to apply saved theme: {ex.Message}"); } catch { }
             }
+        }
+
+        public static string GetThemeIconFileName(string themeName)
+        {
+            return themeName?.Trim() switch
+            {
+                "Dark" or "DarkOrange" => "SGR.ico",
+                "DarkBlue" => "SGR_blue.ico",
+                "DarkGreen" => "SGR_green.ico",
+                "DarkPink" => "SGR_pink.ico",
+                "DarkPurple" => "SGR_purple.ico",
+                "DarkYellow" => "SGR_yellow.ico",
+                    "DarkRed" => "SGR_red.ico",
+                _ => "SGR.ico"
+            };
         }
 
         private void ApplySavedLanguage()

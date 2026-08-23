@@ -1302,21 +1302,11 @@ namespace SteamPluginManager.Views
 
         private async void About_Click(object sender, RoutedEventArgs e)
         {
-            var version = GetInformationalVersion();
+            var version = UpdateChecker.GetCurrentVersion();
             string licenseStatus = await GetLicenseStatusAsync();
             var dialog = new StyledMessageDialog("About HZ Lua Manager", $"HZ Lua Manager\nVersion {version}\n\n{licenseStatus}\n\nYour comprehensive lua management solution.");
             dialog.Owner = Window.GetWindow(this);
             dialog.ShowDialog();
-        }
-
-        private static string GetInformationalVersion()
-        {
-            var infoVersion = System.Reflection.Assembly.GetExecutingAssembly()
-                .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-            if (!string.IsNullOrWhiteSpace(infoVersion))
-                return infoVersion;
-
-            return System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "Unknown";
         }
 
         private async Task<string> GetLicenseStatusAsync()

@@ -82,10 +82,6 @@ namespace SteamPluginManager.Views
                 // Theme section
                 LanguageHelper.RegisterTextBlock(SettingsThemeTitle, "Settings.Theme");
                 LanguageHelper.RegisterTextBlock(SettingsThemeDesc, "Settings.ThemeDesc");
-                if (DarkThemeOption != null)
-                    DarkThemeOption.Content = Application.Current.FindResource("Settings.ThemeDark") ?? "Dark";
-                if (LightThemeOption != null)
-                    LightThemeOption.Content = Application.Current.FindResource("Settings.ThemeLight") ?? "Light";
                 
                 // Language section
                 LanguageHelper.RegisterTextBlock(SettingsLanguageTitle, "Settings.Language");
@@ -1036,17 +1032,11 @@ namespace SteamPluginManager.Views
                 // Get saved theme preference
                 var savedTheme = ThemePreferences.GetSavedThemePreference();
                 
-                // Set selection based on theme (0 = Dark, 1 = Light)
-                if (savedTheme == true)
-                {
-                    ThemeSelector.SelectedIndex = 1; // Light theme
-                    Logger.Log($"[LoadThemePreference] Set to Light theme (index 1)");
-                }
-                else
-                {
-                    ThemeSelector.SelectedIndex = 0; // Dark theme (default)
-                    Logger.Log($"[LoadThemePreference] Set to Dark theme (index 0)");
-                }
+                var themeNames = ThemePreferences.AvailableThemes;
+                var selectedTheme = savedTheme ?? "Dark";
+                var selectedIndex = Array.IndexOf(themeNames, selectedTheme);
+                ThemeSelector.SelectedIndex = selectedIndex >= 0 ? selectedIndex : 0;
+                Logger.Log($"[LoadThemePreference] Set to {themeNames[ThemeSelector.SelectedIndex]} theme");
                 
                 // Re-attach event handler AFTER setting initial value
                 ThemeSelector.SelectionChanged += ThemeSelector_SelectionChanged;
@@ -1142,9 +1132,10 @@ namespace SteamPluginManager.Views
                 
                 if (ThemeSelector.SelectedIndex >= 0)
                 {
-                    bool isLightTheme = ThemeSelector.SelectedIndex == 1; // 0 = Dark, 1 = Light
-                    Logger.Log($"[ThemeSelector] Selected theme: {(isLightTheme ? "Light" : "Dark")}");
-                    ApplyTheme(isLightTheme);
+                    var themeNames = ThemePreferences.AvailableThemes;
+                    var themeName = themeNames[ThemeSelector.SelectedIndex];
+                    Logger.Log($"[ThemeSelector] Selected theme: {themeName}");
+                    ApplyTheme(themeName);
                 }
             }
             catch (Exception ex)
@@ -1221,14 +1212,14 @@ namespace SteamPluginManager.Views
             }
         }
 
-        private void ApplyTheme(bool isLightTheme)
+        private void ApplyTheme(string themeName)
         {
             try
             {
                 var app = Application.Current;
                 if (app == null) return;
 
-                Logger.Log($"[Theme Switch] Starting to apply theme: {(isLightTheme ? "Light" : "Dark")}");
+                Logger.Log($"[Theme Switch] Starting to apply theme: {themeName}");
                 Logger.Log($"[Theme Switch] Current merged dictionaries count: {app.Resources.MergedDictionaries.Count}");
 
                 // Find and remove existing theme resource
@@ -1251,19 +1242,21 @@ namespace SteamPluginManager.Views
                 }
 
                 // Load and add new theme resource
-                string themeFileName = isLightTheme ? "Themes/Light.xaml" : "Themes/Dark.xaml";
+                string themeFileName = $"Themes/{themeName}.xaml";
                 Logger.Log($"[Theme Switch] Loading new theme file: {themeFileName}");
                 
                 ResourceDictionary newDict = new ResourceDictionary { Source = new Uri(themeFileName, UriKind.Relative) };
                 app.Resources.MergedDictionaries.Add(newDict);
+                App.SetThemeIcon(themeName);
+                App.RaiseThemeChanged();
                 
                 Logger.Log($"[Theme Switch] Added new theme dict. New count: {app.Resources.MergedDictionaries.Count}");
 
                 // Save theme preference
-                ThemePreferences.SaveThemePreference(isLightTheme);
-                Logger.Log($"[Theme Switch] Saved theme preference: {(isLightTheme ? "Light" : "Dark")}");
+                ThemePreferences.SaveThemePreference(themeName);
+                Logger.Log($"[Theme Switch] Saved theme preference: {themeName}");
                 
-                Logger.Log($"Theme changed to: {(isLightTheme ? "Light" : "Dark")}");
+                Logger.Log($"Theme changed to: {themeName}");
             }
             catch (Exception ex)
             {

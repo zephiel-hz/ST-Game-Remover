@@ -368,50 +368,8 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Notification Banner -->
-                    <Border Grid.Row="0" x:Name="NotificationBanner"
-                            Background="{DynamicResource AccentBrush}"
-                            CornerRadius="8"
-                            Padding="12"
-                            Margin="20,20,20,12"
-                            Visibility="Collapsed">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0" Orientation="Vertical">
-                                <TextBlock x:Name="NotificationBannerTitle"
-                                           Text="Manifest baru"
-                                           FontWeight="Bold"
-                                           Foreground="White"
-                                           FontSize="14"/>
-                                <TextBlock x:Name="NotificationBannerDetails"
-                                           TextWrapping="Wrap"
-                                           Foreground="White"
-                                           Opacity="0.95"
-                                           Margin="0,4,0,0"
-                                           FontSize="12"/>
-                            </StackPanel>
-
-                            <Button Grid.Column="1"
-                                    Content="✕"
-                                    Width="24"
-                                    Height="24"
-                                    FontSize="12"
-                                    Background="Transparent"
-                                    Foreground="White"
-                                    BorderBrush="Transparent"
-                                    Cursor="Hand"
-                                    Click="NotificationBannerClose_Click"
-                                    HorizontalAlignment="Right"
-                                    VerticalAlignment="Top"/>
-                        </Grid>
-                    </Border>
-
                     <!-- Search Box and Category Tabs -->
-                    <Border Grid.Row="1" Background="{DynamicResource CardBackgroundBrush}" CornerRadius="10" Padding="10" Margin="0,0,0,10" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                    <Border Grid.Row="0" Background="{DynamicResource CardBackgroundBrush}" CornerRadius="10" Padding="10" Margin="0,0,0,10" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
                         <Grid VerticalAlignment="Center">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
@@ -489,7 +447,7 @@
                                             Tag="{StaticResource Icon.Plus}">
                                         <TextBlock Text="Request" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                                     </Button>
-                                    <Button x:Name="BackButton" Width="90" Height="34" Padding="8"
+                                    <Button x:Name="BackButton" Width="90" Height="34"
                                             Background="{DynamicResource PrimaryButtonBrush}"
                                             Foreground="White" FontWeight="SemiBold"
                                             Click="BackToDashboard_Click" Cursor="Hand" FontSize="12"
@@ -522,8 +480,8 @@
                             <RowDefinition Height="*"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
-                        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,12,0" x:Name="CardsScrollViewer">
-                            <ItemsControl x:Name="FileCards" ItemsSource="{Binding Files, Mode=OneWay}" Margin="0,0,0,10">
+                        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,6,0" x:Name="CardsScrollViewer">
+                            <ItemsControl x:Name="FileCards" ItemsSource="{Binding Files, Mode=OneWay}" Margin="0,0,0,4">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
                                         <WrapPanel x:Name="CardPanel" IsItemsHost="True" Orientation="Horizontal" HorizontalAlignment="Left"/>
@@ -531,7 +489,7 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Style="{StaticResource ManifestCardStyle}" ClipToBounds="True" MinWidth="250" Height="270" MouseLeftButtonUp="FileCard_MouseLeftButtonUp" Cursor="Hand" x:Name="CardBorder" Loaded="CardBorder_Loaded" Margin="0,0,12,12">
+                                        <Border Style="{StaticResource ManifestCardStyle}" ClipToBounds="True" MinWidth="220" Height="270" MouseLeftButtonUp="FileCard_MouseLeftButtonUp" Cursor="Hand" x:Name="CardBorder" Loaded="CardBorder_Loaded" Margin="0,0,8,8">
                                             <Grid>
                                                 <Grid.RowDefinitions>
                                                     <RowDefinition Height="126"/>
@@ -539,7 +497,7 @@
                                                 </Grid.RowDefinitions>
 
                                                 <!-- Thumbnail Image Area -->
-                                                <Border Grid.Row="0" Background="{DynamicResource BorderBrush}" CornerRadius="14,14,0,0" Margin="0,0,0,6" ClipToBounds="True" Loaded="ThumbnailBorder_Loaded" SizeChanged="ThumbnailBorder_SizeChanged">
+                                                <Border Grid.Row="0" Background="{DynamicResource BorderBrush}" CornerRadius="14,14,0,0" Margin="0,0,0,3" ClipToBounds="True" Loaded="ThumbnailBorder_Loaded" SizeChanged="ThumbnailBorder_SizeChanged">
                                                     <Grid>
                                                         <Image x:Name="ThumbnailImage" Stretch="UniformToFill" VerticalAlignment="Stretch" HorizontalAlignment="Stretch"/>
                                                         <TextBlock Text="🎮" FontSize="56" 
@@ -549,7 +507,7 @@
                                                 </Border>
 
                                                 <!-- Game Info -->
-                                                <StackPanel Grid.Row="1" VerticalAlignment="Top" Margin="12,7,12,10">
+                                                <StackPanel Grid.Row="1" VerticalAlignment="Top" Margin="12,5,12,8">
                                                     <!-- Game Name (Primary) -->
                                                     <TextBlock Text="{Binding Name}" FontWeight="Bold" HorizontalAlignment="Left" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ForegroundBrush}" FontSize="12" Margin="0,0,0,4" MaxHeight="34"/>
                                                     
@@ -574,7 +532,7 @@
                         </ScrollViewer>
 
                         <!-- Pagination Controls -->
-                            <Border Grid.Row="1" Background="{DynamicResource CardBackgroundBrush}" Padding="8,7" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8">
+                        <Border Grid.Row="1" Background="{DynamicResource CardBackgroundBrush}" Padding="8,7" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -583,7 +541,7 @@
                                 </Grid.ColumnDefinitions>
 
                                 <!-- Previous Button -->
-                                <Button Grid.Column="0" x:Name="PreviousPageButton" Width="110" Height="28" 
+                                <Button Grid.Column="0" x:Name="PreviousPageButton" Width="110" Height="34" 
                                     Background="{DynamicResource PrimaryButtonBrush}"
                                     Foreground="White" FontWeight="SemiBold" Cursor="Hand"
                                     Click="PreviousPage_Click"
@@ -605,7 +563,7 @@
                                 </StackPanel>
 
                                 <!-- Next Button -->
-                                <Button Grid.Column="2" x:Name="NextPageButton" Width="110" Height="28" 
+                                <Button Grid.Column="2" x:Name="NextPageButton" Width="110" Height="34" 
                                     Background="{DynamicResource PrimaryButtonBrush}"
                                     Foreground="White" FontWeight="SemiBold" Cursor="Hand"
                                     Click="NextPage_Click"
@@ -619,6 +577,163 @@
                 </Grid>
             </Border>
 
+        </Grid>
+
+        <!-- Floating manifest notification -->
+        <Border Grid.Row="1" x:Name="NotificationBanner"
+                Panel.ZIndex="20"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Width="520"
+                MaxWidth="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                Background="{DynamicResource AccentBrush}"
+                CornerRadius="8"
+                Padding="12"
+                Margin="20,12,20,0"
+                Visibility="Collapsed"
+                Cursor="Hand"
+                MouseLeftButtonUp="NotificationBanner_Click">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock x:Name="NotificationBannerTitle"
+                               FontWeight="Bold"
+                               Foreground="White"
+                               FontSize="14"/>
+                    <TextBlock x:Name="NotificationBannerDetails"
+                               TextWrapping="Wrap"
+                               Foreground="White"
+                               Opacity="0.95"
+                               Margin="0,4,0,0"
+                               FontSize="12"/>
+                    <TextBlock Text="Click to view new games"
+                               Foreground="White"
+                               Opacity="0.8"
+                               FontSize="10"
+                               Margin="0,6,0,0"/>
+                </StackPanel>
+                <Button Grid.Column="1"
+                        Content="✕"
+                        Width="24"
+                        Height="24"
+                        FontSize="12"
+                        Background="Transparent"
+                        Foreground="White"
+                        BorderBrush="Transparent"
+                        Cursor="Hand"
+                        Click="NotificationBannerClose_Click"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"/>
+            </Grid>
+        </Border>
+
+        <!-- New manifests list modal -->
+        <Grid x:Name="NewManifestPopupOverlay"
+              Grid.Row="0"
+              Grid.RowSpan="2"
+              Panel.ZIndex="40"
+              Visibility="Collapsed"
+              Background="#B2000000">
+            <Border HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Width="480"
+                    MaxHeight="560"
+                    Background="{DynamicResource CardBackgroundBrush}"
+                    BorderBrush="{DynamicResource AccentBrush}"
+                    BorderThickness="1"
+                    CornerRadius="14"
+                    Padding="20">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,0,0,14">
+                        <StackPanel>
+                            <TextBlock Text="New game manifests"
+                                       Foreground="{DynamicResource ForegroundBrush}"
+                                       FontSize="18"
+                                       FontWeight="Bold"/>
+                            <TextBlock x:Name="NewManifestPopupSubtitle"
+                                       Text="Recently added games"
+                                       Foreground="{DynamicResource MutedForegroundBrush}"
+                                       FontSize="12"
+                                       Margin="0,4,0,0"/>
+                        </StackPanel>
+                        <Button Content="✕"
+                            Style="{StaticResource RoundedButtonStyle}"
+                                Width="28"
+                                Height="28"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Top"
+                            Background="{DynamicResource SecondaryButtonBrush}"
+                            Foreground="White"
+                                BorderBrush="Transparent"
+                            FontSize="12"
+                            FontWeight="SemiBold"
+                                Cursor="Hand"
+                                Click="NewManifestPopupClose_Click"/>
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  MaxHeight="420">
+                        <ItemsControl ItemsSource="{Binding NewManifestFiles}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{DynamicResource InputBackgroundBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="8"
+                                            Padding="12"
+                                            Margin="0,0,0,8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Name}"
+                                                           Foreground="{DynamicResource ForegroundBrush}"
+                                                           FontWeight="SemiBold"
+                                                           TextWrapping="Wrap"/>
+                                                <TextBlock Text="{Binding AppId}"
+                                                           Foreground="{DynamicResource MutedForegroundBrush}"
+                                                           FontSize="11"
+                                                           Margin="0,4,0,0"/>
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="NEW"
+                                                       Foreground="White"
+                                                       Background="{DynamicResource AccentBrush}"
+                                                       FontSize="10"
+                                                       FontWeight="Bold"
+                                                       Padding="6,3"
+                                                       VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <Button Grid.Row="2"
+                            Content="Close"
+                            Style="{StaticResource RequestPopupButtonStyle}"
+                            Width="100"
+                            Height="40"
+                            HorizontalAlignment="Right"
+                            Margin="0,16,0,0"
+                            Background="{DynamicResource PrimaryButtonBrush}"
+                            Click="NewManifestPopupClose_Click"/>
+                </Grid>
+            </Border>
         </Grid>
 
         <!-- Request Popup Overlay -->

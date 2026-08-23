@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
 namespace SteamPluginManager.Views
@@ -16,6 +17,14 @@ namespace SteamPluginManager.Views
         public SplashWindow()
         {
             InitializeComponent();
+            var icon = new BitmapImage();
+            icon.BeginInit();
+            icon.UriSource = new Uri(App.GetThemeIconPath(), UriKind.Absolute);
+            icon.CacheOption = BitmapCacheOption.OnLoad;
+            icon.EndInit();
+            icon.Freeze();
+            LogoImage.Source = icon;
+            Icon = BitmapFrame.Create(icon);
             _progressTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(33), DispatcherPriority.Render, ProgressTimer_Tick, Dispatcher);
         }
 

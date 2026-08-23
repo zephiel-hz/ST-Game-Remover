@@ -10,14 +10,10 @@
         <Style x:Key="PremiumButtonStyle" TargetType="Button">
             <Setter Property="Background">
                 <Setter.Value>
-                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                        <GradientStop Color="#FF8A00" Offset="0"/>
-                        <GradientStop Color="#FF9D1A" Offset="0.55"/>
-                        <GradientStop Color="#E66F00" Offset="1"/>
-                    </LinearGradientBrush>
+                    <DynamicResource ResourceKey="AccentBrush"/>
                 </Setter.Value>
             </Setter>
-            <Setter Property="Foreground" Value="#FFF7F1E7"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="FontSize" Value="15"/>
             <Setter Property="Height" Value="54"/>
@@ -29,12 +25,12 @@
                         <Border x:Name="border"
                                 Background="{TemplateBinding Background}"
                                 CornerRadius="15"
-                                BorderBrush="#FFB455"
+                                BorderBrush="{DynamicResource AccentBrush}"
                                 BorderThickness="1"
                                 SnapsToDevicePixels="True"
                                 RenderTransformOrigin="0.5,0.5">
                             <Border.Effect>
-                                <DropShadowEffect Color="#FF8A00" BlurRadius="18" ShadowDepth="0" Opacity="0.28"/>
+                                <DropShadowEffect Color="#000000" BlurRadius="18" ShadowDepth="0" Opacity="0.28"/>
                             </Border.Effect>
                             <Border.RenderTransform>
                                 <TranslateTransform X="0" Y="0"/>
@@ -43,15 +39,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background">
-                                    <Setter.Value>
-                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                            <GradientStop Color="#FF9D1A" Offset="0"/>
-                                            <GradientStop Color="#FFAF2F" Offset="0.55"/>
-                                            <GradientStop Color="#F07A00" Offset="1"/>
-                                        </LinearGradientBrush>
-                                    </Setter.Value>
-                                </Setter>
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource HoverBrush}"/>
                                 <Setter TargetName="border" Property="RenderTransform">
                                     <Setter.Value>
                                         <TranslateTransform Y="-1"/>
@@ -59,14 +47,7 @@
                                 </Setter>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background">
-                                    <Setter.Value>
-                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                            <GradientStop Color="#E66F00" Offset="0"/>
-                                            <GradientStop Color="#D66500" Offset="1"/>
-                                        </LinearGradientBrush>
-                                    </Setter.Value>
-                                </Setter>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource PrimaryButtonBrush}"/>
                                 <Setter TargetName="border" Property="RenderTransform">
                                     <Setter.Value>
                                         <TranslateTransform Y="1"/>
@@ -80,16 +61,16 @@
         </Style>
 
         <Style x:Key="PremiumTextBoxStyle" TargetType="TextBox">
-            <Setter Property="Background" Value="#141826"/>
-            <Setter Property="Foreground" Value="#F7F4EB"/>
+            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource InputForegroundBrush}"/>
             <Setter Property="FontSize" Value="15"/>
-            <Setter Property="BorderBrush" Value="#2F3748"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1.2"/>
             <Setter Property="Height" Value="56"/>
             <Setter Property="Padding" Value="16,0,16,0"/>
             <Setter Property="TextAlignment" Value="Center"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="CaretBrush" Value="#FF8A00"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource AccentBrush}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
@@ -103,11 +84,11 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="#4E5568"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource HoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="#FF8A00"/>
-                                <Setter TargetName="Bd" Property="Background" Value="#1B2030"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BackgroundBrush}"/>
                                 <Setter TargetName="Bd" Property="Effect">
                                     <Setter.Value>
                                         <DropShadowEffect Color="#FF8A00" BlurRadius="22" ShadowDepth="0" Opacity="0.22"/>
@@ -123,43 +104,33 @@
 
     <Grid>
         <Grid.Background>
-            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                <GradientStop Color="#0D1118" Offset="0"/>
-                <GradientStop Color="#141A24" Offset="0.55"/>
-                <GradientStop Color="#0C1119" Offset="1"/>
-            </LinearGradientBrush>
+            <SolidColorBrush Color="#00000000"/>
         </Grid.Background>
 
         <Rectangle Width="720" Height="720" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-180,-140,0,0" Opacity="0.24" IsHitTestVisible="False">
             <Rectangle.Fill>
-                <RadialGradientBrush Center="0.4,0.3" RadiusX="0.75" RadiusY="0.75">
-                    <GradientStop Color="#FF8A00" Offset="0"/>
-                    <GradientStop Color="#00000000" Offset="1"/>
-                </RadialGradientBrush>
+                <SolidColorBrush Color="#00000000"/>
             </Rectangle.Fill>
         </Rectangle>
 
-        <Border Width="560" Height="400" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,-90" CornerRadius="180" Opacity="0.08" Background="#FF8A00" IsHitTestVisible="False"/>
+        <Border Width="560" Height="400" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,-90" CornerRadius="180" Opacity="0.08" Background="{DynamicResource AccentBrush}" IsHitTestVisible="False"/>
 
-        <Path Data="M0,0 L320,0 L520,220" Stroke="#2A3140" StrokeThickness="1" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,80,64,0" Opacity="0.4" IsHitTestVisible="False"/>
-        <Path Data="M120,0 L0,220" Stroke="#FF8A00" StrokeThickness="1" Opacity="0.15" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="90,70,0,0" IsHitTestVisible="False"/>
+        <Path Data="M0,0 L320,0 L520,220" Stroke="{DynamicResource BorderBrush}" StrokeThickness="1" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,80,64,0" Opacity="0.4" IsHitTestVisible="False"/>
+        <Path Data="M120,0 L0,220" Stroke="{DynamicResource AccentBrush}" StrokeThickness="1" Opacity="0.15" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="90,70,0,0" IsHitTestVisible="False"/>
 
         <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0">
             <Border Width="560"
                     MaxWidth="560"
                     Padding="42"
                     CornerRadius="30"
-                    BorderBrush="#2E3648"
+                    BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1"
                     Effect="{StaticResource CardGlow}">
                 <Border.RenderTransform>
-                    <TranslateTransform X="-110"/>
+                    <TranslateTransform X="0"/>
                 </Border.RenderTransform>
                 <Border.Background>
-                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                        <GradientStop Color="#161B27" Offset="0"/>
-                        <GradientStop Color="#111522" Offset="1"/>
-                    </LinearGradientBrush>
+                    <SolidColorBrush Color="#00000000"/>
                 </Border.Background>
                 <Grid>
                     <Grid.RowDefinitions>
@@ -179,35 +150,35 @@
                             CornerRadius="46"
                             HorizontalAlignment="Center"
                             Margin="0,0,0,24"
-                            Background="#181D2A"
-                            BorderBrush="#FF8A00"
+                            Background="{DynamicResource InputBackgroundBrush}"
+                            BorderBrush="{DynamicResource AccentBrush}"
                             BorderThickness="1.2">
                         <Border.Effect>
                             <DropShadowEffect Color="#FF8A00" BlurRadius="24" ShadowDepth="0" Opacity="0.22"/>
                         </Border.Effect>
-                        <Image Source="/Config/SGR.ico" Width="58" Height="58" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        <Image x:Name="VerifyLogoImage" Source="/Config/SGR.ico" Width="58" Height="58" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </Border>
 
                     <StackPanel Grid.Row="1" HorizontalAlignment="Center" Margin="0,0,0,18">
                         <TextBlock FontSize="12"
                                    FontWeight="SemiBold"
-                                   Foreground="#FF8A00"
+                                   Foreground="{DynamicResource AccentBrush}"
                                    HorizontalAlignment="Center"
                                    Text="SECURE ACCESS"
                                    Margin="0,0,0,8"/>
                         <TextBlock FontSize="30"
                                    FontWeight="Bold"
-                                   Foreground="#F8F7F2"
+                                   Foreground="{DynamicResource ForegroundBrush}"
                                    HorizontalAlignment="Center">
                             <Run Text="VERIFY YOUR "/>
-                            <Run Text="TOKEN" Foreground="#FF8A00"/>
+                            <Run Text="TOKEN" Foreground="{DynamicResource AccentBrush}"/>
                         </TextBlock>
                     </StackPanel>
 
                     <TextBlock Grid.Row="2"
                                Text="Paste the token you received from the token panel to continue securely."
                                FontSize="14"
-                               Foreground="#9BA4B7"
+                               Foreground="{DynamicResource MutedForegroundBrush}"
                                TextAlignment="Center"
                                TextWrapping="Wrap"
                                Margin="0,0,0,28"
@@ -242,11 +213,11 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <Ellipse Grid.Column="0" Width="18" Height="18" Stroke="#FF8A00" StrokeThickness="2" Margin="0,0,8,0"/>
+                        <Ellipse Grid.Column="0" Width="18" Height="18" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" Margin="0,0,8,0"/>
                         <TextBlock x:Name="LoadingText"
                                    Grid.Column="1"
                                    VerticalAlignment="Center"
-                                   Foreground="#C7CEDF"
+                                   Foreground="{DynamicResource MutedForegroundBrush}"
                                    FontSize="12"/>
                     </Grid>
 
@@ -254,20 +225,20 @@
                                Grid.Row="6"
                                FontSize="12"
                                TextWrapping="Wrap"
-                               Foreground="#C7CEDF"
+                               Foreground="{DynamicResource MutedForegroundBrush}"
                                Margin="0,0,0,16"
                                TextAlignment="Center"/>
 
                     <Border Grid.Row="7"
                             Margin="0,8,0,0"
                             Padding="0,16,0,0"
-                            BorderBrush="#2A3140"
+                            BorderBrush="{DynamicResource BorderBrush}"
                             BorderThickness="0,1,0,0">
                         <TextBlock HorizontalAlignment="Center"
                                    FontSize="13"
-                                   Foreground="#9BA4B7">
+                                   Foreground="{DynamicResource MutedForegroundBrush}">
                             <Run Text="Don't have a token? "/>
-                            <Hyperlink Click="OnClickHere" Foreground="#FF8A00" TextDecorations="None">
+                            <Hyperlink Click="OnClickHere" Foreground="{DynamicResource AccentBrush}" TextDecorations="None">
                                 <Run Text="Click here"/>
                             </Hyperlink>
                         </TextBlock>

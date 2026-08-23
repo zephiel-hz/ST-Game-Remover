@@ -56,6 +56,56 @@
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
         </Style>
+
+        <Style x:Key="SettingsSwitchStyle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="46"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid>
+                            <Border x:Name="Track"
+                                    CornerRadius="13"
+                                    Background="{DynamicResource MutedForegroundBrush}"
+                                    Opacity="0.35"/>
+                            <Border x:Name="Thumb"
+                                    Width="20"
+                                    Height="20"
+                                    CornerRadius="10"
+                                    Background="White"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center"
+                                    Margin="3,0,0,0">
+                                <Border.RenderTransform>
+                                    <TranslateTransform x:Name="ThumbTranslateTransform" X="0"/>
+                                </Border.RenderTransform>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="Track" Property="Opacity" Value="1"/>
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="ThumbTranslateTransform" Storyboard.TargetProperty="X" To="20" Duration="0:0:0.18"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="ThumbTranslateTransform" Storyboard.TargetProperty="X" To="0" Duration="0:0:0.18"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         
         <!-- ComboBox Style for Language Selector -->
         <Style x:Key="SettingsComboBoxStyle" TargetType="ComboBox">
@@ -219,9 +269,20 @@
 
         <!-- Content Area -->
         <ScrollViewer VerticalScrollBarVisibility="Auto" DockPanel.Dock="Top">
-            <StackPanel>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
                 <!-- Steamtools Status Section -->
-                <Border Style="{StaticResource SettingsSectionBorder}">
+                <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource SettingsSectionBorder}" Margin="0,0,10,20">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -276,7 +337,7 @@
                 </Border>
 
                 <!-- Overlay shown during install/uninstall operations -->
-                <Grid x:Name="SteamtoolsOverlayGrid" Background="#80000000" Visibility="Collapsed" Panel.ZIndex="100">
+                <Grid Grid.Row="0" Grid.RowSpan="4" Grid.ColumnSpan="2" x:Name="SteamtoolsOverlayGrid" Background="#80000000" Visibility="Collapsed" Panel.ZIndex="100">
                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="450">
                         <!-- Progress Card -->
                         <Border Background="{DynamicResource CardBackgroundBrush}" CornerRadius="10" Padding="24" Effect="{DynamicResource DropShadowEffect}">
@@ -322,7 +383,7 @@
                     </StackPanel>
                 </Grid>
                 <!-- Language Selection -->
-                <Border Style="{StaticResource SettingsSectionBorder}">
+                <Border Grid.Row="0" Grid.Column="1" Style="{StaticResource SettingsSectionBorder}" Margin="10,0,0,20">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -349,7 +410,7 @@
                 </Border>
 
                 <!-- Theme Selection -->
-                <Border Style="{StaticResource SettingsSectionBorder}">
+                <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource SettingsSectionBorder}" Margin="0,0,10,20">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -370,14 +431,19 @@
                                   Margin="20,0,0,0"
                                   Style="{StaticResource SettingsComboBoxStyle}"
                                   SelectionChanged="ThemeSelector_SelectionChanged">
-                            <ComboBoxItem x:Name="DarkThemeOption"/>
-                            <ComboBoxItem x:Name="LightThemeOption"/>
+                            <ComboBoxItem Content="Dark Orange"/>
+                            <ComboBoxItem Content="Dark Blue"/>
+                            <ComboBoxItem Content="Dark Green"/>
+                            <ComboBoxItem Content="Dark Pink"/>
+                            <ComboBoxItem Content="Dark Purple"/>
+                            <ComboBoxItem Content="Dark Yellow"/>
+                            <ComboBoxItem Content="Dark Red"/>
                         </ComboBox>
                     </Grid>
                 </Border>
 
                 <!-- Cache Section -->
-                <Border Style="{StaticResource SettingsSectionBorder}">
+                <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource SettingsSectionBorder}" Margin="10,0,0,20">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -416,7 +482,7 @@
                 </Border>
 
                 <!-- Performance Section -->
-                <Border Style="{StaticResource SettingsSectionBorder}">
+                <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource SettingsSectionBorder}" Margin="0,0,10,20">
                     <StackPanel>
                         <TextBlock x:Name="SettingsPerformanceTitle" Style="{StaticResource SettingsSectionTitle}"/>
                         <Grid Margin="0,8,0,0">
@@ -436,11 +502,10 @@
                                            Margin="0,4,0,0"/>
                             </StackPanel>
 
-                            <CheckBox Grid.Column="1"
+                            <ToggleButton Grid.Column="1"
                                       x:Name="HardwareAccelerationCheckBox"
                                       VerticalAlignment="Center"
-                                      Width="20"
-                                      Height="20"
+                                      Style="{StaticResource SettingsSwitchStyle}"
                                       Margin="20,0,0,0"
                                       Cursor="Hand"/>
                         </Grid>
@@ -448,7 +513,7 @@
                 </Border>
 
                 <!-- Auto Update Section -->
-                <Border Style="{StaticResource SettingsSectionBorder}">
+                <Border Grid.Row="2" Grid.Column="1" Style="{StaticResource SettingsSectionBorder}" Margin="10,0,0,20">
                     <StackPanel>
                         <TextBlock x:Name="SettingsAutoUpdateTitle" Style="{StaticResource SettingsSectionTitle}"/>
                         <Grid Margin="0,8,0,0">
@@ -468,11 +533,10 @@
                                            Margin="0,4,0,0"/>
                             </StackPanel>
 
-                            <CheckBox Grid.Column="1"
+                            <ToggleButton Grid.Column="1"
                                       x:Name="AutoUpdateCheckBox"
                                       VerticalAlignment="Center"
-                                      Width="20"
-                                      Height="20"
+                                      Style="{StaticResource SettingsSwitchStyle}"
                                       Margin="20,0,0,0"
                                       Cursor="Hand"
                                       Checked="AutoUpdateCheckBox_Changed"
@@ -482,7 +546,7 @@
                 </Border>
 
                 <!-- Allow 18+ Content Section -->
-                <Border Style="{StaticResource SettingsSectionBorder}">
+                <Border Grid.Row="3" Grid.Column="0" Style="{StaticResource SettingsSectionBorder}" Margin="0,0,10,20">
                     <StackPanel>
                         <TextBlock x:Name="SettingsAllow18PlusTitle" Style="{StaticResource SettingsSectionTitle}"/>
                         <Grid Margin="0,8,0,0">
@@ -502,11 +566,10 @@
                                            Margin="0,4,0,0"/>
                             </StackPanel>
 
-                            <CheckBox Grid.Column="1"
+                            <ToggleButton Grid.Column="1"
                                       x:Name="Allow18PlusCheckBox"
                                       VerticalAlignment="Center"
-                                      Width="20"
-                                      Height="20"
+                                      Style="{StaticResource SettingsSwitchStyle}"
                                       Margin="20,0,0,0"
                                       Cursor="Hand"
                                       Checked="Allow18PlusCheckBox_Changed"
@@ -514,7 +577,7 @@
                         </Grid>
                     </StackPanel>
                 </Border>
-            </StackPanel>
+            </Grid>
         </ScrollViewer>
     </DockPanel>
 </UserControl>

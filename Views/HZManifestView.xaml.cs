@@ -171,11 +171,13 @@ namespace SteamPluginManager.Views
         // Static cache to prevent refetching data when navigating back
         private static List<ManifestFile>? _cachedFiles = null;
         private static int _cachedPage = 0;
+        private static double _cachedScrollOffset = 0;
         private static DateTime _lastFetchTime = DateTime.MinValue;
         private static readonly TimeSpan _cacheDuration = TimeSpan.FromMinutes(5); // Cache for 5 minutes
 
         // Property yang di-expose untuk binding - ini yang ItemsControl bind ke
         public ObservableCollection<ManifestFile> Files { get; set; }
+        public ObservableCollection<ManifestFile> NewManifestFiles { get; } = new();
         
         // CollectionViewSource untuk search filtering
         private System.ComponentModel.ICollectionView _filesView;
@@ -197,6 +199,9 @@ namespace SteamPluginManager.Views
         private int _pageSize = 50;
         private int _totalFiles = 0;
         private List<ManifestFile> _allFiles = new(); // Store all files from Supabase
+        private HashSet<int> _newManifestIds = new();
+        private bool _showNewManifestsOnly;
+        private System.Windows.Threading.DispatcherTimer? _manifestNotificationTimer;
 
         // Category filtering
         private static string _currentCategory = "All";
@@ -211,10 +216,11 @@ namespace SteamPluginManager.Views
         private System.Windows.Threading.DispatcherTimer? _autoRefreshTimer;
         private bool _forceRefreshOnLoad = true; // Default to true for backward compatibility
         private bool _requiresDeviceVerificationOnLoad = false;
+        private bool _hasRestoredScrollPosition = false;
         
         // Debounce timer for SizeChanged to prevent multiple rapid refreshes during window state transitions
         private System.Windows.Threading.DispatcherTimer? _sizeChangeDebounceTimer;
-        private const double MIN_CARD_WIDTH = 250;
+        private const double MIN_CARD_WIDTH = 220;
         private const int ROWS_PER_PAGE = 10;
         // Runtime reference to the generated WrapPanel from the ItemsControl template
         private WrapPanel? CardPanel;
@@ -277,7 +283,10 @@ namespace SteamPluginManager.Views
                 {
                     CardPanel = FindVisualChild<WrapPanel>(FileCards);
                     UpdateCardPanelLayout();
-                    // Do NOT wire scroll changed: disable auto-paging on scroll
+                    if (CardsScrollViewer != null)
+                    {
+                        CardsScrollViewer.ScrollChanged += CardsScrollViewer_ScrollChanged;
+                    }
                 }
                 catch { }
             };
@@ -544,6 +553,9 @@ namespace SteamPluginManager.Views
                     _sizeChangeDebounceTimer.Stop();
                     _sizeChangeDebounceTimer = null;
                 }
+
+                _manifestNotificationTimer?.Stop();
+                _manifestNotificationTimer = null;
                 
                 // Unsubscribe from 18+ content setting changes to prevent memory leak
                 Allow18PlusContentPreferences.Allow18PlusContentChanged -= Allow18PlusContentPreferences_Changed;
@@ -561,6 +573,7 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                _showNewManifestsOnly = false;
                 _currentSearchText = (sender as TextBox)?.Text?.Trim().ToLower() ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(_currentSearchText))
                 {
@@ -746,6 +759,7 @@ namespace SteamPluginManager.Views
 
         private void UpdateCategorySelection(string selectedCategory)
         {
+            _showNewManifestsOnly = false;
             _currentCategory = selectedCategory;
             _currentFilterCategory = selectedCategory; // Sync with filter category
 
@@ -824,6 +838,7 @@ namespace SteamPluginManager.Views
             {
                 if (selectedItem.Tag is string sortOrder)
                 {
+                    _showNewManifestsOnly = false;
                     _currentSortOrder = sortOrder;
                     DisplayCurrentPage();
                 }
@@ -1057,7 +1072,7 @@ namespace SteamPluginManager.Views
                 if (newFiles.Any())
                 {
                     LogDebug($"Detected {newFiles.Count} new manifest(s) since last visit");
-                    Dispatcher.Invoke(() => UpdateManifestNotificationBanner(newFiles.Select(file => file.Name))); 
+                    Dispatcher.Invoke(() => UpdateManifestNotificationBanner(newFiles)); 
                 }
                 else
                 {
@@ -1073,27 +1088,44 @@ namespace SteamPluginManager.Views
             return Task.CompletedTask;
         }
 
-        private void UpdateManifestNotificationBanner(IEnumerable<string> newManifestNames)
+        private void UpdateManifestNotificationBanner(IEnumerable<ManifestFile> newManifestFiles)
         {
             try
             {
                 var banner = FindName("NotificationBanner") as Border;
                 var title = FindName("NotificationBannerTitle") as TextBlock;
                 var details = FindName("NotificationBannerDetails") as TextBlock;
+                var popupSubtitle = FindName("NewManifestPopupSubtitle") as TextBlock;
 
                 if (banner == null || title == null || details == null)
                     return;
 
-                var names = newManifestNames.Where(name => !string.IsNullOrWhiteSpace(name)).ToList();
+                var files = newManifestFiles.Where(file => file != null).ToList();
+                var names = files.Select(file => file.Name).Where(name => !string.IsNullOrWhiteSpace(name)).ToList();
                 if (!names.Any())
                 {
                     banner.Visibility = Visibility.Collapsed;
                     return;
                 }
 
+                _newManifestIds = files.Where(file => file.Id.HasValue)
+                    .Select(file => file.Id!.Value)
+                    .ToHashSet();
+                NewManifestFiles.Clear();
+                foreach (var file in files)
+                    NewManifestFiles.Add(file);
+                _showNewManifestsOnly = false;
+
                 title.Text = names.Count == 1
                     ? "A new game manifest has been added"
                     : $"{names.Count} new game manifests have been added";
+
+                if (popupSubtitle != null)
+                {
+                    popupSubtitle.Text = files.Count == 1
+                        ? "1 game recently added"
+                        : $"{files.Count} games recently added";
+                }
 
                 var displayNames = names.Take(5).ToList();
                 var detailsText = string.Join(", ", displayNames);
@@ -1104,6 +1136,15 @@ namespace SteamPluginManager.Views
 
                 details.Text = detailsText;
                 banner.Visibility = Visibility.Visible;
+
+                _manifestNotificationTimer ??= new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(5)
+                };
+                _manifestNotificationTimer.Stop();
+                _manifestNotificationTimer.Tick -= ManifestNotificationTimer_Tick;
+                _manifestNotificationTimer.Tick += ManifestNotificationTimer_Tick;
+                _manifestNotificationTimer.Start();
             }
             catch (Exception ex)
             {
@@ -1115,6 +1156,7 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                _manifestNotificationTimer?.Stop();
                 var banner = FindName("NotificationBanner") as Border;
                 if (banner != null)
                     banner.Visibility = Visibility.Collapsed;
@@ -1123,6 +1165,11 @@ namespace SteamPluginManager.Views
             {
                 LogDebug($"Error hiding notification banner: {ex.Message}");
             }
+        }
+
+        private void ManifestNotificationTimer_Tick(object? sender, EventArgs e)
+        {
+            HideManifestNotificationBanner();
         }
 
         public void SetForceRefresh(bool forceRefresh)
@@ -2431,6 +2478,7 @@ namespace SteamPluginManager.Views
                 {
                     _currentPage++;
                     DisplayCurrentPage();
+                    ResetCardsScrollToTop();
                 }
             }
             catch (Exception ex)
@@ -2447,6 +2495,7 @@ namespace SteamPluginManager.Views
                 {
                     _currentPage--;
                     DisplayCurrentPage();
+                    ResetCardsScrollToTop();
                 }
             }
             catch (Exception ex)
@@ -2484,6 +2533,7 @@ namespace SteamPluginManager.Views
                 {
                     _currentPage = pageNumber - 1;
                     DisplayCurrentPage();
+                    ResetCardsScrollToTop();
                 }
             }
             catch (Exception ex)
@@ -2557,6 +2607,9 @@ namespace SteamPluginManager.Views
                 foreach (var file in _allFiles)
                 {
                     if (!allow18Plus && Is18PlusContent(file))
+                        continue;
+
+                    if (_showNewManifestsOnly && (!file.Id.HasValue || !_newManifestIds.Contains(file.Id.Value)))
                         continue;
 
                     if (_currentFilterCategory != "All" && !GenreMatchesCategory(file.Genre, _currentFilterCategory))
@@ -2656,8 +2709,19 @@ namespace SteamPluginManager.Views
                 // Setup thumbnail loading untuk semua items
                 SetupLazyThumbnailLoading();
                 
-                // Scroll to top
-                CardsScrollViewer.ScrollToTop();
+                // Restore saved scroll position when returning to this view, otherwise scroll to top on first load
+                if (CardsScrollViewer != null)
+                {
+                    if (_cachedScrollOffset > 0 && !_hasRestoredScrollPosition)
+                    {
+                        CardsScrollViewer.ScrollToVerticalOffset(_cachedScrollOffset);
+                        _hasRestoredScrollPosition = true;
+                    }
+                    else if (!_hasRestoredScrollPosition)
+                    {
+                        CardsScrollViewer.ScrollToTop();
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -2759,8 +2823,28 @@ namespace SteamPluginManager.Views
 
         private void CardsScrollViewer_ScrollChanged(object? sender, ScrollChangedEventArgs e)
         {
+            try
+            {
+                if (sender is ScrollViewer scrollViewer)
+                {
+                    _cachedScrollOffset = scrollViewer.VerticalOffset;
+                }
+            }
+            catch { }
+
             // Auto paging on scroll disabled per user request.
-            return;
+        }
+
+        private void ResetCardsScrollToTop()
+        {
+            if (CardsScrollViewer == null)
+                return;
+
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                CardsScrollViewer.UpdateLayout();
+                CardsScrollViewer.ScrollToTop();
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
 
         private void LoadNextPage()
@@ -2785,11 +2869,14 @@ namespace SteamPluginManager.Views
                 if (availableWidth <= 0)
                     return;
 
-                const double cardGap = 12;
-                int columns = Math.Max(1, (int)((availableWidth + cardGap) / (MIN_CARD_WIDTH + cardGap)));
-                double computedWidth = Math.Floor((availableWidth - columns * cardGap) / columns);
-                if (computedWidth < MIN_CARD_WIDTH)
-                    computedWidth = MIN_CARD_WIDTH;
+                const double cardGap = 8;
+                const double childHorizontalMargin = 8;
+                const double viewportPadding = 6;
+                double usableWidth = Math.Max(0, availableWidth - viewportPadding);
+                int columns = Math.Max(1, (int)((usableWidth + cardGap) / (MIN_CARD_WIDTH + cardGap)));
+                double computedWidth = Math.Floor((usableWidth - (columns * childHorizontalMargin)) / columns);
+                if (computedWidth < 180)
+                    computedWidth = Math.Max(180, Math.Floor(usableWidth / Math.Max(1, columns)) - childHorizontalMargin);
 
                 CardPanel.ItemWidth = computedWidth;
 
@@ -2823,8 +2910,8 @@ namespace SteamPluginManager.Views
                     // Use actual measured child height when available, otherwise fallback to configuredItemHeight
                     itemHeight = (actualChildHeight > 1) ? actualChildHeight : configuredItemHeight;
 
-                    // Include the card's bottom margin so rows remain separated without excess whitespace.
-                    double verticalSpacing = (childVerticalMargins > 0) ? childVerticalMargins : cardGap;
+                    // Keep the row gap tighter and let the card margins control the spacing.
+                    double verticalSpacing = 6;
                     double effectiveItemHeight = Math.Ceiling(itemHeight + verticalSpacing + 2); // small buffer
 
                     // Ensure the WrapPanel has a reasonable ItemHeight so layout math is predictable
@@ -2833,7 +2920,7 @@ namespace SteamPluginManager.Views
                     // Compute visible columns using ItemWidth and available width rather than relying solely on visual children (more stable)
                     if (CardPanel.ItemWidth > 0)
                     {
-                        visibleColumns = Math.Max(1, (int)Math.Floor(availableWidth / (CardPanel.ItemWidth + cardGap)));
+                        visibleColumns = Math.Max(1, (int)Math.Floor(usableWidth / (CardPanel.ItemWidth + cardGap)));
                     }
                     else
                     {
@@ -3071,7 +3158,27 @@ namespace SteamPluginManager.Views
 
         private void NotificationBannerClose_Click(object sender, RoutedEventArgs e)
         {
+            e.Handled = true;
             HideManifestNotificationBanner();
+        }
+
+        private void NotificationBanner_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (NewManifestFiles.Count == 0)
+                return;
+
+            if (FindName("NewManifestPopupOverlay") is Grid popup)
+                popup.Visibility = Visibility.Visible;
+
+            e.Handled = true;
+        }
+
+        private void NewManifestPopupClose_Click(object sender, RoutedEventArgs e)
+        {
+            if (FindName("NewManifestPopupOverlay") is Grid popup)
+                popup.Visibility = Visibility.Collapsed;
+
+            e.Handled = true;
         }
     }
 }

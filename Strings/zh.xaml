@@ -139,7 +139,6 @@
   <sys:String x:Key="Settings.Theme">主题</sys:String>
   <sys:String x:Key="Settings.ThemeDesc">选择您喜欢的视觉风格</sys:String>
   <sys:String x:Key="Settings.ThemeDark">深色</sys:String>
-  <sys:String x:Key="Settings.ThemeLight">浅色</sys:String>
   <sys:String x:Key="Settings.Language">语言</sys:String>
   <sys:String x:Key="Settings.LanguageDesc">选择您的首选语言</sys:String>
   <sys:String x:Key="Settings.Back">返回</sys:String>

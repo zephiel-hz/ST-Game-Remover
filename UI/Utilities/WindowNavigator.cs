@@ -59,6 +59,14 @@ namespace SteamPluginManager
             _mainShellInstance?.NavigateToSaweria();
         }
 
+        public static void NavigateToGenerateToken()
+        {
+            if (_mainShellInstance != null)
+            {
+                _mainShellInstance?.NavigateToGenerateToken();
+            }
+        }
+
         public static void NavigateToHZManifest()
         {
             NavigateToHZManifest(forceRefresh: true);
@@ -82,6 +90,16 @@ namespace SteamPluginManager
             if (_mainShellInstance != null)
             {
                 _mainShellInstance.TransitionToView(new VerifyTokenView());
+            }
+        }
+
+        public static void NavigateToVerifyToken(string token)
+        {
+            if (_mainShellInstance != null)
+            {
+                var view = new VerifyTokenView();
+                try { view.SetToken(token); } catch { }
+                _mainShellInstance.TransitionToView(view);
             }
         }
 

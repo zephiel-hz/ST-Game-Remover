@@ -89,6 +89,8 @@ namespace SteamPluginManager.Views
         private const int MAX_THUMBNAILS_TO_LOAD = 48;
         // Runtime reference to the generated WrapPanel from the ItemsControl template
         private WrapPanel? CardPanel;
+        private static double _cachedScrollOffset = 0;
+        private bool _hasRestoredScrollPosition = false;
 
         public GameBypassView()
         {
@@ -240,6 +242,14 @@ namespace SteamPluginManager.Views
                     searchBox.Foreground = Application.Current.FindResource("ForegroundBrush") as System.Windows.Media.Brush;
                 }
                 
+                // Prepare scroll handlers for restore/caching
+                if (FindName("CardsScrollViewer") is ScrollViewer sc)
+                {
+                    sc.ScrollChanged -= CardsScrollViewer_ScrollChanged;
+                    sc.ScrollChanged += CardsScrollViewer_ScrollChanged;
+                }
+                _hasRestoredScrollPosition = false;
+
                 await LoadFilesFromSource();
                 
                 if (debugInfo != null)
@@ -249,11 +259,9 @@ namespace SteamPluginManager.Views
                 
                 LogDebug($"GameBypassView_Loaded completed. Files in collection: {Files.Count}");
                 
-                if (loadingOverlay != null)
-                {
-                    StopContinuousLoadingAnimation();
-                    loadingOverlay.Visibility = Visibility.Collapsed;
-                }
+                // Wait until layout is stable before hiding the overlay to avoid
+                // a brief width-jump when the WrapPanel measures for the first time.
+                HideLoadingOverlayWhenLayoutReady();
             }
             catch (Exception ex)
             {
@@ -273,6 +281,68 @@ namespace SteamPluginManager.Views
             }
         }
 
+        private void HideLoadingOverlayWhenLayoutReady()
+        {
+            try
+            {
+                var overlay = FindName("LoadingOverlay") as Grid;
+                var fileCards = FindName("FileCards") as ItemsControl;
+
+                // Hide content initially to avoid flicker while layout stabilizes
+                if (fileCards != null)
+                    fileCards.Visibility = Visibility.Hidden;
+
+                if (FindName("CardsScrollViewer") is not ScrollViewer viewer)
+                {
+                    // Fallback: nothing to wait for
+                    if (overlay != null)
+                    {
+                        StopContinuousLoadingAnimation();
+                        overlay.Visibility = Visibility.Collapsed;
+                    }
+                    if (fileCards != null)
+                        fileCards.Visibility = Visibility.Visible;
+                    return;
+                }
+
+                EventHandler? layoutHandler = null;
+                layoutHandler = (s, e) =>
+                {
+                    try
+                    {
+                        // Ensure item widths are computed
+                        UpdateCardPanelLayout();
+
+                        if (CardPanel != null && CardPanel.ItemWidth > 0)
+                        {
+                            viewer.LayoutUpdated -= layoutHandler;
+                            // Restore scroll after measurement
+                            RestoreScrollPosition();
+
+                            if (fileCards != null)
+                                fileCards.Visibility = Visibility.Visible;
+
+                            if (overlay != null)
+                            {
+                                StopContinuousLoadingAnimation();
+                                overlay.Visibility = Visibility.Collapsed;
+                            }
+                        }
+                    }
+                    catch { }
+                };
+
+                viewer.LayoutUpdated += layoutHandler;
+
+                // Kick one render pass to encourage layout
+                viewer.Dispatcher.BeginInvoke(new Action(() => UpdateCardPanelLayout()), System.Windows.Threading.DispatcherPriority.Render);
+            }
+            catch (Exception ex)
+            {
+                LogDebug($"HideLoadingOverlayWhenLayoutReady error: {ex.Message}");
+            }
+        }
+
         private void GameBypassView_Unloaded(object sender, RoutedEventArgs e)
         {
             try
@@ -288,6 +358,11 @@ namespace SteamPluginManager.Views
                 {
                     _thumbnailLoadDebounceTimer.Stop();
                     _thumbnailLoadDebounceTimer = null;
+                }
+                if (FindName("CardsScrollViewer") is ScrollViewer sc2)
+                {
+                    sc2.ScrollChanged -= CardsScrollViewer_ScrollChanged;
+                    sc2.LayoutUpdated -= CardsScrollViewer_LayoutUpdated;
                 }
             }
             catch (Exception ex)
@@ -818,8 +893,8 @@ namespace SteamPluginManager.Views
                 
                 SetupLazyThumbnailLoading();
                 
-                if (FindName("CardsScrollViewer") is ScrollViewer viewer)
-                    viewer.ScrollToTop();
+                // Restore previous scroll position if available
+                RestoreScrollPosition();
             }
             catch (Exception ex)
             {
@@ -863,6 +938,70 @@ namespace SteamPluginManager.Views
             {
                 LogDebug($"SizeChanged handler error: {ex.Message}");
             }
+        }
+
+        private void CardsScrollViewer_ScrollChanged(object? sender, ScrollChangedEventArgs e)
+        {
+            try
+            {
+                if (sender is ScrollViewer scrollViewer)
+                {
+                    if (e.VerticalChange == 0)
+                        return;
+
+                    _cachedScrollOffset = scrollViewer.VerticalOffset;
+                }
+            }
+            catch { }
+        }
+
+        private void RestoreScrollPosition()
+        {
+            if (FindName("CardsScrollViewer") is not ScrollViewer viewer)
+                return;
+
+            if (_hasRestoredScrollPosition)
+                return;
+
+            viewer.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    if (viewer == null)
+                        return;
+
+                    if (_cachedScrollOffset > 0 && viewer.ScrollableHeight > 0)
+                    {
+                        double targetOffset = Math.Min(_cachedScrollOffset, viewer.ScrollableHeight);
+                        viewer.ScrollToVerticalOffset(targetOffset);
+                        _hasRestoredScrollPosition = true;
+                    }
+                    else if (_cachedScrollOffset > 0)
+                    {
+                        viewer.LayoutUpdated += CardsScrollViewer_LayoutUpdated;
+                    }
+                    else
+                    {
+                        viewer.ScrollToTop();
+                        _hasRestoredScrollPosition = true;
+                    }
+                }
+                catch { }
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
+        private void CardsScrollViewer_LayoutUpdated(object? sender, EventArgs e)
+        {
+            if (FindName("CardsScrollViewer") is not ScrollViewer viewer || _hasRestoredScrollPosition)
+                return;
+
+            if (viewer.ScrollableHeight <= 0)
+                return;
+
+            viewer.LayoutUpdated -= CardsScrollViewer_LayoutUpdated;
+            double targetOffset = Math.Min(_cachedScrollOffset, viewer.ScrollableHeight);
+            viewer.ScrollToVerticalOffset(targetOffset);
+            _hasRestoredScrollPosition = true;
         }
 
         /// <summary>

@@ -53,7 +53,7 @@
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="BtnRoot"
                                 CornerRadius="14"
-                                Background="{StaticResource WS_Accent}"
+                                Background="{DynamicResource AccentBrush}"
                                 SnapsToDevicePixels="True"
                                 Effect="{StaticResource CardShadow}">
                             <ContentPresenter HorizontalAlignment="Center"
@@ -62,7 +62,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="BtnRoot" Property="Background" Value="{StaticResource WS_AccentSoft}"/>
+                                <Setter TargetName="BtnRoot" Property="Background" Value="{DynamicResource HoverBrush}"/>
                                 <Setter TargetName="BtnRoot" Property="Effect">
                                     <Setter.Value>
                                         <DropShadowEffect Color="#FF8A00" BlurRadius="18" ShadowDepth="0" Opacity="0.35"/>
@@ -70,7 +70,7 @@
                                 </Setter>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="BtnRoot" Property="Background" Value="{StaticResource WS_AccentDark}"/>
+                                <Setter TargetName="BtnRoot" Property="Background" Value="{DynamicResource PrimaryButtonBrush}"/>
                                 <Setter TargetName="BtnRoot" Property="Opacity" Value="0.9"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -80,7 +80,7 @@
         </Style>
 
         <Style x:Key="ModernCheckBoxStyle" TargetType="CheckBox">
-            <Setter Property="Foreground" Value="{StaticResource WS_Text}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Template">
@@ -91,15 +91,15 @@
                                     Width="20"
                                     Height="20"
                                     CornerRadius="6"
-                                    Background="#141B27"
-                                    BorderBrush="#334155"
+                                    Background="{DynamicResource InputBackgroundBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
                                     BorderThickness="1"
                                     Margin="0,0,10,0"
                                     SnapsToDevicePixels="True">
                                 <Grid>
                                     <Path x:Name="CheckGlyph"
                                           Data="M 3 10 L 7 14 L 16 5"
-                                          Stroke="#FF8A00"
+                                          Stroke="{DynamicResource AccentBrush}"
                                           StrokeThickness="2"
                                           StrokeStartLineCap="Round"
                                           StrokeEndLineCap="Round"
@@ -112,11 +112,11 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="CheckGlyph" Property="Visibility" Value="Visible"/>
-                                <Setter TargetName="CheckBorder" Property="Background" Value="#1E2431"/>
-                                <Setter TargetName="CheckBorder" Property="BorderBrush" Value="#FF8A00"/>
+                                <Setter TargetName="CheckBorder" Property="Background" Value="{DynamicResource SelectedBrush}"/>
+                                <Setter TargetName="CheckBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="CheckBorder" Property="BorderBrush" Value="#FF9D1A"/>
+                                <Setter TargetName="CheckBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -125,7 +125,7 @@
         </Style>
     </Window.Resources>
 
-    <Border Background="{StaticResource WS_Background}" CornerRadius="32" Padding="0" SnapsToDevicePixels="True">
+    <Border Background="{DynamicResource BackgroundBrush}" CornerRadius="32" Padding="0" SnapsToDevicePixels="True">
         <Grid x:Name="RootContainer" Opacity="0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -134,7 +134,7 @@
             </Grid.RowDefinitions>
 
             <Border Grid.Row="0"
-                    Background="{StaticResource WS_HeaderGradient}"
+                    Background="{DynamicResource HeaderBackgroundBrush}"
                     Padding="32,24,32,20"
                     CornerRadius="32,32,0,0">
                 <Grid>
@@ -144,14 +144,14 @@
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.Column="0" Margin="0,4,0,0">
-                        <TextBlock FontSize="30" FontWeight="Bold" Foreground="{StaticResource WS_Text}" Margin="0,0,0,8">
+                        <TextBlock FontSize="30" FontWeight="Bold" Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,8">
                             <Run Text="Welcome to "/>
-                            <Run Text="HZ" Foreground="{StaticResource WS_Accent}"/>
+                            <Run Text="HZ" Foreground="{DynamicResource AccentBrush}"/>
                             <Run Text=" Lua Manager"/>
                         </TextBlock>
                         <TextBlock Text="A polished application for managing, organizing, and unlocking your Steam games."
                                    FontSize="14"
-                                   Foreground="{StaticResource WS_TextMuted}"
+                                   Foreground="{DynamicResource MutedForegroundBrush}"
                                    TextWrapping="Wrap"
                                    TextAlignment="Left"
                                    HorizontalAlignment="Left"
@@ -161,10 +161,10 @@
                     <Button Grid.Column="1"
                             x:Name="CloseButton"
                             Width="40" Height="40"
-                            Background="#161B27"
+                            Background="{DynamicResource ButtonBackgroundBrush}"
                             BorderThickness="1"
-                            BorderBrush="#334155"
-                            Foreground="{StaticResource WS_TextMuted}"
+                            BorderBrush="{DynamicResource ButtonBorderBrush}"
+                            Foreground="{DynamicResource MutedForegroundBrush}"
                             Click="CloseButton_Click"
                             Cursor="Hand"
                             ToolTip="Close"
@@ -179,8 +179,8 @@
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#202634"/>
-                                        <Setter Property="Foreground" Value="{StaticResource WS_Text}"/>
+                                        <Setter Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
@@ -192,8 +192,8 @@
 
             <Border Grid.Row="1" Padding="32,18,32,16">
                 <StackPanel>
-                    <Border Background="{StaticResource WS_CardGlow}"
-                            BorderBrush="#263041"
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
                             BorderThickness="1"
                             CornerRadius="28"
                             Padding="20"
@@ -209,21 +209,21 @@
                                     Width="150"
                                     Height="150"
                                     CornerRadius="28"
-                                    Background="#0E121B"
-                                    BorderBrush="#2B3546"
+                                    Background="{DynamicResource InputBackgroundBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
                                     BorderThickness="1"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
                                     Padding="10">
                                 <Grid>
                                     <Ellipse Width="96" Height="96"
-                                             Fill="#FF8A00"
+                                             Fill="{DynamicResource AccentBrush}"
                                              Opacity="0.16"/>
                                     <Ellipse Width="74" Height="74"
-                                             Stroke="#FF8A00"
+                                             Stroke="{DynamicResource AccentBrush}"
                                              StrokeThickness="1.4"
                                              Opacity="0.55"/>
-                                    <Image Source="../../../Config/SGR.ico"
+                                    <Image x:Name="WelcomeLogoImage" Source="../../../Config/SGR.ico"
                                            Stretch="UniformToFill"
                                            VerticalAlignment="Center"
                                            HorizontalAlignment="Center"
@@ -232,8 +232,8 @@
                             </Border>
 
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="18,0,0,0">
-                                <Border Background="#151D2C"
-                                        BorderBrush="#2F3B4E"
+                                <Border Background="{DynamicResource InputBackgroundBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
                                         BorderThickness="1"
                                         CornerRadius="24"
                                         Padding="10,6"
@@ -242,16 +242,16 @@
                                     <TextBlock Text="FEATURED EXPERIENCE"
                                                FontSize="12"
                                                FontWeight="SemiBold"
-                                               Foreground="#FF9D1A"/>
+                                               Foreground="{DynamicResource AccentBrush}"/>
                                 </Border>
                                 <TextBlock Text="Powerful features, refined presentation"
                                            FontSize="20"
                                            FontWeight="SemiBold"
-                                           Foreground="{StaticResource WS_Text}"
+                                           Foreground="{DynamicResource ForegroundBrush}"
                                            Margin="0,0,0,8"/>
                                 <TextBlock Text="{DynamicResource Welcome.Description}"
                                            FontSize="13"
-                                           Foreground="{StaticResource WS_TextMuted}"
+                                           Foreground="{DynamicResource MutedForegroundBrush}"
                                            TextWrapping="Wrap"
                                            LineHeight="20"
                                            Margin="0,0,0,14"/>
@@ -267,8 +267,8 @@
                                     </Grid.RowDefinitions>
 
                                     <Border Grid.Row="0" Grid.Column="0"
-                                            Background="#141B27"
-                                            BorderBrush="#2B3546"
+                                            Background="{DynamicResource InputBackgroundBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}"
                                             BorderThickness="1"
                                             CornerRadius="20"
                                             Padding="10"
@@ -277,18 +277,18 @@
                                             <TextBlock Text="Fast workflow"
                                                        FontSize="13"
                                                        FontWeight="SemiBold"
-                                                       Foreground="{StaticResource WS_Text}"/>
+                                                       Foreground="{DynamicResource ForegroundBrush}"/>
                                             <TextBlock Text="{DynamicResource Welcome.Feature1}"
                                                        FontSize="12"
-                                                       Foreground="{StaticResource WS_TextMuted}"
+                                                       Foreground="{DynamicResource MutedForegroundBrush}"
                                                        TextWrapping="Wrap"
                                                        Margin="0,2,0,0"/>
                                         </StackPanel>
                                     </Border>
 
                                     <Border Grid.Row="0" Grid.Column="1"
-                                            Background="#141B27"
-                                            BorderBrush="#2B3546"
+                                            Background="{DynamicResource InputBackgroundBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}"
                                             BorderThickness="1"
                                             CornerRadius="20"
                                             Padding="10"
@@ -297,18 +297,18 @@
                                             <TextBlock Text="Safe &amp; secure"
                                                        FontSize="13"
                                                        FontWeight="SemiBold"
-                                                       Foreground="{StaticResource WS_Text}"/>
+                                                       Foreground="{DynamicResource ForegroundBrush}"/>
                                             <TextBlock Text="{DynamicResource Welcome.Feature2}"
                                                        FontSize="12"
-                                                       Foreground="{StaticResource WS_TextMuted}"
+                                                       Foreground="{DynamicResource MutedForegroundBrush}"
                                                        TextWrapping="Wrap"
                                                        Margin="0,2,0,0"/>
                                         </StackPanel>
                                     </Border>
 
                                     <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                                            Background="#141B27"
-                                            BorderBrush="#2B3546"
+                                            Background="{DynamicResource InputBackgroundBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}"
                                             BorderThickness="1"
                                             CornerRadius="20"
                                             Padding="10"
@@ -317,10 +317,10 @@
                                             <TextBlock Text="Built for enthusiasts"
                                                        FontSize="13"
                                                        FontWeight="SemiBold"
-                                                       Foreground="{StaticResource WS_Text}"/>
+                                                       Foreground="{DynamicResource ForegroundBrush}"/>
                                             <TextBlock Text="{DynamicResource Welcome.Feature3}"
                                                        FontSize="12"
-                                                       Foreground="{StaticResource WS_TextMuted}"
+                                                       Foreground="{DynamicResource MutedForegroundBrush}"
                                                        TextWrapping="Wrap"
                                                        Margin="0,2,0,0"/>
                                         </StackPanel>
@@ -330,23 +330,23 @@
                         </Grid>
                     </Border>
 
-                    <Border Background="#10141D"
-                            BorderBrush="#253041"
+                        <Border Background="{DynamicResource InputBackgroundBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
                             BorderThickness="1"
                             CornerRadius="20"
                             Padding="12"
                             HorizontalAlignment="Center">
                         <TextBlock x:Name="VersionText"
                                    FontSize="12"
-                                   Foreground="#8B95A8"
+                                   Foreground="{DynamicResource MutedForegroundBrush}"
                                    TextAlignment="Center"/>
                     </Border>
                 </StackPanel>
             </Border>
 
             <Border Grid.Row="2"
-                    Background="{StaticResource WS_HeaderGradient}"
-                    BorderBrush="#243041"
+                    Background="{DynamicResource HeaderBackgroundBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="0,1,0,0"
                     Padding="32,16,32,16"
                     CornerRadius="0,0,32,32">
@@ -362,7 +362,7 @@
                                   VerticalAlignment="Center"
                                   Margin="0,0,8,0"/>
                         <TextBlock Text="{DynamicResource Welcome.DontShowAgain}"
-                                   Foreground="{StaticResource WS_TextMuted}"
+                                   Foreground="{DynamicResource MutedForegroundBrush}"
                                    FontSize="13"
                                    VerticalAlignment="Center"/>
                     </StackPanel>

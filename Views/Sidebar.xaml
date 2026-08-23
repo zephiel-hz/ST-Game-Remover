@@ -353,7 +353,7 @@
 
             <TextBlock Grid.Row="1"
                        Margin="16,0,16,12"
-                       Text="zephiel © 2026"
+                       Text="zorty © 2026"
                        Foreground="{DynamicResource MutedForegroundBrush}"
                        FontSize="11"
                        Opacity="0.8"/>

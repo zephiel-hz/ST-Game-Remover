@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Animation;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 
 namespace SteamPluginManager
@@ -15,6 +16,14 @@ namespace SteamPluginManager
         public WelcomeScreen()
         {
             InitializeComponent();
+            var icon = new BitmapImage();
+            icon.BeginInit();
+            icon.UriSource = new Uri(App.GetThemeIconPath(), UriKind.Absolute);
+            icon.CacheOption = BitmapCacheOption.OnLoad;
+            icon.EndInit();
+            icon.Freeze();
+            WelcomeLogoImage.Source = icon;
+            Icon = BitmapFrame.Create(icon);
             CenterWindow();
             SetupEventHandlers();
             DisplayVersion();

@@ -197,8 +197,8 @@ namespace SteamPluginManager.Views
                 Clear(SettingsButton);
                 Clear(CheckUpdatesButton);
                 Clear(AboutButton);
-                SaweriaCard.Background = (System.Windows.Media.Brush)FindResource("CardBackgroundBrush");
-                SaweriaCard.BorderBrush = (System.Windows.Media.Brush)FindResource("BorderBrush");
+                SaweriaCard.SetResourceReference(BackgroundProperty, "CardBackgroundBrush");
+                SaweriaCard.SetResourceReference(BorderBrushProperty, "BorderBrush");
                 SaweriaCard.BorderThickness = new Thickness(1);
 
                 Button? select = key?.ToLowerInvariant() switch
@@ -220,15 +220,15 @@ namespace SteamPluginManager.Views
                 {
                     if (ReferenceEquals(select, SaweriaButton))
                     {
-                        SaweriaCard.Background = (System.Windows.Media.Brush)FindResource("SelectedBrush");
-                        SaweriaCard.BorderBrush = (System.Windows.Media.Brush)FindResource("AccentBrush");
+                        SaweriaCard.SetResourceReference(BackgroundProperty, "SelectedBrush");
+                        SaweriaCard.SetResourceReference(BorderBrushProperty, "AccentBrush");
                         SaweriaCard.BorderThickness = new Thickness(1);
                     }
                     else
                     {
                         // Apply selected visuals using dynamic resources defined in themes
-                        select.Background = (System.Windows.Media.Brush)FindResource("SelectedBrush");
-                        select.BorderBrush = (System.Windows.Media.Brush)FindResource("AccentBrush");
+                        select.SetResourceReference(BackgroundProperty, "SelectedBrush");
+                        select.SetResourceReference(BorderBrushProperty, "AccentBrush");
                         select.BorderThickness = new Thickness(1);
                     }
                 }

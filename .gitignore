@@ -33,7 +33,7 @@ __pycache__/
 # Secrets and local configuration
 .env
 .env.*
-!.env.example
+.env.example
 Config/service-config.json
 Config/*-local.json
 Config/*-secret.json

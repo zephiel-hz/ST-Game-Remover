@@ -81,6 +81,8 @@ namespace SteamPluginManager.Views
         private const int MAX_THUMBNAILS_TO_LOAD = 48;
         // Runtime reference to the generated WrapPanel from the ItemsControl template
         private WrapPanel? CardPanel;
+        private static double _cachedScrollOffset = 0;
+        private bool _hasRestoredScrollPosition = false;
 
             // --- Thumbnail Loading Logic ---
             private void SetupLazyThumbnailLoading()
@@ -397,6 +399,70 @@ namespace SteamPluginManager.Views
             }
         }
 
+        private void CardsScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
+        {
+            try
+            {
+                if (sender is ScrollViewer scrollViewer)
+                {
+                    if (e.VerticalChange == 0)
+                        return;
+
+                    _cachedScrollOffset = scrollViewer.VerticalOffset;
+                }
+            }
+            catch { }
+        }
+
+        private void RestoreScrollPosition()
+        {
+            if (FindName("CardsScrollViewer") is not ScrollViewer viewer)
+                return;
+
+            if (_hasRestoredScrollPosition)
+                return;
+
+            viewer.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    if (viewer == null)
+                        return;
+
+                    if (_cachedScrollOffset > 0 && viewer.ScrollableHeight > 0)
+                    {
+                        double targetOffset = Math.Min(_cachedScrollOffset, viewer.ScrollableHeight);
+                        viewer.ScrollToVerticalOffset(targetOffset);
+                        _hasRestoredScrollPosition = true;
+                    }
+                    else if (_cachedScrollOffset > 0)
+                    {
+                        viewer.LayoutUpdated += CardsScrollViewer_LayoutUpdated;
+                    }
+                    else
+                    {
+                        viewer.ScrollToTop();
+                        _hasRestoredScrollPosition = true;
+                    }
+                }
+                catch { }
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
+        private void CardsScrollViewer_LayoutUpdated(object? sender, EventArgs e)
+        {
+            if (FindName("CardsScrollViewer") is not ScrollViewer viewer || _hasRestoredScrollPosition)
+                return;
+
+            if (viewer.ScrollableHeight <= 0)
+                return;
+
+            viewer.LayoutUpdated -= CardsScrollViewer_LayoutUpdated;
+            double targetOffset = Math.Min(_cachedScrollOffset, viewer.ScrollableHeight);
+            viewer.ScrollToVerticalOffset(targetOffset);
+            _hasRestoredScrollPosition = true;
+        }
+
         private async Task LoadFilesFromSource()
         {
             try
@@ -420,12 +486,8 @@ namespace SteamPluginManager.Views
                     
                     // Update displayed page and page indicator after loading completes
                     DisplayCurrentPage();
-                    
-                    var loadingOverlayCache = FindName("LoadingOverlay") as Grid;
-                    if (loadingOverlayCache != null)
-                    {
-                        loadingOverlayCache.Visibility = Visibility.Collapsed;
-                    }
+                    // Hold overlay until layout stabilizes to avoid a brief width-jump
+                    HideLoadingOverlayWhenLayoutReady();
                     return;
                 }
 
@@ -480,12 +542,8 @@ namespace SteamPluginManager.Views
                 
                 // Update displayed page and page indicator after loading completes
                 DisplayCurrentPage();
-                
-                if (loadingOverlay != null)
-                {
-                    StopContinuousLoadingAnimation();
-                    loadingOverlay.Visibility = Visibility.Collapsed;
-                }
+                // Hold overlay until layout stabilizes to avoid a brief width-jump
+                HideLoadingOverlayWhenLayoutReady();
             }
             catch (Exception ex)
             {
@@ -544,6 +602,13 @@ namespace SteamPluginManager.Views
                     searchBox.TextChanged += SearchBox_TextChanged;
                     searchBox.Foreground = Application.Current.FindResource("ForegroundBrush") as System.Windows.Media.Brush;
                 }
+                if (FindName("CardsScrollViewer") is ScrollViewer sv)
+                {
+                    sv.ScrollChanged -= CardsScrollViewer_ScrollChanged;
+                    sv.ScrollChanged += CardsScrollViewer_ScrollChanged;
+                }
+                _hasRestoredScrollPosition = false;
+
                 _ = LoadFilesFromSource();
             }
             catch (Exception ex)
@@ -573,6 +638,11 @@ namespace SteamPluginManager.Views
                 {
                     _thumbnailLoadDebounceTimer.Stop();
                     _thumbnailLoadDebounceTimer = null;
+                }
+                if (FindName("CardsScrollViewer") is ScrollViewer sv2)
+                {
+                    sv2.ScrollChanged -= CardsScrollViewer_ScrollChanged;
+                    sv2.LayoutUpdated -= CardsScrollViewer_LayoutUpdated;
                 }
             }
             catch (Exception ex)
@@ -665,6 +735,59 @@ namespace SteamPluginManager.Views
             {
                 // Log error
             }
+        }
+
+        private void HideLoadingOverlayWhenLayoutReady()
+        {
+            try
+            {
+                var overlay = FindName("LoadingOverlay") as Grid;
+                var fileCards = FindName("FileCards") as ItemsControl;
+
+                if (fileCards != null)
+                    fileCards.Visibility = Visibility.Hidden;
+
+                if (FindName("CardsScrollViewer") is not ScrollViewer viewer)
+                {
+                    if (overlay != null)
+                    {
+                        StopContinuousLoadingAnimation();
+                        overlay.Visibility = Visibility.Collapsed;
+                    }
+                    if (fileCards != null)
+                        fileCards.Visibility = Visibility.Visible;
+                    return;
+                }
+
+                EventHandler? layoutHandler = null;
+                layoutHandler = (s, e) =>
+                {
+                    try
+                    {
+                        UpdateCardPanelLayout();
+
+                        if (CardPanel != null && CardPanel.ItemWidth > 0)
+                        {
+                            viewer.LayoutUpdated -= layoutHandler;
+                            RestoreScrollPosition();
+
+                            if (fileCards != null)
+                                fileCards.Visibility = Visibility.Visible;
+
+                            if (overlay != null)
+                            {
+                                StopContinuousLoadingAnimation();
+                                overlay.Visibility = Visibility.Collapsed;
+                            }
+                        }
+                    }
+                    catch { }
+                };
+
+                viewer.LayoutUpdated += layoutHandler;
+                viewer.Dispatcher.BeginInvoke(new Action(() => UpdateCardPanelLayout()), System.Windows.Threading.DispatcherPriority.Render);
+            }
+            catch { }
         }
 
 
@@ -771,6 +894,8 @@ namespace SteamPluginManager.Views
                 pageIndicator.Visibility = Visibility.Visible;
                 pageIndicator.Text = $"Total: {_allFiles.Count} files";
             }
+            // Restore scrolling state once items are displayed
+            RestoreScrollPosition();
         }
 
         private void StartSpinnerAnimation()

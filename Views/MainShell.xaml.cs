@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Threading.Tasks;
 
 namespace SteamPluginManager.Views
@@ -19,7 +20,26 @@ namespace SteamPluginManager.Views
         public MainShell(bool? startupLicenseVerified = null)
         {
             InitializeComponent();
+            ApplyThemeIcon();
+            App.ThemeChanged += ThemeChanged_Handler;
             _startupLicenseVerified = startupLicenseVerified;
+        }
+
+        private void ThemeChanged_Handler(object? sender, EventArgs e)
+        {
+            ApplyThemeIcon();
+        }
+
+        private void ApplyThemeIcon()
+        {
+            var icon = new BitmapImage();
+            icon.BeginInit();
+            icon.UriSource = new Uri(App.GetThemeIconPath(), UriKind.Absolute);
+            icon.CacheOption = BitmapCacheOption.OnLoad;
+            icon.EndInit();
+            icon.Freeze();
+            MainShellLogoImage.Source = icon;
+            Icon = BitmapFrame.Create(icon);
         }
 
         private async void Window_Loaded(object sender, RoutedEventArgs e)
@@ -128,6 +148,13 @@ namespace SteamPluginManager.Views
             try { GlobalSidebar?.SetActiveMenu("Saweria"); } catch { }
         }
 
+        public void NavigateToGenerateToken()
+        {
+            TitleText.Text = "Get Token";
+            TransitionToView(new GenerateTokenView());
+            try { GlobalSidebar?.SetActiveMenu("GetToken"); } catch { }
+        }
+
         public void NavigateToHZManifest()
         {
             NavigateToHZManifest(forceRefresh: true);
@@ -187,20 +214,10 @@ namespace SteamPluginManager.Views
 
         public void ShowAboutDialog()
         {
-            var version = GetInformationalVersion();
+            var version = UpdateChecker.GetCurrentVersion();
             var dialog = new StyledMessageDialog("About HZ Lua Manager", $"HZ Lua Manager\nVersion {version}\n\nYour comprehensive lua management solution.");
             dialog.Owner = this;
             dialog.ShowDialog();
-        }
-
-        private static string GetInformationalVersion()
-        {
-            var infoVersion = Assembly.GetExecutingAssembly()
-                .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-            if (!string.IsNullOrWhiteSpace(infoVersion))
-                return infoVersion;
-
-            return Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "Unknown";
         }
 
         private async Task CheckForUpdatesAsync()
@@ -337,18 +354,47 @@ namespace SteamPluginManager.Views
         private void ApplyLayoutForContent(object newContent)
         {
             bool isVerifyView = newContent is VerifyTokenView;
+            bool isGenerateTokenView = newContent is GenerateTokenView;
 
-            if (isVerifyView)
+            if (isVerifyView || isGenerateTokenView)
             {
-                GlobalSidebar.Visibility = Visibility.Collapsed;
-                ContentArea.SetValue(System.Windows.Controls.Grid.ColumnProperty, 0);
-                ContentArea.SetValue(System.Windows.Controls.Grid.ColumnSpanProperty, 2);
+                try
+                {
+                    // Hide sidebar and collapse its column
+                    GlobalSidebar.Visibility = Visibility.Collapsed;
+                    if (MainContentGrid != null)
+                    {
+                        MainContentGrid.ColumnDefinitions[0].Width = new System.Windows.GridLength(0);
+                        MainContentGrid.ColumnDefinitions[1].Width = new System.Windows.GridLength(1, System.Windows.GridUnitType.Star);
+                    }
+
+                    // Move the content border to span both columns so it fills the space
+                    if (ContentBorder != null)
+                    {
+                        ContentBorder.SetValue(System.Windows.Controls.Grid.ColumnProperty, 0);
+                        ContentBorder.SetValue(System.Windows.Controls.Grid.ColumnSpanProperty, 2);
+                    }
+                }
+                catch { }
                 return;
             }
 
-            GlobalSidebar.Visibility = Visibility.Visible;
-            ContentArea.SetValue(System.Windows.Controls.Grid.ColumnProperty, 1);
-            ContentArea.SetValue(System.Windows.Controls.Grid.ColumnSpanProperty, 1);
+            try
+            {
+                GlobalSidebar.Visibility = Visibility.Visible;
+                if (MainContentGrid != null)
+                {
+                    MainContentGrid.ColumnDefinitions[0].Width = new System.Windows.GridLength(260);
+                    MainContentGrid.ColumnDefinitions[1].Width = new System.Windows.GridLength(1, System.Windows.GridUnitType.Star);
+                }
+
+                if (ContentBorder != null)
+                {
+                    ContentBorder.SetValue(System.Windows.Controls.Grid.ColumnProperty, 1);
+                    ContentBorder.SetValue(System.Windows.Controls.Grid.ColumnSpanProperty, 1);
+                }
+            }
+            catch { }
         }
 
         // Window Control Handlers

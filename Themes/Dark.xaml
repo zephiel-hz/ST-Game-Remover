@@ -2,8 +2,8 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
   <LinearGradientBrush x:Key="BackgroundBrush" StartPoint="0,0" EndPoint="1,1">
-    <GradientStop Color="#0D1016" Offset="0"/>
-    <GradientStop Color="#171B24" Offset="1"/>
+    <GradientStop Color="#050505" Offset="0"/>
+    <GradientStop Color="#101010" Offset="1"/>
   </LinearGradientBrush>
   <SolidColorBrush x:Key="ForegroundBrush" Color="#F4F2EA"/>
   <SolidColorBrush x:Key="MutedForegroundBrush" Color="#8C94A5"/>
@@ -22,11 +22,11 @@
   <SolidColorBrush x:Key="PurpleButtonBrush" Color="#A86BDA"/>
   <SolidColorBrush x:Key="HoverBrush" Color="#212736"/>
   <SolidColorBrush x:Key="SelectedBrush" Color="#302114"/>
-  <SolidColorBrush x:Key="HeaderBackgroundBrush" Color="#171B24"/>
-  <SolidColorBrush x:Key="CardBackgroundBrush" Color="#161A22"/>
-  <SolidColorBrush x:Key="InputBackgroundBrush" Color="#1E2330"/>
+  <SolidColorBrush x:Key="HeaderBackgroundBrush" Color="#101010"/>
+  <SolidColorBrush x:Key="CardBackgroundBrush" Color="#141414"/>
+  <SolidColorBrush x:Key="InputBackgroundBrush" Color="#181818"/>
   <SolidColorBrush x:Key="InputForegroundBrush" Color="#F4F2EA"/>
-  <SolidColorBrush x:Key="ComboBoxBackgroundBrush" Color="#1E2330"/>
+  <SolidColorBrush x:Key="ComboBoxBackgroundBrush" Color="#181818"/>
   <SolidColorBrush x:Key="ComboBoxForegroundBrush" Color="#F4F2EA"/>
   <SolidColorBrush x:Key="ComboBoxItemForegroundBrush" Color="#F4F2EA"/>
   <SolidColorBrush x:Key="PlaceholderBrush" Color="#7B8390"/>

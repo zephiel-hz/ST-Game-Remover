@@ -135,7 +135,6 @@ namespace SteamPluginManager
         private readonly string steamPath;
         private bool _isBusy;
         private ResourceDictionary? _darkTheme;
-        private ResourceDictionary? _lightTheme;
         private string _currentLanguage = "en"; // "en" or "zh"
         private string _lastPlaceholder = "Search...";
 
@@ -413,15 +412,14 @@ namespace SteamPluginManager
             try
             {
                 _darkTheme = new ResourceDictionary { Source = new Uri("Themes/Dark.xaml", UriKind.Relative) };
-                _lightTheme = new ResourceDictionary { Source = new Uri("Themes/Light.xaml", UriKind.Relative) };
                 
                 // Set initial toggle state based on saved preference or current theme
                 var savedTheme = ThemePreferences.GetSavedThemePreference();
-                bool isLightTheme = savedTheme ?? true; // Default to light if no preference saved
+                bool isDarkTheme = string.IsNullOrEmpty(savedTheme) || savedTheme == "Dark";
                 
                 // Ensure current app resources use the correct theme and keep strings dictionary
                 var md = Application.Current.Resources.MergedDictionaries;
-                var initialTheme = new ResourceDictionary { Source = new Uri(isLightTheme ? "Themes/Light.xaml" : "Themes/Dark.xaml", UriKind.Relative) };
+                var initialTheme = new ResourceDictionary { Source = new Uri($"Themes/{(isDarkTheme ? "Dark" : savedTheme)}.xaml", UriKind.Relative) };
                 if (md.Count > 0)
                 {
                     // Put theme at index 0
@@ -446,7 +444,7 @@ namespace SteamPluginManager
 
                 // Set toggle state to match the theme (light = checked, dark = unchecked)
                 if (ThemeToggle != null)
-                    ThemeToggle.IsChecked = isLightTheme;
+                    ThemeToggle.IsChecked = !isDarkTheme;
             }
             catch (Exception ex)
             {
@@ -852,8 +850,8 @@ namespace SteamPluginManager
 
         private void ThemeToggle_Checked(object sender, RoutedEventArgs e)
         {
-            SwitchTheme(isLight: true);
-            AnimateThemeToggle(isLight: true);
+            SwitchTheme(isLight: false);
+            AnimateThemeToggle(isLight: false);
         }
 
         private void ThemeToggle_Unchecked(object sender, RoutedEventArgs e)
@@ -878,11 +876,11 @@ namespace SteamPluginManager
                     // This runs after the fade-out is complete
                     
                     // Reuse preloaded dictionaries to avoid re-reading XAML from disk
-                    ResourceDictionary? target = isLight ? _lightTheme : _darkTheme;
+                    ResourceDictionary? target = _darkTheme;
                     if (target == null)
                     {
-                        target = new ResourceDictionary { Source = new Uri(isLight ? "Themes/Light.xaml" : "Themes/Dark.xaml", UriKind.Relative) };
-                        if (isLight) _lightTheme = target; else _darkTheme = target;
+                        target = new ResourceDictionary { Source = new Uri("Themes/Dark.xaml", UriKind.Relative) };
+                        _darkTheme = target;
                     }
                     
                     var dictionaries = Application.Current.Resources.MergedDictionaries;
@@ -896,7 +894,7 @@ namespace SteamPluginManager
                     }
 
                     // Save preference
-                    ThemePreferences.SaveThemePreference(isLight);
+                    ThemePreferences.SaveThemePreference("Dark");
 
                     // Now, fade back in
                     var fadeInAnimation = new DoubleAnimation
