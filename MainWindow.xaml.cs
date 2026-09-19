@@ -1025,14 +1025,14 @@ namespace SteamPluginManager
                 }
                 else
                 {
-                    versionText.Text = "2.2.0";
+                    versionText.Text = "2.2.2";
                 }
             }
             catch
             {
                 var versionText = FindName("VersionText") as TextBlock;
                 if (versionText != null)
-                    versionText.Text = "2.2.0";
+                    versionText.Text = "2.2.2";
             }
         }
 

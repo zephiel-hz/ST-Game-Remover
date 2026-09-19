@@ -2099,7 +2099,18 @@ namespace SteamPluginManager.Views
             }
         }
 
-        private const string DiscordWebhookUrl = "https://discord.com/api/webhooks/1500965855196876832/M5IsodIehe8-G_GeFJm4GybwZMcT9iatnRwf_l_klrJ35xNI4TElR9GFpF6-1V4H4hmD";
+        private static string DiscordWebhookUrl
+        {
+            get
+            {
+                var configuredUrl = ServiceConfiguration.Current.Discord.GameRequestWebhookUrl;
+                if (!string.IsNullOrWhiteSpace(configuredUrl))
+                    return configuredUrl.Trim();
+
+                var environmentUrl = Environment.GetEnvironmentVariable("DISCORD_GAME_REQUEST_WEBHOOK_URL");
+                return string.IsNullOrWhiteSpace(environmentUrl) ? string.Empty : environmentUrl.Trim();
+            }
+        }
 
         private async Task<string> GetSteamGameNameAsync(string steamUrl, int appId)
         {

@@ -74,12 +74,12 @@ namespace SteamPluginManager
                 }
                 else
                 {
-                    VersionText.Text = "v2.1.2";
+                    VersionText.Text = "v2.2.2";
                 }
             }
             catch
             {
-                VersionText.Text = "v2.1.2";
+                VersionText.Text = "v2.2.2";
             }
         }
         

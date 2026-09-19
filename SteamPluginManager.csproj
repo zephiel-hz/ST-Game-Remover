@@ -12,10 +12,10 @@
     <ApplicationManifest>Config\app.manifest</ApplicationManifest>
     <ApplicationIcon>Config\SGR.ico</ApplicationIcon>
     <!-- Version info -->
-    <Version>2.2.0</Version>
-    <AssemblyVersion>2.2.0.0</AssemblyVersion>
-    <FileVersion>2.2.0.0</FileVersion>
-    <InformationalVersion>2.2.0</InformationalVersion>
+    <Version>2.2.2</Version>
+    <AssemblyVersion>2.2.2.0</AssemblyVersion>
+    <FileVersion>2.2.2.0</FileVersion>
+    <InformationalVersion>2.2.2</InformationalVersion>
     <!-- Disable warnings for missing UI elements in XAML codebehind -->
     <NoWarn>$(NoWarn);CS0246;CS0103;CA2022;CS8603;CS0234</NoWarn>
     <!-- Performance optimizations (compatible with WPF) -->

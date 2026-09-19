@@ -3,6 +3,7 @@ using System.IO;
 using System.Reflection;
 using System.IO.Compression;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -25,6 +26,19 @@ namespace SteamPluginManager.Views
         private string? _steamtoolsLatestVersion = null;
         private bool _steamtoolsUpdateAvailable = false;
         private string? _steamtoolsInstalledVersion = null;
+
+        private static string BugReportWebhookUrl
+        {
+            get
+            {
+                var configuredUrl = ServiceConfiguration.Current.Discord.BugReportWebhookUrl;
+                if (!string.IsNullOrWhiteSpace(configuredUrl))
+                    return configuredUrl.Trim();
+
+                var environmentUrl = Environment.GetEnvironmentVariable("DISCORD_BUG_REPORT_WEBHOOK_URL");
+                return string.IsNullOrWhiteSpace(environmentUrl) ? string.Empty : environmentUrl.Trim();
+            }
+        }
 
         public SettingsView()
         {
@@ -252,9 +266,9 @@ namespace SteamPluginManager.Views
             try
             {
                 var client = SharedHttpClient.Instance;
-                const string latestReleaseApi = "https://api.github.com/repos/OpenSteam001/OpenSteamTool/releases/latest";
+                const string latestReleaseApi = "https://api.github.com/repos/madoiscool/BetterSteamTools/releases/latest";
                 using var request = new HttpRequestMessage(HttpMethod.Get, latestReleaseApi);
-                request.Headers.UserAgent.ParseAdd("SteamPluginManager/2.1.9");
+                request.Headers.UserAgent.ParseAdd("SteamPluginManager/2.2.2");
                 request.Headers.Accept.ParseAdd("application/vnd.github+json");
 
                 using var response = await client.SendAsync(request);
@@ -778,12 +792,12 @@ namespace SteamPluginManager.Views
                         Logger.Log("[Steamtools] Added HKCU\\Software\\Valve\\Steamtools\\iscdkey=true");
 
                         var client = SharedHttpClient.Instance;
-                        const string latestReleaseApi = "https://api.github.com/repos/OpenSteam001/OpenSteamTool/releases/latest";
+                        const string latestReleaseApi = "https://api.github.com/repos/madoiscool/BetterSteamTools/releases/latest";
 
                         _overlayWindow?.SetStepInProgress(2);
                         _overlayWindow?.SetStatus("Downloading latest release...");
                         using var request = new HttpRequestMessage(HttpMethod.Get, latestReleaseApi);
-                        request.Headers.UserAgent.ParseAdd("SteamPluginManager/2.1.9");
+                        request.Headers.UserAgent.ParseAdd("SteamPluginManager/2.2.2");
                         request.Headers.Accept.ParseAdd("application/vnd.github+json");
 
                         using var releaseResponse = await client.SendAsync(request);
@@ -1525,12 +1539,12 @@ namespace SteamPluginManager.Views
                 Logger.Log("[Steamtools] Added HKCU\\Software\\Valve\\Steamtools\\iscdkey=true");
 
                 var client = SharedHttpClient.Instance;
-                const string latestReleaseApi = "https://api.github.com/repos/OpenSteam001/OpenSteamTool/releases/latest";
+                const string latestReleaseApi = "https://api.github.com/repos/madoiscool/BetterSteamTools/releases/latest";
 
                 _overlayWindow?.SetStepInProgress(2);
                 _overlayWindow?.SetStatus("Downloading latest release...");
                 using var request = new HttpRequestMessage(HttpMethod.Get, latestReleaseApi);
-                request.Headers.UserAgent.ParseAdd("SteamPluginManager/2.1.9");
+                request.Headers.UserAgent.ParseAdd("SteamPluginManager/2.2.2");
                 request.Headers.Accept.ParseAdd("application/vnd.github+json");
 
                 using var releaseResponse = await client.SendAsync(request);
@@ -1710,6 +1724,104 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"[Steamtools] Update button error: {ex.Message}");
+            }
+        }
+
+        private void ShowBugReportPopup_Click(object sender, RoutedEventArgs e)
+        {
+            BugReportValidationText.Visibility = Visibility.Collapsed;
+            BugReportTitleTextBox.Clear();
+            BugReportDescriptionTextBox.Clear();
+            BugReportPopupOverlay.Visibility = Visibility.Visible;
+            BugReportTitleTextBox.Focus();
+        }
+
+        private void CancelBugReportButton_Click(object sender, RoutedEventArgs e)
+        {
+            HideBugReportPopup();
+        }
+
+        private void HideBugReportPopup()
+        {
+            BugReportPopupOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private void ShowBugReportValidation(string message)
+        {
+            BugReportValidationText.Text = message;
+            BugReportValidationText.Visibility = Visibility.Visible;
+        }
+
+        private async void BugReportSubmitButton_Click(object sender, RoutedEventArgs e)
+        {
+            var title = BugReportTitleTextBox.Text.Trim();
+            var description = BugReportDescriptionTextBox.Text.Trim();
+
+            if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(description))
+            {
+                ShowBugReportValidation("Please enter a short title and describe the problem.");
+                return;
+            }
+
+            BugReportSubmitButton.IsEnabled = false;
+            BugReportSubmitButton.Content = "Sending...";
+
+            try
+            {
+                var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "unknown";
+                var senderName = await DashboardView.GetCurrentDisplayNameAsync();
+                if (string.IsNullOrWhiteSpace(senderName))
+                {
+                    senderName = "Anonymous";
+                }
+
+                var fields = new List<object>
+                {
+                    new { name = "Sender", value = senderName, inline = true },
+                    new { name = "App version", value = version, inline = true },
+                    new { name = "Reported at", value = DateTimeOffset.UtcNow.ToString("u"), inline = true }
+                };
+
+                var payload = new
+                {
+                    username = "HZ Lua Manager Bug Reports",
+                    allowed_mentions = new { parse = Array.Empty<string>() },
+                    embeds = new[]
+                    {
+                        new
+                        {
+                            title = title,
+                            description = description,
+                            color = 15158332,
+                            fields,
+                            footer = new { text = "Submitted from HZ Lua Manager" }
+                        }
+                    }
+                };
+
+                var json = JsonSerializer.Serialize(payload);
+                using var content = new StringContent(json, Encoding.UTF8, "application/json");
+                using var response = await SharedHttpClient.Instance.PostAsync(BugReportWebhookUrl, content);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    Logger.Log($"[BugReport] Discord webhook failed: {response.StatusCode}");
+                    ShowBugReportValidation("The bug report could not be sent. Please try again later.");
+                    return;
+                }
+
+                MessageBox.Show("Bug report sent successfully. Thank you!", "Bug Report Sent", MessageBoxButton.OK, MessageBoxImage.Information);
+                HideBugReportPopup();
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[BugReport] Failed to send report: {ex.Message}");
+                ShowBugReportValidation("The bug report could not be sent. Please try again later.");
+            }
+            finally
+            {
+                BugReportSubmitButton.IsEnabled = true;
+                BugReportSubmitButton.Content = "Send Report";
             }
         }
 

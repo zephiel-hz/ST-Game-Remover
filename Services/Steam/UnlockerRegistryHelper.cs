@@ -122,10 +122,10 @@ namespace SteamPluginManager
             StopSteamProcesses();
 
             var client = SharedHttpClient.Instance;
-            const string latestReleaseApi = "https://api.github.com/repos/OpenSteam001/OpenSteamTool/releases/latest";
+            const string latestReleaseApi = "https://api.github.com/repos/madoiscool/BetterSteamTools/releases/latest";
 
             using var request = new HttpRequestMessage(HttpMethod.Get, latestReleaseApi);
-            request.Headers.UserAgent.ParseAdd("SteamPluginManager/2.1.9");
+            request.Headers.UserAgent.ParseAdd("SteamPluginManager/2.2.2");
             request.Headers.Accept.ParseAdd("application/vnd.github+json");
 
             using var releaseResponse = await client.SendAsync(request);

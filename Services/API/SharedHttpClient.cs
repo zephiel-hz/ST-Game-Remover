@@ -23,7 +23,7 @@ namespace SteamPluginManager
                 Timeout = TimeSpan.FromSeconds(30)
             };
 
-            client.DefaultRequestHeaders.Add("User-Agent", "SteamPluginManager/2.1.9");
+            client.DefaultRequestHeaders.Add("User-Agent", "SteamPluginManager/2.2.2");
             return client;
         });
 

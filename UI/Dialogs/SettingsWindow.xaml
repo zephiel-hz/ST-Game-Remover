@@ -225,7 +225,7 @@
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                 <TextBlock Text="ABOUT" Style="{StaticResource SettingsSectionTitle}"/>
                                 <TextBlock x:Name="VersionText"
-                                           Text="Version 2.1.2" 
+                                           Text="Version 2.2.2"
                                            Style="{StaticResource SettingsText}"/>
                                 <TextBlock x:Name="CreatedByText"
                                            Text="Created by: Zephiel" 
