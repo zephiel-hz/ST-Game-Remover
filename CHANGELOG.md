@@ -41,37 +41,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [3.0.0] - 2026-09-29
 
-### UI Overhaul
-* **Game Library Redesign:** Cleaner, modern, and responsive card-based layout.
-* **Enhanced Game Cards:** Features installed status badges, optimized high-resolution cover art, and smooth hover animations.
-* **Faster Filtering:** Improved game search and category filtering for rapid catalog browsing.
-* **New Main Header:** Integrated user profile info, token status, and Steam engine status indicator.
-* **Modern Dynamic Sidebar:** Smooth tab transitions with active indicator rails and non-intrusive floating chat button positioning.
-* **Multi-Theme Support:** Added customizable themes including Dark, Dark Blue, Dark Purple, Dark Green, Dark Red, Dark Pink, and Dark Yellow.
-* **Modern Dialog System:** Replaced standard Windows dialogs with custom themed components (`ModernMessageBox`, `ModernDialogWindow`, `DeleteChoiceDialog`, `StyledMessageDialog`).
-* **Markdown Update Notes:** Update dialog renders GitHub Markdown formatting with styled headers, lists, and links.
+### Added
+* **Community Chat:** Chat in real time with other users, reply to messages, mention friends with `@username`, and check user profiles.
+* **Game Request System:** Request games directly inside the app with live status tracking and automatic patch setup.
+* **New Color Themes:** Added multiple themes including Dark Blue, Purple, Green, Red, Pink, and Yellow in Settings.
+* **Rich Markdown Updates:** Update announcements now display styled text, bullet points, and clickable links.
 
-### New Game Request System
-* **Interactive Request Modal:** Modern interface (`RequestGameModalView`) for structured game and manifest requests.
-* **Hubcap & ManifestHub Integration:** Automated manifest search and retrieval through integrated API services.
-* **Hubcap Authentication:** In-app login and token management dialog for authenticated requests.
-* **Realtime Operation Progress:** Multi-step progress modal (`OperationProgressModalView`) displaying live download, extraction, compression, and deployment status.
-* **OnlineFix Pipeline:** Automated companion resource workflow to synchronize available fixes upon manifest request.
+### Changed
+* **Modern UI Redesign:** Completely refreshed interface with modern game cards, smooth tab navigation, and updated headers.
+* **Faster Game Browsing:** Improved game search and category filtering for quicker browsing in Game Library.
+* **Modern Dialogs:** Replaced standard Windows message boxes with custom dark-themed dialogs.
 
-### Community Chat & Profiles
-* **Realtime Chat Engine:** Direct messaging powered by Supabase Realtime / WebSocket connectivity.
-* **Adaptive Message Bubbles:** Content-hugging chat bubbles with clear alignment (own messages right, others left).
-* **Message Replies:** Reply directly to messages with quote previews and one-click jump navigation with highlighting.
-* **User Mentions (@username):** Mention autocomplete popup, visual mention badge styling, and clickable profile links.
-* **Interactive Profile Cards:** Quick-access popup profile cards accessible from avatars, usernames, and mentions.
-* **Text Selection & Auto-Links:** Select and copy text directly from message bubbles with automatic clickable URL detection.
-* **Profile Customization:** Customize display names and choose preset avatar colors.
-
-### Performance & Architecture
-* **Dynamic Versioning:** Centralized version management via `AppInfo` dynamically reading assembly metadata, eliminating hardcoded version strings.
-* **Secure Configuration:** Separated sensitive API keys and service configurations from source code and build pipelines.
-* **View Caching:** Instant tab switching with preserved scroll positions and state across views.
-* **Optimized Responsiveness:** Reduced UI thread blocking during disk and network operations.
+### Fixed
+* **App Performance & Smoothness:** Optimized memory usage and responsiveness for faster and smoother navigation throughout the app.
 
 ---
 
