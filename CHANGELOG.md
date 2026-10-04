@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 * **Realtime Profile Pictures:** Other users' new profile pictures now update right away in Community Chat without needing to restart the app.
+* **B2 Storage Verification:** Ensured profile picture uploads are fully verified on Backblaze B2 before saving changes, preventing broken avatar displays.
 * **Game Thumbnail Loading:** Fixed an issue where missing game thumbnails could cause background errors.
 
 ---
@@ -23,15 +24,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [3.0.1] - 2026-10-03
 
 ### Added
-* **Custom Profile Pictures:** You can now upload your own avatar picture with a built-in circular crop tool.
+* **Custom Profile Pictures:** You can now upload and crop your own avatar picture with an interactive circular preview.
+* **Backblaze B2 Cloud Storage:** Switched storage backend to Backblaze B2 for faster and more reliable avatar and game resource downloads.
 * **New `.hzbak` Backup Format:** Game backups now use the `.hzbak` format, with easy import and restore support in Game Library.
 * **Pinned Chat Announcements:** Announcements in Community Chat now appear in a neat scrolling marquee banner above the messages.
 
 ### Changed
 * **Modern Toggle Switches:** Redesigned toggle switches in Settings with smoother animations and modern styling.
-* **Improved Game Patch Archives:** OnlineFix patches are now packaged cleaner for smoother and easier installations.
 
 ### Fixed
+* **OnlineFix Subfolder Extraction:** Fixed an issue where game patches containing engine subfolders (such as `Engine/`, `Binaries/`, or `Game_Data/`) were extracted into incorrect directories.
+* **OnlineFix Archive Compression:** Improved patch archive structure by automatically stripping redundant wrapper folders so fix files deploy directly into the game root.
 * **Presence & Stability:** Improved user status accuracy and chat connection stability.
 
 ---
