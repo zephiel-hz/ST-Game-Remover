@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 * **Realtime Profile Pictures:** Other users' new profile pictures now update right away in Community Chat without needing to restart the app.
+* **OnlineFix Upload Timeout:** Fixed an issue where uploading OnlineFix files to Backblaze B2 could encounter timeout errors.
 * **B2 Storage Verification:** Ensured profile picture uploads are fully verified on Backblaze B2 before saving changes, preventing broken avatar displays.
 * **Game Thumbnail Loading:** Fixed an issue where missing game thumbnails could cause background errors.
 
