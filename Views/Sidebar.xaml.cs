@@ -43,6 +43,22 @@ namespace SteamPluginManager.Views
             WindowNavigator.NavigateToSettings();
         }
 
+        private void Dev_Click(object sender, RoutedEventArgs e)
+        {
+            WindowNavigator.NavigateToDev();
+        }
+
+        public void SetAdminVisibility(bool isAdmin)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (DevButton != null)
+                {
+                    DevButton.Visibility = isAdmin ? Visibility.Visible : Visibility.Collapsed;
+                }
+            });
+        }
+
         private void Library_Click(object sender, RoutedEventArgs e)
         {
             WindowNavigator.NavigateToGameLibrary();
@@ -82,7 +98,7 @@ namespace SteamPluginManager.Views
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to update Unlocker toggle: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                ModernMessageBox.Show($"Failed to update Unlocker toggle: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 
@@ -155,7 +171,7 @@ namespace SteamPluginManager.Views
         }
 
         // Allow other views to update sidebar content
-        public void SetProfile(string displayName, string status)
+        public void SetProfile(string displayName, string status, System.Windows.Media.ImageSource? avatarImage = null)
         {
             Dispatcher.Invoke(() =>
             {
@@ -195,11 +211,16 @@ namespace SteamPluginManager.Views
                 Clear(OnlineFixButton);
                 Clear(RestartSteamButton);
                 Clear(SettingsButton);
+                Clear(DevButton);
                 Clear(CheckUpdatesButton);
                 Clear(AboutButton);
-                SaweriaCard.SetResourceReference(BackgroundProperty, "CardBackgroundBrush");
-                SaweriaCard.SetResourceReference(BorderBrushProperty, "BorderBrush");
-                SaweriaCard.BorderThickness = new Thickness(1);
+                Clear(SaweriaButton);
+                if (SaweriaCard != null)
+                {
+                    SaweriaCard.SetResourceReference(BackgroundProperty, "CardBackgroundBrush");
+                    SaweriaCard.SetResourceReference(BorderBrushProperty, "BorderBrush");
+                    SaweriaCard.BorderThickness = new Thickness(1);
+                }
 
                 Button? select = key?.ToLowerInvariant() switch
                 {
@@ -210,6 +231,7 @@ namespace SteamPluginManager.Views
                     "onlinefix" => OnlineFixButton,
                     "restartsteam" => RestartSteamButton,
                     "settings" => SettingsButton,
+                    "dev" => DevButton,
                     "checkupdates" => CheckUpdatesButton,
                     "about" => AboutButton,
                     "saweria" => SaweriaButton,
@@ -218,19 +240,10 @@ namespace SteamPluginManager.Views
 
                 if (select != null)
                 {
-                    if (ReferenceEquals(select, SaweriaButton))
-                    {
-                        SaweriaCard.SetResourceReference(BackgroundProperty, "SelectedBrush");
-                        SaweriaCard.SetResourceReference(BorderBrushProperty, "AccentBrush");
-                        SaweriaCard.BorderThickness = new Thickness(1);
-                    }
-                    else
-                    {
-                        // Apply selected visuals using dynamic resources defined in themes
-                        select.SetResourceReference(BackgroundProperty, "SelectedBrush");
-                        select.SetResourceReference(BorderBrushProperty, "AccentBrush");
-                        select.BorderThickness = new Thickness(1);
-                    }
+                    // Apply selected visuals using dynamic resources defined in themes
+                    select.SetResourceReference(BackgroundProperty, "SelectedBrush");
+                    select.SetResourceReference(BorderBrushProperty, "AccentBrush");
+                    select.BorderThickness = new Thickness(1);
                 }
             });
         }

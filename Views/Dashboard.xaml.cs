@@ -318,12 +318,12 @@ namespace SteamPluginManager
 
         private void CacheManager_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("Cache Manager feature coming soon!", "Feature in Development", MessageBoxButton.OK, MessageBoxImage.Information);
+            ModernMessageBox.Show("Cache Manager feature coming soon!", "Feature in Development", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void ActivityLog_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("Activity Log feature coming soon!", "Feature in Development", MessageBoxButton.OK, MessageBoxImage.Information);
+            ModernMessageBox.Show("Activity Log feature coming soon!", "Feature in Development", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void RestartSteam_Click(object sender, RoutedEventArgs e)
@@ -331,11 +331,11 @@ namespace SteamPluginManager
             try
             {
                 SteamHelper.RestartSteam();
-                MessageBox.Show("Steam is restarting...", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                ModernMessageBox.Show("Steam is restarting...", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error restarting Steam: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Error restarting Steam: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -359,17 +359,8 @@ namespace SteamPluginManager
 
                 if (updateInfo.HasUpdate)
                 {
-                    var dialog = new StyledMessageDialog(
-                        "Update Available",
-                        $"New Version Available!\n\nCurrent: {updateInfo.CurrentVersion}\nLatest: {updateInfo.LatestVersion}\n\n{updateInfo.ReleaseNotes}\n\nWould you like to download and install the update?",
-                        showCancel: true
-                    );
-                    dialog.Owner = this;
-                    dialog.PrimaryButton.Content = "Download";
-                    dialog.SecondaryButton.Content = "Cancel";
-                    var result = dialog.ShowDialog();
-
-                    if (result == true && !string.IsNullOrEmpty(updateInfo.DownloadUrl))
+                    bool shouldUpdate = UpdateAvailableDialog.ShowUpdate(this, updateInfo);
+                    if (shouldUpdate && !string.IsNullOrEmpty(updateInfo.DownloadUrl))
                     {
                         await DownloadAndInstallUpdateAsync(updateInfo.DownloadUrl);
                     }
@@ -383,7 +374,7 @@ namespace SteamPluginManager
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to check for updates: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Failed to check for updates: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -448,7 +439,7 @@ namespace SteamPluginManager
             }
             else
             {
-                MessageBox.Show($"Failed to download or install update: {message}", "Update Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Failed to download or install update: {message}", "Update Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -465,7 +456,7 @@ namespace SteamPluginManager
         private void About_Click(object sender, RoutedEventArgs e)
         {
             var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "Unknown";
-            MessageBox.Show(
+            ModernMessageBox.Show(
                 "SGR - Steam Game Remover\n\n" +
                 $"Version: {version}\n" +
                 "A comprehensive Steam game management tool\n\n" +
@@ -480,7 +471,7 @@ namespace SteamPluginManager
         {
             var openFileDialog = new OpenFileDialog
             {
-                Filter = "SPM Backup (*.spmb)|*.spmb|All Files (*.*)|*.*",
+                Filter = "HZ Backup (*.hzbak)|*.hzbak|SPM Backup (*.spmb)|*.spmb|All Files (*.*)|*.*",
                 Title = "Restore Game Backup",
                 Multiselect = false
             };
@@ -495,7 +486,7 @@ namespace SteamPluginManager
                 // Validate file exists
                 if (!File.Exists(backupFilePath))
                 {
-                    MessageBox.Show(
+                    ModernMessageBox.Show(
                         "Selected backup file does not exist.",
                         "Error",
                         MessageBoxButton.OK,
@@ -504,7 +495,7 @@ namespace SteamPluginManager
                 }
 
                 // Show confirmation dialog
-                var result = MessageBox.Show(
+                var result = ModernMessageBox.Show(
                     $"This will restore the backup from:\n{Path.GetFileName(backupFilePath)}\n\n" +
                     "Existing plugin and manifest files will be overwritten.\n" +
                     "Continue?",
@@ -519,7 +510,7 @@ namespace SteamPluginManager
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
+                ModernMessageBox.Show(
                     $"Error opening backup file: {ex.Message}",
                     "Error",
                     MessageBoxButton.OK,
@@ -568,7 +559,7 @@ namespace SteamPluginManager
                 if (string.IsNullOrEmpty(steamPath))
                 {
                     progressWindow.Close();
-                    MessageBox.Show(
+                    ModernMessageBox.Show(
                         "Could not find Steam installation directory.",
                         "Error",
                         MessageBoxButton.OK,
@@ -629,7 +620,7 @@ namespace SteamPluginManager
                     catch { }
 
                     // Show success message
-                    MessageBox.Show(
+                    ModernMessageBox.Show(
                         $"Backup restored successfully!\n\n" +
                         $"Lua Files: {luaFiles}\n" +
                         $"Manifest Files: {manifestFiles}\n\n" +
@@ -641,7 +632,7 @@ namespace SteamPluginManager
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
+                ModernMessageBox.Show(
                     $"Failed to restore backup:\n{ex.Message}",
                     "Restore Error",
                     MessageBoxButton.OK,

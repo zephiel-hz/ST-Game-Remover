@@ -1,6 +1,7 @@
 using Microsoft.Win32;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 
 namespace SteamPluginManager
 {
@@ -28,7 +29,12 @@ namespace SteamPluginManager
         {
             try
             {
-                return Process.GetProcessesByName("steam").Length > 0;
+                var processes = Process.GetProcessesByName("steam");
+                return processes.Any(p =>
+                {
+                    try { return !p.HasExited; }
+                    catch { return true; }
+                });
             }
             catch
             {

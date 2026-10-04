@@ -347,11 +347,96 @@ namespace SteamPluginManager.Views
             {
                 RegisterTextElements();
                 DisplayFileDetails();
+                UpdateLayoutMode(ActualWidth < 680);
             }
             catch (Exception ex)
             {
                 Logger.Log($"[HZManifestDetailView] Error: {ex.Message}");
             }
+        }
+
+        private void HZManifestDetailView_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            bool isCompact = e.NewSize.Width < 680;
+            UpdateLayoutMode(isCompact);
+        }
+
+        private void UpdateLayoutMode(bool isCompact)
+        {
+            try
+            {
+                if (FindName("SystemRequirementsGrid") is Grid sysGrid)
+                {
+                    var minCard = FindName("MinRequirementsCard") as Border;
+                    var recCard = FindName("RecRequirementsCard") as Border;
+
+                    if (isCompact)
+                    {
+                        // In compact / split view (Drawer): stack into 1 column
+                        if (sysGrid.ColumnDefinitions.Count > 1)
+                        {
+                            sysGrid.ColumnDefinitions[1].Width = new GridLength(0);
+                        }
+                        while (sysGrid.RowDefinitions.Count < 2)
+                        {
+                            sysGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                        }
+                        if (minCard != null)
+                        {
+                            Grid.SetColumn(minCard, 0);
+                            Grid.SetRow(minCard, 0);
+                            minCard.Margin = new Thickness(0, 0, 0, 8);
+                        }
+                        if (recCard != null)
+                        {
+                            Grid.SetColumn(recCard, 0);
+                            Grid.SetRow(recCard, 1);
+                            recCard.Margin = new Thickness(0);
+                        }
+                    }
+                    else
+                    {
+                        // In full view: 2 columns side-by-side
+                        if (sysGrid.ColumnDefinitions.Count > 1)
+                        {
+                            sysGrid.ColumnDefinitions[1].Width = new GridLength(1, GridUnitType.Star);
+                        }
+                        if (minCard != null)
+                        {
+                            Grid.SetColumn(minCard, 0);
+                            Grid.SetRow(minCard, 0);
+                            minCard.Margin = new Thickness(0, 0, 6, 0);
+                        }
+                        if (recCard != null)
+                        {
+                            Grid.SetColumn(recCard, 1);
+                            Grid.SetRow(recCard, 0);
+                            recCard.Margin = new Thickness(6, 0, 0, 0);
+                        }
+                    }
+                }
+
+                if (FindName("MainContentStackPanel") is StackPanel mainStack)
+                {
+                    mainStack.Margin = isCompact ? new Thickness(14, 12, 14, 16) : new Thickness(24, 18, 24, 24);
+                }
+
+                if (FindName("GameThumbnail") is Image thumbnail)
+                {
+                    thumbnail.MaxHeight = isCompact ? 180 : 280;
+                }
+
+                if (FindName("ThumbnailBorder") is Border thumbBorder)
+                {
+                    thumbBorder.MinHeight = isCompact ? 130 : 220;
+                }
+
+                if (FindName("BackButton") is Button backBtn)
+                {
+                    backBtn.Visibility = isCompact ? Visibility.Collapsed : Visibility.Visible;
+                }
+            }
+            catch { }
         }
 
         public void SetFile(ManifestFile file)
@@ -367,14 +452,8 @@ namespace SteamPluginManager.Views
         {
             try
             {
-                if (FindName("DetailTitle") is TextBlock detailTitle)
-                    detailTitle.Text = "Game Details";
-                if (FindName("DetailSubtitle") is TextBlock detailSubtitle)
-                    detailSubtitle.Text = "HZ Manifest Information";
                 if (FindName("AddToLibraryButton") is Button addToLibraryButton)
                     addToLibraryButton.Content = "Add to Library";
-                if (FindName("BackButtonText") is TextBlock backButtonText)
-                    backButtonText.Text = "← Back";
             }
             catch (Exception ex)
             {
@@ -382,10 +461,20 @@ namespace SteamPluginManager.Views
             }
         }
 
-        private void ShowLoadingState(bool show, string status = "Processing...")
+        private void ShowLoadingState(bool show, string status = "Processing...", string detail = "")
         {
             try
             {
+                var modal = WindowNavigator.GetProgressModal();
+                if (modal != null)
+                {
+                    if (show)
+                        modal.ShowModal(status, detail);
+                    else
+                        modal.HideModal();
+                    return;
+                }
+
                 if (FindName("ProgressOverlay") is Grid overlay)
                 {
                     overlay.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
@@ -483,8 +572,19 @@ namespace SteamPluginManager.Views
                     Directory.CreateDirectory(depotCachePath);
                     Directory.CreateDirectory(depotCachePathOld);
 
+                    int totalFiles = files.Count;
+                    int downloadedCount = 0;
                     foreach (var objectName in files)
                     {
+                        downloadedCount++;
+                        int pct = totalFiles > 0 ? (int)((downloadedCount / (double)totalFiles) * 100) : 100;
+                        var modal = WindowNavigator.GetProgressModal();
+                        if (modal != null)
+                        {
+                            modal.SetProgress(pct, 100, false);
+                            modal.UpdateStatus($"Downloading files ({downloadedCount}/{totalFiles})", Path.GetFileName(objectName));
+                        }
+
                         var encodedName = string.Join("/", objectName.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries)
                             .Select(Uri.EscapeDataString));
                         var fileUrl = $"{SupabaseConfig.SupabaseUrl}/storage/v1/object/public/{SupabaseConfig.StorageBucketName}/{encodedName}";
@@ -719,6 +819,13 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                var modal = WindowNavigator.GetProgressModal();
+                if (modal != null)
+                {
+                    modal.ShowResultNotification(isSuccess, message);
+                    return;
+                }
+
                 if (FindName("ResultNotification") is Border resultBorder)
                 {
                     resultBorder.Visibility = Visibility.Visible;
@@ -747,6 +854,13 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                var modal = WindowNavigator.GetProgressModal();
+                if (modal != null)
+                {
+                    modal.UpdateProgressStep(stepNumber, completed);
+                    return;
+                }
+
                 string[] stepIcons = new[] { "Step1Icon", "Step2Icon", "Step3Icon", "Step4Icon" };
                 
                 for (int i = 1; i <= 4; i++)
@@ -784,6 +898,21 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                var modal = WindowNavigator.GetProgressModal();
+                if (modal != null)
+                {
+                    modal.Configure(
+                        "Adding to Library...",
+                        "Verify Manifest",
+                        "Download Files",
+                        "Extract Files",
+                        "Register in Steam",
+                        "\uE896",
+                        gameTitle: _currentFile?.Name,
+                        appId: _currentFile?.AppId?.ToString());
+                    return;
+                }
+
                 if (FindName("ProgressTitle") is TextBlock title)
                     title.Text = "Adding to Library...";
                 if (FindName("Step1Text") is TextBlock step1)
@@ -805,6 +934,21 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                var modal = WindowNavigator.GetProgressModal();
+                if (modal != null)
+                {
+                    modal.Configure(
+                        "Restarting Steam...",
+                        "Closing Steam...",
+                        "Starting Steam...",
+                        "Waiting for Steam startup...",
+                        "Finalizing restart...",
+                        "\uE7FC",
+                        gameTitle: _currentFile?.Name,
+                        appId: _currentFile?.AppId?.ToString());
+                    return;
+                }
+
                 if (FindName("ProgressTitle") is TextBlock title)
                     title.Text = "Restarting Steam...";
                 if (FindName("Step1Text") is TextBlock step1)
@@ -828,7 +972,7 @@ namespace SteamPluginManager.Views
             {
                 if (_currentFile == null)
                 {
-                    MessageBox.Show("No file selected", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ModernMessageBox.Show("No file selected", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
@@ -895,7 +1039,7 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"[HZManifestDetailView] Error displaying details: {ex.Message}");
-                MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -1241,7 +1385,7 @@ namespace SteamPluginManager.Views
             {
                 if (_currentFile == null)
                 {
-                    MessageBox.Show("No file selected", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ModernMessageBox.Show("No file selected", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
@@ -1279,15 +1423,20 @@ namespace SteamPluginManager.Views
 
                 // Show loading indicator
                 ConfigureOverlayForAddToLibrary();
-                ShowLoadingState(true, "Initializing...");
+                ShowLoadingState(true, "Verifying manifest availability...", "Connecting to repository storage...");
                 UpdateProgressStep(1);
+
+                var modal = WindowNavigator.GetProgressModal();
+                if (modal != null)
+                {
+                    modal.SetProgress(0, 100, true);
+                }
 
                 Logger.Log($"[HZManifestDetailView] Starting add to library process for: {_currentFile.Name} (AppID: {_currentFile.AppId})");
                 Logger.Log($"[HZManifestDetailView] StorageType: '{_currentFile.StorageType}', FolderPath raw: '{_currentFile.FolderPath}', FileName: '{_currentFile.FileName}'");
                 
                 // Pre-check: Verify file or folder storage is accessible before starting download
                 Logger.Log($"[HZManifestDetailView] Pre-check: Verifying file availability...");
-                ShowLoadingState(true, "Verifying file availability...");
                 bool storageAccessible;
                 if (_currentFile.IsFolderStorage)
                 {
@@ -1318,6 +1467,10 @@ namespace SteamPluginManager.Views
 
                 Logger.Log($"[HZManifestDetailView] ✓ URL is accessible, proceeding with download");
                 UpdateProgressStep(2);
+                if (modal != null)
+                {
+                    modal.SetProgress(20, 100, true);
+                }
                 
                 // Step 2: Download file or folder contents
                 string downloadedFilePath;
@@ -1328,7 +1481,7 @@ namespace SteamPluginManager.Views
                 {
                     string folderPath = ResolveFolderPath();
                     Logger.Log($"[HZManifestDetailView] Step 2: Downloading folder contents from {folderPath}");
-                    ShowLoadingState(true, $"Downloading files for AppID {_currentFile.AppId}...");
+                    ShowLoadingState(true, $"Downloading files for AppID {_currentFile.AppId}...", "Retrieving folder items from Supabase...");
                     var downloadResult = await DownloadFolderStorageAsync(folderPath, _currentFile.AppId.Value);
                     downloadedFilePath = downloadResult.Path;
                     downloadedFiles = downloadResult.DownloadedFiles;
@@ -1337,13 +1490,12 @@ namespace SteamPluginManager.Views
                 else
                 {
                     Logger.Log($"[HZManifestDetailView] Step 2: Downloading from {_currentFile.FileUrl}");
-                    ShowLoadingState(true, $"Downloading '{_currentFile.FileName}'...");
+                    ShowLoadingState(true, $"Downloading '{_currentFile.FileName}'...", "Retrieving archive package...");
                     downloadedFilePath = await DownloadFileAsync(_currentFile.FileUrl, _currentFile.FileName);
                 }
                 
                 if (string.IsNullOrEmpty(downloadedFilePath) || !Directory.Exists(downloadedFilePath) && !File.Exists(downloadedFilePath))
                 {
-                    Logger.Log($"[HZManifestDetailView] Download failed for {_currentFile.Name}");
                     Logger.Log($"[HZManifestDetailView] Download failed for {_currentFile.Name}");
                     ShowResultNotification(false, "✗ Failed to download file.\n\nPlease try again.");
                     await Task.Delay(1500);
@@ -1353,10 +1505,14 @@ namespace SteamPluginManager.Views
                 }
                 Logger.Log($"[HZManifestDetailView] ✓ Downloaded to: {downloadedFilePath}");
                 UpdateProgressStep(3);
+                if (modal != null)
+                {
+                    modal.SetProgress(50, 100, true);
+                }
 
                 // Step 3: Extract file or folder contents
                 Logger.Log($"[HZManifestDetailView] Step 3: Extracting file");
-                ShowLoadingState(true, "Extracting files...");
+                ShowLoadingState(true, "Extracting package contents...", "Unpacking Lua and manifest files...");
                 string extractedFolderPath = await ExtractFileAsync(downloadedFilePath);
                 
                 if (string.IsNullOrEmpty(extractedFolderPath) || !Directory.Exists(extractedFolderPath))
@@ -1370,10 +1526,14 @@ namespace SteamPluginManager.Views
                 }
                 Logger.Log($"[HZManifestDetailView] ✓ Extracted to: {extractedFolderPath}");
                 UpdateProgressStep(4);
+                if (modal != null)
+                {
+                    modal.SetProgress(75, 100, false);
+                }
 
                 // Step 3.5: Parse DLC data from lua file and store to database
                 Logger.Log($"[HZManifestDetailView] Step 3.5: Parsing DLC data from lua file");
-                ShowLoadingState(true, "Parsing DLC data...");
+                ShowLoadingState(true, "Parsing DLC data...", "Cataloging DLC expansions...");
                 try
                 {
                     await StoreDlcDataAsync(extractedFolderPath, _currentFile.AppId.Value, downloadedFiles);
@@ -1388,7 +1548,7 @@ namespace SteamPluginManager.Views
                 if (!directLibrarySave)
                 {
                     Logger.Log($"[HZManifestDetailView] Step 4: Moving to Steam st-plugin folder");
-                    ShowLoadingState(true, "Moving to library...");
+                    ShowLoadingState(true, "Registering in Steam...", "Deploying files to stplug-in directory...");
                     moveSuccess = await MoveToLibraryAsync(extractedFolderPath, _currentFile.AppId.Value);
                 }
                 else
@@ -1406,6 +1566,13 @@ namespace SteamPluginManager.Views
                     return;
                 }
                 Logger.Log($"[HZManifestDetailView] ✓ Successfully moved to library");
+
+                UpdateProgressStep(4, true);
+                if (modal != null)
+                {
+                    modal.SetProgress(100, 100, false);
+                    modal.UpdateStatus("Registration complete!", "Manifest and Lua registered in Steam.");
+                }
 
                 bool downloadCountUpdated = await SteamPluginManager.SupabaseConfig.IncrementDownloadCountAsync(
                     _currentFile.Id,
@@ -1449,10 +1616,7 @@ namespace SteamPluginManager.Views
                     Logger.Log($"[HZManifestDetailView] Warning: Cleanup failed: {cleanupEx.Message}");
                 }
 
-                // Mark all steps as completed
-                UpdateProgressStep(5);
-                ShowLoadingState(true, "Completed! Finalizing...");
-                await Task.Delay(1500); // Show completion message
+                await Task.Delay(800);
 
                 // Hide overlay - use Dispatcher to ensure it renders
                 Dispatcher.Invoke(() =>
@@ -2020,7 +2184,7 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"[HZManifestDetailView] Navigation error: {ex.Message}");
-                MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -2030,14 +2194,14 @@ namespace SteamPluginManager.Views
             {
                 if (_currentFile == null || _currentFile.AppId == null)
                 {
-                    MessageBox.Show("No file selected", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ModernMessageBox.Show("No file selected", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
                 int appId = _currentFile.AppId.Value;
 
                 // Confirm deletion
-                var result = MessageBox.Show(
+                var result = ModernMessageBox.Show(
                     $"Delete lua and manifest files for {_currentFile.Name}?\n\n" +
                     "This will remove:\n" +
                     $"• Lua file: {appId}.lua\n" +
@@ -2180,7 +2344,7 @@ namespace SteamPluginManager.Views
 
                             if (relatedManifestFiles.Count == 0)
                             {
-                                MessageBox.Show(
+                                ModernMessageBox.Show(
                                     $"Files deleted successfully!\n\n" +
                                     $"• Lua file deleted (1)\n" +
                                     $"• No related manifest files found\n\n" +
@@ -2191,7 +2355,7 @@ namespace SteamPluginManager.Views
                             }
                             else
                             {
-                                MessageBox.Show(
+                                ModernMessageBox.Show(
                                     $"Files deleted successfully!\n\n" +
                                     $"Lua file: 1\n" +
                                     $"Manifest files: {filesDeleted - 1}\n" +
@@ -2212,7 +2376,7 @@ namespace SteamPluginManager.Views
                             if (FindName("DeleteFilesButton") is Button btn)
                                 btn.IsEnabled = true;
 
-                            MessageBox.Show(
+                            ModernMessageBox.Show(
                                 $"Error deleting files:\n{ex.Message}",
                                 "Delete Error",
                                 MessageBoxButton.OK,
@@ -2224,7 +2388,7 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"[HZManifestDetailView] DeleteFiles_Click error: {ex.Message}");
-                MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -2233,7 +2397,7 @@ namespace SteamPluginManager.Views
             try
             {
                 // Confirm restart
-                var result = MessageBox.Show(
+                var result = ModernMessageBox.Show(
                     "Restart Steam to apply changes?\n\n" +
                     "This will:\n" +
                     "• Close Steam if it's running\n" +
@@ -2388,7 +2552,7 @@ namespace SteamPluginManager.Views
                             if (FindName("RestartSteamButton") is Button btn)
                                 btn.IsEnabled = true;
 
-                            MessageBox.Show(
+                            ModernMessageBox.Show(
                                 "Steam has been restarted successfully!\n\n" +
                                 "The manifest changes should now be applied.\n\n" +
                                 "Note: Steam may take a few moments to fully load.",
@@ -2407,7 +2571,7 @@ namespace SteamPluginManager.Views
                             if (FindName("RestartSteamButton") is Button btn)
                                 btn.IsEnabled = true;
 
-                            MessageBox.Show(
+                            ModernMessageBox.Show(
                                 $"Error restarting Steam:\n{ex.Message}\n\n" +
                                 "You may need to restart Steam manually.",
                                 "Restart Error",
@@ -2420,7 +2584,7 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"[HZManifestDetailView] RestartSteam_Click error: {ex.Message}");
-                MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

@@ -22,8 +22,7 @@ namespace SteamPluginManager
                 // Load version
                 try
                 {
-                    var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-                    VersionText.Text = $"Version {version?.Major}.{version?.Minor}.{version?.Build}";
+                    VersionText.Text = $"Version {AppInfo.Version}";
                 }
                 catch { }
 
@@ -35,7 +34,7 @@ namespace SteamPluginManager
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to load settings: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Failed to load settings: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -64,7 +63,7 @@ namespace SteamPluginManager
                 bool isEnabled = HardwareAccelerationCheckBox.IsChecked ?? true;
                 HardwareAccelerationPreferences.SaveHardwareAccelerationPreference(isEnabled);
                 
-                MessageBox.Show(
+                ModernMessageBox.Show(
                     "Hardware acceleration setting saved.\nPlease restart the application for changes to take effect.",
                     "Settings Saved",
                     MessageBoxButton.OK,
@@ -74,7 +73,7 @@ namespace SteamPluginManager
             catch (Exception ex)
             {
                 Logger.Log($"Failed to save hardware acceleration setting: {ex.Message}");
-                MessageBox.Show($"Failed to save setting: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Failed to save setting: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -130,7 +129,7 @@ namespace SteamPluginManager
         {
             try
             {
-                var result = MessageBox.Show(
+                var result = ModernMessageBox.Show(
                     "Clear unused/expired cache?\nThis will remove cached game data that is expired (365+ days old) or incomplete.\nValid cached items will be preserved.",
                     "Clear Cache",
                     MessageBoxButton.YesNo,
@@ -144,7 +143,7 @@ namespace SteamPluginManager
                     
                     // Show result
                     int cacheSize = CacheManager.GetCacheSize();
-                    MessageBox.Show(
+                    ModernMessageBox.Show(
                         $"Cache cleared successfully.\nRemaining cache items: {cacheSize}",
                         "Cache Cleared",
                         MessageBoxButton.OK,
@@ -155,7 +154,7 @@ namespace SteamPluginManager
             catch (Exception ex)
             {
                 Logger.Log($"Error clearing cache: {ex.Message}");
-                MessageBox.Show(
+                ModernMessageBox.Show(
                     $"Error clearing cache: {ex.Message}",
                     "Cache Clear Error",
                     MessageBoxButton.OK,

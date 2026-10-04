@@ -3,6 +3,8 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Net.NetworkInformation;
 using System.Management;
@@ -43,6 +45,7 @@ namespace SteamPluginManager.Views
         private void VerifyTokenView_Unloaded(object sender, RoutedEventArgs e)
         {
             App.ThemeChanged -= ThemeChanged_Handler;
+            StopLoadingAnimation();
         }
 
         public void SetToken(string token)
@@ -66,14 +69,84 @@ namespace SteamPluginManager.Views
                 TokenInput.IsEnabled = true;
                 TokenInput.Focus();
                 LoadingGrid.Visibility = Visibility.Collapsed;
+                StopLoadingAnimation();
+
+                // Display masked Device Hardware ID
+                try
+                {
+                    string id = GetDeviceId();
+                    if (!string.IsNullOrWhiteSpace(id) && id != "UNKNOWN")
+                    {
+                        string masked = id.Length > 12 ? $"{id.Substring(0, 4)}...{id.Substring(id.Length - 4)}" : id;
+                        if (DeviceIdBadgeText != null)
+                            DeviceIdBadgeText.Text = $"Hardware ID: {masked}";
+                    }
+                    else if (DeviceIdBadgeText != null)
+                    {
+                        DeviceIdBadgeText.Text = "Hardware ID: Standard PC";
+                    }
+                }
+                catch { }
 
                 Logger.Log("[VerifyTokenView] UI initialized");
             }
             catch (Exception ex)
             {
                 Logger.Log($"[VerifyTokenView] Error in Loaded: {ex.Message}");
-                MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        private void StartLoadingAnimation()
+        {
+            try
+            {
+                var animation = new DoubleAnimation
+                {
+                    From = 0,
+                    To = 360,
+                    Duration = new Duration(TimeSpan.FromSeconds(1)),
+                    RepeatBehavior = RepeatBehavior.Forever
+                };
+                VerifySpinnerRotate?.BeginAnimation(RotateTransform.AngleProperty, animation);
+            }
+            catch { }
+        }
+
+        private void StopLoadingAnimation()
+        {
+            try
+            {
+                VerifySpinnerRotate?.BeginAnimation(RotateTransform.AngleProperty, null);
+            }
+            catch { }
+        }
+
+        private void PasteButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (Clipboard.ContainsText())
+                {
+                    string text = Clipboard.GetText()?.Trim() ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        TokenInput.Text = text;
+                        TokenInput.Focus();
+                        TokenInput.CaretIndex = TokenInput.Text.Length;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[VerifyTokenView] Paste error: {ex.Message}");
+            }
+        }
+
+        private void ClearButton_Click(object sender, RoutedEventArgs e)
+        {
+            TokenInput.Text = string.Empty;
+            TokenInput.Focus();
         }
 
         private void OnClickHere(object sender, RoutedEventArgs e)
@@ -86,7 +159,7 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"[VerifyTokenView] Failed to open in-app token generator: {ex.Message}");
-                MessageBox.Show("Unable to open the token generator. Please visit: https://hzluamanager-get-token.lovable.app", "Open Link Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                ModernMessageBox.Show("Unable to open the token generator. Please visit: https://hzluamanager-get-token.lovable.app", "Open Link Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 
@@ -100,7 +173,7 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"[VerifyTokenView] Error in BackToDashboard_Click: {ex.Message}");
-                MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -120,6 +193,7 @@ namespace SteamPluginManager.Views
                 // Show loading state
                 VerifyButton.IsEnabled = false;
                 LoadingGrid.Visibility = Visibility.Visible;
+                StartLoadingAnimation();
                 LoadingText.Text = "Verifying token...";
                 StatusMessage.Text = "";
 
@@ -132,8 +206,18 @@ namespace SteamPluginManager.Views
                 // Call Supabase to verify token
                 VerificationResult verification = await VerifyTokenAsync(token, deviceId);
 
-                if (verification.IsExpiredOrRevoked)
+                if (verification.IsBlocked)
                 {
+                    StopLoadingAnimation();
+                    LoadingGrid.Visibility = Visibility.Collapsed;
+                    VerifyButton.IsEnabled = true;
+                    StatusMessage.Foreground = (System.Windows.Media.Brush)TryFindResource("DangerButtonBrush");
+                    StatusMessage.Text = "⛔ This device has been permanently blocked by administrator.";
+                    Logger.Log($"[VerifyTokenView] Device is permanently blocked.");
+                }
+                else if (verification.IsExpiredOrRevoked)
+                {
+                    StopLoadingAnimation();
                     LoadingGrid.Visibility = Visibility.Collapsed;
                     VerifyButton.IsEnabled = true;
                     StatusMessage.Foreground = (System.Windows.Media.Brush)TryFindResource("DangerButtonBrush");
@@ -145,10 +229,14 @@ namespace SteamPluginManager.Views
                 }
                 else if (verification.IsValid)
                 {
+                    StopLoadingAnimation();
                     LoadingGrid.Visibility = Visibility.Collapsed;
                     StatusMessage.Foreground = (System.Windows.Media.Brush)TryFindResource("SuccessButtonBrush");
                     StatusMessage.Text = "✓ Token verified successfully! Redirecting...";
                     Logger.Log($"[VerifyTokenView] Token verified successfully");
+
+                    // Immediately reload user profile in MainShell top-right header
+                    _ = WindowNavigator.GetMainShell()?.LoadUserProfileHeaderAsync();
 
                     // Navigate to the originally requested view (if any)
                     await System.Threading.Tasks.Task.Delay(1500);
@@ -173,6 +261,7 @@ namespace SteamPluginManager.Views
                 }
                 else
                 {
+                    StopLoadingAnimation();
                     LoadingGrid.Visibility = Visibility.Collapsed;
                     VerifyButton.IsEnabled = true;
                     StatusMessage.Foreground = (System.Windows.Media.Brush)TryFindResource("DangerButtonBrush");
@@ -182,6 +271,7 @@ namespace SteamPluginManager.Views
             }
             catch (Exception ex)
             {
+                StopLoadingAnimation();
                 VerifyButton.IsEnabled = true;
                 LoadingGrid.Visibility = Visibility.Collapsed;
                 StatusMessage.Foreground = (System.Windows.Media.Brush)TryFindResource("DangerButtonBrush");
@@ -300,6 +390,13 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                // Check if this device is permanently blocked by administrator
+                if (await DashboardView.IsDeviceBlockedAsync(deviceId))
+                {
+                    Logger.Log($"[VerifyTokenView] Hardware ID {deviceId} is permanently blocked.");
+                    return new VerificationResult(false, false, true);
+                }
+
                 // Query Supabase to check if token exists and is not used
                 using (var http = new System.Net.Http.HttpClient())
                 {
@@ -439,14 +536,16 @@ namespace SteamPluginManager.Views
 
         private class VerificationResult
         {
-            public VerificationResult(bool isValid, bool isExpiredOrRevoked)
+            public VerificationResult(bool isValid, bool isExpiredOrRevoked, bool isBlocked = false)
             {
                 IsValid = isValid;
                 IsExpiredOrRevoked = isExpiredOrRevoked;
+                IsBlocked = isBlocked;
             }
 
             public bool IsValid { get; }
             public bool IsExpiredOrRevoked { get; }
+            public bool IsBlocked { get; }
         }
 
         private class TokenRecord

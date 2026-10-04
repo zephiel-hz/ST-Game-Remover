@@ -55,6 +55,14 @@ namespace SteamPluginManager.Views
                 RegisterTextElements();
                 _isInitialized = true;
             }
+            UpdateHubcapSessionStatus();
+            try
+            {
+                SettingsCurrentVersionBadge.Text = AppInfo.FormattedVersion;
+                ChangelogModalVersionText.Text = AppInfo.FormattedVersion;
+                ChangelogVersionCountText.Text = $"Full version history from v1.0.6 to {AppInfo.FormattedVersion}";
+            }
+            catch { }
             // Subscribe to language change event
             App.LanguageChanged += LanguageChanged_Handler;
         }
@@ -102,8 +110,6 @@ namespace SteamPluginManager.Views
                 LanguageHelper.RegisterTextBlock(SettingsLanguageDesc, "Settings.LanguageDesc");
                 
                 // Button texts
-                if (BackButtonText != null)
-                    LanguageHelper.RegisterTextBlock(BackButtonText, "Settings.Back");
                 if (ClearCacheButtonText != null)
                     LanguageHelper.RegisterTextBlock(ClearCacheButtonText, "Settings.ClearCache");
 
@@ -189,7 +195,7 @@ namespace SteamPluginManager.Views
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to load settings: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Failed to load settings: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -268,7 +274,7 @@ namespace SteamPluginManager.Views
                 var client = SharedHttpClient.Instance;
                 const string latestReleaseApi = "https://api.github.com/repos/madoiscool/BetterSteamTools/releases/latest";
                 using var request = new HttpRequestMessage(HttpMethod.Get, latestReleaseApi);
-                request.Headers.UserAgent.ParseAdd("SteamPluginManager/2.2.2");
+                request.Headers.UserAgent.ParseAdd(AppInfo.UserAgent);
                 request.Headers.Accept.ParseAdd("application/vnd.github+json");
 
                 using var response = await client.SendAsync(request);
@@ -797,7 +803,7 @@ namespace SteamPluginManager.Views
                         _overlayWindow?.SetStepInProgress(2);
                         _overlayWindow?.SetStatus("Downloading latest release...");
                         using var request = new HttpRequestMessage(HttpMethod.Get, latestReleaseApi);
-                        request.Headers.UserAgent.ParseAdd("SteamPluginManager/2.2.2");
+                        request.Headers.UserAgent.ParseAdd(AppInfo.UserAgent);
                         request.Headers.Accept.ParseAdd("application/vnd.github+json");
 
                         using var releaseResponse = await client.SendAsync(request);
@@ -1068,48 +1074,9 @@ namespace SteamPluginManager.Views
             {
                 if (LangSelector == null) return;
                 
-                // First detach any existing handler
                 LangSelector.SelectionChanged -= LangSelector_SelectionChanged;
-                
-                // Check saved language preference first
-                string savedLanguage = null;
-                try
-                {
-                    string appDataPath = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        "SteamPluginManager"
-                    );
-                    string langFile = Path.Combine(appDataPath, "language.txt");
-                    if (File.Exists(langFile))
-                    {
-                        savedLanguage = File.ReadAllText(langFile).Trim();
-                        Logger.Log($"[LoadLanguagePreference] Loaded saved language: {savedLanguage}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log($"[LoadLanguagePreference] Failed to read saved language: {ex.Message}");
-                }
-                
-                // Use saved language if available, otherwise use system culture
-                string languageToUse = savedLanguage ?? System.Globalization.CultureInfo.CurrentCulture.TwoLetterISOLanguageName;
-                Logger.Log($"[LoadLanguagePreference] Language to use: {languageToUse}");
-                
-                // Select based on language code
-                if (languageToUse == "zh")
-                {
-                    LangSelector.SelectedIndex = 1; // Chinese
-                    Logger.Log($"[LoadLanguagePreference] Set to Chinese (index 1)");
-                }
-                else
-                {
-                    LangSelector.SelectedIndex = 0; // English (default)
-                    Logger.Log($"[LoadLanguagePreference] Set to English (index 0)");
-                }
-                
-                // Re-attach event handler AFTER setting initial value
+                LangSelector.SelectedIndex = 0; // English (default)
                 LangSelector.SelectionChanged += LangSelector_SelectionChanged;
-                Logger.Log($"[LoadLanguagePreference] Event handler re-attached");
             }
             catch (Exception ex)
             {
@@ -1121,14 +1088,9 @@ namespace SteamPluginManager.Views
         {
             try
             {
-                Logger.Log($"[LangSelector] Selection changed event fired");
-                Logger.Log($"[LangSelector] SelectedIndex: {LangSelector.SelectedIndex}");
-                
                 if (LangSelector.SelectedIndex >= 0)
                 {
-                    string language = LangSelector.SelectedIndex == 0 ? "en" : "zh";
-                    Logger.Log($"[LangSelector] Selected language code: {language}");
-                    ApplyLanguage(language);
+                    ApplyLanguage("en");
                 }
             }
             catch (Exception ex)
@@ -1165,18 +1127,13 @@ namespace SteamPluginManager.Views
                 var app = Application.Current;
                 if (app == null) return;
 
-                Logger.Log($"[Language Switch] Starting to apply language: {languageCode}");
-                Logger.Log($"[Language Switch] Current merged dictionaries count: {app.Resources.MergedDictionaries.Count}");
-
                 // Find and remove existing language resource
                 ResourceDictionary? existingLangDict = null;
                 foreach (var dict in app.Resources.MergedDictionaries)
                 {
-                    Logger.Log($"[Language Switch] Checking dict: {dict.Source?.OriginalString}");
                     if (dict.Source?.OriginalString.Contains("Strings/") == true)
                     {
                         existingLangDict = dict;
-                        Logger.Log($"[Language Switch] Found existing language dict: {dict.Source.OriginalString}");
                         break;
                     }
                 }
@@ -1184,17 +1141,12 @@ namespace SteamPluginManager.Views
                 if (existingLangDict != null)
                 {
                     app.Resources.MergedDictionaries.Remove(existingLangDict);
-                    Logger.Log($"[Language Switch] Removed old language dict");
                 }
 
-                // Load and add new language resource
-                string langFileName = languageCode == "en" ? "Strings/en.xaml" : "Strings/zh.xaml";
-                Logger.Log($"[Language Switch] Loading new language file: {langFileName}");
-                
+                // Load and add English language resource
+                string langFileName = "Strings/en.xaml";
                 ResourceDictionary newDict = new ResourceDictionary { Source = new Uri(langFileName, UriKind.Relative) };
                 app.Resources.MergedDictionaries.Add(newDict);
-                
-                Logger.Log($"[Language Switch] Added new language dict. New count: {app.Resources.MergedDictionaries.Count}");
 
                 // Save language preference
                 try
@@ -1204,25 +1156,22 @@ namespace SteamPluginManager.Views
                         "SteamPluginManager"
                     );
                     Directory.CreateDirectory(appDataPath);
-                    File.WriteAllText(Path.Combine(appDataPath, "language.txt"), languageCode);
-                    Logger.Log($"[Language Switch] Saved language preference: {languageCode}");
+                    File.WriteAllText(Path.Combine(appDataPath, "language.txt"), "en");
                 }
                 catch (Exception ex)
                 {
                     Logger.Log($"Failed to save language preference: {ex.Message}");
                 }
 
-                Logger.Log($"Language changed to: {(languageCode == "en" ? "English" : "中文")}");
+                Logger.Log("Language changed to: English");
                 
                 // Raise event to notify all views about language change
-                Logger.Log("[Language Switch] Raising LanguageChanged event");
                 App.RaiseLanguageChanged();
-                Logger.Log("[Language Switch] LanguageChanged event raised");
             }
             catch (Exception ex)
             {
                 Logger.Log($"Failed to apply language: {ex.Message}");
-                MessageBox.Show($"Failed to apply language: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Failed to apply language: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -1275,7 +1224,7 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"Failed to apply theme: {ex.Message}");
-                MessageBox.Show($"Failed to apply theme: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Failed to apply theme: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -1337,7 +1286,7 @@ namespace SteamPluginManager.Views
                 bool isEnabled = HardwareAccelerationCheckBox.IsChecked ?? true;
                 HardwareAccelerationPreferences.SaveHardwareAccelerationPreference(isEnabled);
                 
-                MessageBox.Show(
+                ModernMessageBox.Show(
                     "Hardware acceleration setting saved.\nPlease restart the application for changes to take effect.",
                     "Settings Saved",
                     MessageBoxButton.OK,
@@ -1347,7 +1296,7 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"Failed to save hardware acceleration setting: {ex.Message}");
-                MessageBox.Show($"Failed to save setting: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Failed to save setting: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -1372,7 +1321,7 @@ namespace SteamPluginManager.Views
                 File.WriteAllText(autoUpdateFile, isEnabled.ToString());
                 
                 Logger.Log($"[AutoUpdateCheckBox_Changed] Auto-update setting saved: {isEnabled}");
-                MessageBox.Show(
+                ModernMessageBox.Show(
                     isEnabled ? "Auto-update enabled. The app will check for updates automatically." 
                               : "Auto-update disabled. You can still check for updates manually.",
                     "Settings Saved",
@@ -1383,7 +1332,7 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"Failed to save auto-update setting: {ex.Message}");
-                MessageBox.Show($"Failed to save setting: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Failed to save setting: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -1439,7 +1388,7 @@ namespace SteamPluginManager.Views
         {
             try
             {
-                var result = MessageBox.Show(
+                var result = ModernMessageBox.Show(
                     "Clear unused/expired cache?\nThis will remove cached game data that is expired (365+ days old) or incomplete.\nValid cached items will be preserved.",
                     "Clear Cache",
                     MessageBoxButton.YesNo,
@@ -1453,7 +1402,7 @@ namespace SteamPluginManager.Views
                     
                     // Show result
                     int cacheSize = CacheManager.GetCacheSize();
-                    MessageBox.Show(
+                    ModernMessageBox.Show(
                         $"Cache cleared successfully.\nRemaining cache items: {cacheSize}",
                         "Cache Cleared",
                         MessageBoxButton.OK,
@@ -1464,7 +1413,7 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"Error clearing cache: {ex.Message}");
-                MessageBox.Show(
+                ModernMessageBox.Show(
                     $"Error clearing cache: {ex.Message}",
                     "Cache Clear Error",
                     MessageBoxButton.OK,
@@ -1473,7 +1422,239 @@ namespace SteamPluginManager.Views
             }
         }
 
-        
+        private void ClearHubcapSessionButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var result = ModernMessageBox.Show(
+                    "Reset Hubcap session and API key?\n\nThis will:\n" +
+                    "• Clear the stored Hubcap API key from local config\n" +
+                    "• Remove WebView2 Discord and Hubcap browser login data\n\n" +
+                    "Next time a game request needs Hubcap, you will be prompted to log in again.",
+                    "Reset Hubcap Session",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question
+                );
+
+                if (result != MessageBoxResult.Yes)
+                    return;
+
+                // 1. Reset in-memory config and cache
+                ServiceConfiguration.Current.Hubcap.ApiKey = string.Empty;
+                RemoteConfigService.InvalidateCache("hubcap_api_key");
+                HubcapManifestService.SetSessionCookieHeader(null);
+
+                // 2. Clear local credentials file and legacy config entries
+                try
+                {
+                    var credentialPaths = new[]
+                    {
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HZLuaManager", "hubcap_credentials.json"),
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SteamPluginManager", "hubcap_credentials.json")
+                    };
+
+                    foreach (var credFile in credentialPaths)
+                    {
+                        if (File.Exists(credFile))
+                        {
+                            File.Delete(credFile);
+                            Logger.Log($"[SettingsView] Deleted local Hubcap credentials file: {credFile}");
+                        }
+                    }
+
+                    var configFiles = new[]
+                    {
+                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "service-config.json"),
+                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "Config", "service-config.json")
+                    };
+                    foreach (var file in configFiles)
+                    {
+                        if (File.Exists(file))
+                        {
+                            var fullPath = Path.GetFullPath(file);
+                            var json = File.ReadAllText(fullPath);
+                            var doc = JsonSerializer.Deserialize<ServiceConfigModel>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                            if (doc?.Hubcap != null && !string.IsNullOrEmpty(doc.Hubcap.ApiKey))
+                            {
+                                doc.Hubcap.ApiKey = string.Empty;
+                                var updatedJson = JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true });
+                                File.WriteAllText(fullPath, updatedJson);
+                                Logger.Log($"[SettingsView] Cleared Hubcap API key in {fullPath}");
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[SettingsView] Error clearing local credentials / config: {ex.Message}");
+                }
+
+                // 3. Clear WebView2 browser profile folder safely
+                try
+                {
+                    string userDataFolder = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "HZLuaManager",
+                        "HubcapBrowserProfile"
+                    );
+
+                    // Terminate child msedgewebview2 processes associated with this profile so locks are released
+                    try
+                    {
+                        using var searcher = new System.Management.ManagementObjectSearcher(
+                            "SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name = 'msedgewebview2.exe'");
+                        foreach (var obj in searcher.Get())
+                        {
+                            var cmd = obj["CommandLine"]?.ToString() ?? "";
+                            if (cmd.Contains("HubcapBrowserProfile", StringComparison.OrdinalIgnoreCase))
+                            {
+                                var pid = Convert.ToInt32(obj["ProcessId"]);
+                                try
+                                {
+                                    var p = System.Diagnostics.Process.GetProcessById(pid);
+                                    p.Kill();
+                                    p.WaitForExit(500);
+                                }
+                                catch { }
+                            }
+                        }
+                    }
+                    catch { }
+
+                    // Resilient delete of files and directories (so locked cache files like journal.baj don't abort wiping cookies/session)
+                    TryDeleteDirectoryContents(userDataFolder);
+                    Logger.Log("[SettingsView] Cleared HubcapBrowserProfile cookies and session data");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[SettingsView] Error clearing HubcapBrowserProfile: {ex.Message}");
+                }
+
+                UpdateHubcapSessionStatus();
+
+                ModernMessageBox.Show(
+                    "Hubcap browser session and saved API key have been successfully cleared!",
+                    "Reset Complete",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information
+                );
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[SettingsView] Failed to reset Hubcap session: {ex.Message}");
+                ModernMessageBox.Show(
+                    $"Failed to reset Hubcap session: {ex.Message}",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error
+                );
+            }
+        }
+
+        private static void TryDeleteDirectoryContents(string targetDirectory)
+        {
+            if (!Directory.Exists(targetDirectory)) return;
+
+            try
+            {
+                foreach (var file in Directory.GetFiles(targetDirectory))
+                {
+                    try
+                    {
+                        File.SetAttributes(file, FileAttributes.Normal);
+                        File.Delete(file);
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+
+            try
+            {
+                foreach (var dir in Directory.GetDirectories(targetDirectory))
+                {
+                    TryDeleteDirectoryContents(dir);
+                    try
+                    {
+                        Directory.Delete(dir, false);
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+
+            try
+            {
+                Directory.Delete(targetDirectory, false);
+            }
+            catch { }
+        }
+
+        private void UpdateHubcapSessionStatus()
+        {
+            try
+            {
+                string localKey = ServiceConfiguration.Current.Hubcap.ApiKey;
+                if (string.IsNullOrWhiteSpace(localKey))
+                {
+                    var credentialPaths = new[]
+                    {
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HZLuaManager", "hubcap_credentials.json"),
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SteamPluginManager", "hubcap_credentials.json")
+                    };
+                    foreach (var credFile in credentialPaths)
+                    {
+                        if (File.Exists(credFile))
+                        {
+                            try
+                            {
+                                var json = File.ReadAllText(credFile);
+                                using var doc = JsonDocument.Parse(json);
+                                if (doc.RootElement.TryGetProperty("apiKey", out var keyElem) && !string.IsNullOrWhiteSpace(keyElem.GetString()))
+                                {
+                                    localKey = keyElem.GetString()!;
+                                    break;
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                }
+
+                string userDataFolder = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "HZLuaManager",
+                    "HubcapBrowserProfile"
+                );
+                bool hasBrowserSession = File.Exists(Path.Combine(userDataFolder, "EBWebView", "Default", "Network", "Cookies")) ||
+                                         Directory.Exists(Path.Combine(userDataFolder, "EBWebView", "Default", "Local Storage"));
+                bool hasApiKey = !string.IsNullOrWhiteSpace(localKey);
+
+                if (hasApiKey && hasBrowserSession)
+                {
+                    HubcapSessionStatusText.Text = "API key configured & browser session active.";
+                }
+                else if (hasApiKey)
+                {
+                    HubcapSessionStatusText.Text = "API key configured (no browser session).";
+                }
+                else if (hasBrowserSession)
+                {
+                    HubcapSessionStatusText.Text = "Browser session active (no local API key).";
+                }
+                else
+                {
+                    HubcapSessionStatusText.Text = "No active session or API key stored.";
+                }
+            }
+            catch
+            {
+                if (HubcapSessionStatusText != null)
+                {
+                    HubcapSessionStatusText.Text = "Clear Discord login session and saved Hubcap API key.";
+                }
+            }
+        }
 
         private void BackToDashboard_Click(object sender, RoutedEventArgs e)
         {
@@ -1544,7 +1725,7 @@ namespace SteamPluginManager.Views
                 _overlayWindow?.SetStepInProgress(2);
                 _overlayWindow?.SetStatus("Downloading latest release...");
                 using var request = new HttpRequestMessage(HttpMethod.Get, latestReleaseApi);
-                request.Headers.UserAgent.ParseAdd("SteamPluginManager/2.2.2");
+                request.Headers.UserAgent.ParseAdd(AppInfo.UserAgent);
                 request.Headers.Accept.ParseAdd("application/vnd.github+json");
 
                 using var releaseResponse = await client.SendAsync(request);
@@ -1810,7 +1991,7 @@ namespace SteamPluginManager.Views
                     return;
                 }
 
-                MessageBox.Show("Bug report sent successfully. Thank you!", "Bug Report Sent", MessageBoxButton.OK, MessageBoxImage.Information);
+                ModernMessageBox.Show("Bug report sent successfully. Thank you!", "Bug Report Sent", MessageBoxButton.OK, MessageBoxImage.Information);
                 HideBugReportPopup();
             }
             catch (Exception ex)
@@ -1861,7 +2042,7 @@ namespace SteamPluginManager.Views
                 bool isEnabled = Allow18PlusCheckBox.IsChecked ?? false;
                 Allow18PlusContentPreferences.SaveAllow18PlusContentPreference(isEnabled);
                 
-                MessageBox.Show(
+                ModernMessageBox.Show(
                     isEnabled 
                         ? "18+ content filter is now enabled.\n\nManifest files with nudity and sexual content are now visible." 
                         : "18+ content filter is now disabled.\n\nManifest files with nudity and sexual content are hidden.",
@@ -1875,7 +2056,7 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"Failed to save 18+ content setting: {ex.Message}");
-                MessageBox.Show($"Failed to save setting: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Failed to save setting: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -1892,6 +2073,179 @@ namespace SteamPluginManager.Views
                 Logger.Log($"Error refreshing language UI: {ex.Message}");
             }
         }
+
+        #region Full Changelog Modal Handlers
+
+        private string? _fullChangelogMarkdown;
+        private bool _isChangelogLoaded = false;
+
+        private void ViewChangelogButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (!_isChangelogLoaded || string.IsNullOrWhiteSpace(_fullChangelogMarkdown))
+                {
+                    LoadChangelogMarkdown();
+                }
+
+                RenderChangelogContent(_fullChangelogMarkdown);
+                ChangelogSearchTextBox.Text = string.Empty;
+                ChangelogSearchPlaceholder.Visibility = Visibility.Visible;
+                ClearChangelogSearchButton.Visibility = Visibility.Collapsed;
+
+                ChangelogModalOverlay.Visibility = Visibility.Visible;
+                ChangelogScrollViewer.ScrollToTop();
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[SettingsView] Failed to open changelog modal: {ex.Message}");
+                ModernMessageBox.Show($"Failed to load changelog: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void CloseChangelogModal_Click(object sender, RoutedEventArgs e)
+        {
+            ChangelogModalOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private void LoadChangelogMarkdown()
+        {
+            try
+            {
+                string changelogPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "CHANGELOG.md");
+                if (!File.Exists(changelogPath))
+                {
+                    // Check parent directories for development/debug environment
+                    var currentDir = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
+                    while (currentDir != null && currentDir.Exists)
+                    {
+                        var testPath = Path.Combine(currentDir.FullName, "CHANGELOG.md");
+                        if (File.Exists(testPath))
+                        {
+                            changelogPath = testPath;
+                            break;
+                        }
+                        currentDir = currentDir.Parent;
+                    }
+                }
+
+                if (File.Exists(changelogPath))
+                {
+                    _fullChangelogMarkdown = File.ReadAllText(changelogPath);
+                    _isChangelogLoaded = true;
+                }
+                else
+                {
+                    _fullChangelogMarkdown = "# Changelog\n\nRelease notes file (CHANGELOG.md) was not found in the application directory.";
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[SettingsView] LoadChangelogMarkdown error: {ex.Message}");
+                _fullChangelogMarkdown = $"# Changelog\n\nFailed to read release notes: {ex.Message}";
+            }
+        }
+
+        private void RenderChangelogContent(string? markdown)
+        {
+            if (string.IsNullOrWhiteSpace(markdown))
+            {
+                ChangelogContentHost.Content = new TextBlock
+                {
+                    Text = "No release notes available.",
+                    Foreground = (System.Windows.Media.Brush)FindResource("MutedForegroundBrush"),
+                    FontStyle = FontStyles.Italic,
+                    FontSize = 12
+                };
+                return;
+            }
+
+            var uiElement = GitHubMarkdownParser.ParseToUIElement(markdown);
+            ChangelogContentHost.Content = uiElement;
+        }
+
+        private void ChangelogSearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            string query = ChangelogSearchTextBox.Text?.Trim() ?? string.Empty;
+            ChangelogSearchPlaceholder.Visibility = string.IsNullOrEmpty(query) ? Visibility.Visible : Visibility.Collapsed;
+            ClearChangelogSearchButton.Visibility = string.IsNullOrEmpty(query) ? Visibility.Collapsed : Visibility.Visible;
+
+            if (string.IsNullOrEmpty(query))
+            {
+                RenderChangelogContent(_fullChangelogMarkdown);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_fullChangelogMarkdown)) return;
+
+            // Filter markdown sections by version or keyword
+            var lines = _fullChangelogMarkdown.Replace("\r\n", "\n").Split('\n');
+            var matchedSections = new System.Text.StringBuilder();
+            matchedSections.AppendLine("# Changelog (Filtered)\n");
+
+            var currentSection = new System.Text.StringBuilder();
+            bool sectionMatches = false;
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                if (line.StartsWith("## [") || line.StartsWith("## "))
+                {
+                    if (sectionMatches && currentSection.Length > 0)
+                    {
+                        matchedSections.Append(currentSection);
+                        matchedSections.AppendLine("\n---\n");
+                    }
+                    currentSection.Clear();
+                    sectionMatches = false;
+                }
+
+                currentSection.AppendLine(line);
+                if (!sectionMatches && line.Contains(query, StringComparison.OrdinalIgnoreCase))
+                {
+                    sectionMatches = true;
+                }
+            }
+
+            if (sectionMatches && currentSection.Length > 0)
+            {
+                matchedSections.Append(currentSection);
+            }
+
+            if (matchedSections.Length <= 30) // Only the title
+            {
+                RenderChangelogContent($"# No Results Found\n\nNo release notes matching **\"{query}\"** were found in the changelog.");
+            }
+            else
+            {
+                RenderChangelogContent(matchedSections.ToString());
+            }
+
+            ChangelogScrollViewer.ScrollToTop();
+        }
+
+        private void ClearChangelogSearchButton_Click(object sender, RoutedEventArgs e)
+        {
+            ChangelogSearchTextBox.Text = string.Empty;
+        }
+
+        private void OpenGitHubReleases_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "https://github.com/zephiel-hz/ST-Game-Remover/releases",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[SettingsView] OpenGitHubReleases error: {ex.Message}");
+            }
+        }
+
+        #endregion
     }
 }
 

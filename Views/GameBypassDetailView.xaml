@@ -4,29 +4,38 @@
              Background="{DynamicResource BackgroundBrush}"
              Foreground="{DynamicResource ForegroundBrush}">
     <UserControl.Resources>
-        <!-- Settings Button Template -->
+        <!-- Modern Button Template -->
         <ControlTemplate x:Key="SettingsButtonTemplate" TargetType="Button">
-            <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+            <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="9" Padding="{TemplateBinding Padding}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <Border Width="26" Height="26" CornerRadius="13" Background="{DynamicResource ButtonIconBackground}" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,8,0">
-                        <TextBlock Text="{TemplateBinding Tag}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource ForegroundBrush}" FontSize="12" FontFamily="Segoe MDL2 Assets"/>
+                    <Border Width="22" Height="22" CornerRadius="11" Background="{DynamicResource ButtonIconBackground}" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,7,0">
+                        <TextBlock Text="{TemplateBinding Tag}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource ForegroundBrush}" FontSize="11" FontFamily="Segoe MDL2 Assets"/>
                     </Border>
                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </StackPanel>
             </Border>
             <ControlTemplate.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter TargetName="root" Property="Background" Value="{DynamicResource HoverBrush}"/>
-                    <Setter TargetName="root" Property="Opacity" Value="0.95"/>
+                    <Setter TargetName="root" Property="Opacity" Value="0.9"/>
                 </Trigger>
                 <Trigger Property="IsPressed" Value="True">
-                    <Setter TargetName="root" Property="Opacity" Value="0.8"/>
+                    <Setter TargetName="root" Property="Opacity" Value="0.75"/>
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
-                    <Setter TargetName="root" Property="Opacity" Value="0.6"/>
+                    <Setter TargetName="root" Property="Opacity" Value="0.5"/>
                 </Trigger>
             </ControlTemplate.Triggers>
         </ControlTemplate>
+
+        <Style x:Key="DetailSectionCard" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="14"/>
+            <Setter Property="Padding" Value="18"/>
+            <Setter Property="Margin" Value="0,0,0,16"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+        </Style>
 
         <!-- Loading Animation -->
         <Storyboard x:Key="SpinAnimation">
@@ -42,165 +51,79 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Progress Overlay -->
-        <Grid x:Name="ProgressOverlay" Grid.Row="0" Grid.RowSpan="2" Background="#80000000" Visibility="Collapsed" Panel.ZIndex="100">
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="450">
-                <!-- Progress Card -->
-                <Border Background="{DynamicResource CardBackgroundBrush}" CornerRadius="10" Padding="24" Effect="{DynamicResource DropShadowEffect}">
-                    <StackPanel>
-                        <!-- Title -->
-                        <TextBlock x:Name="ProgressTitle" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,12" Text="Adding to Library..."/>
-                        
-                        <!-- Status Text -->
-                        <TextBlock x:Name="ProgressStatus" FontSize="12" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,0,8" TextWrapping="Wrap" Text="Initializing..."/>
-                        <TextBlock x:Name="ProgressDetail" FontSize="12" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,0,16" TextWrapping="Wrap" Visibility="Collapsed" Text=""/>
-                        
-                        <!-- Progress Bar -->
-                        <ProgressBar x:Name="ProgressBar" Height="6" Background="{DynamicResource BorderBrush}" Foreground="{DynamicResource SuccessButtonBrush}" Margin="0,0,0,12" IsIndeterminate="True"/>
-                        
-                        <!-- Step Indicator -->
-                        <StackPanel x:Name="StepsPanel" Margin="0,0,0,0">
-                            <!-- Step 1 -->
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                <TextBlock x:Name="Step1Icon" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{DynamicResource MutedForegroundBrush}" Text="&#xE7BA;" Margin="0,0,8,0"/>
-                                <TextBlock x:Name="Step1Text" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Text="Verifying file availability..."/>
-                            </StackPanel>
-                            
-                            <!-- Step 2 -->
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                <TextBlock x:Name="Step2Icon" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{DynamicResource MutedForegroundBrush}" Text="&#xE7BA;" Margin="0,0,8,0"/>
-                                <TextBlock x:Name="Step2Text" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Text="Downloading file..."/>
-                            </StackPanel>
-                            
-                            <!-- Step 3 -->
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                <TextBlock x:Name="Step3Icon" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{DynamicResource MutedForegroundBrush}" Text="&#xE7BA;" Margin="0,0,8,0"/>
-                                <TextBlock x:Name="Step3Text" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Text="Extracting files..."/>
-                            </StackPanel>
-                            
-                            <!-- Step 4 -->
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock x:Name="Step4Icon" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{DynamicResource MutedForegroundBrush}" Text="&#xE7BA;" Margin="0,0,8,0"/>
-                                <TextBlock x:Name="Step4Text" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Text="Moving to library..."/>
-                            </StackPanel>
-                        </StackPanel>
-                        
-                        <!-- Result Notification (Hidden by default) -->
-                        <Border x:Name="ResultNotification" Visibility="Collapsed" Background="{DynamicResource CardBackgroundBrush}" CornerRadius="8" Padding="16" Margin="0,16,0,0" BorderBrush="{DynamicResource SuccessButtonBrush}" BorderThickness="2">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock x:Name="ResultIcon" FontFamily="Segoe MDL2 Assets" FontSize="20" Text="&#xE73E;" Foreground="{DynamicResource SuccessButtonBrush}" Margin="0,0,8,0"/>
-                                <TextBlock x:Name="ResultMessage" FontSize="12" Foreground="{DynamicResource ForegroundBrush}" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Border>
-                        
-                        <!-- Control Buttons (Cancel/Pause) -->
-                        <StackPanel x:Name="ControlButtonsPanel" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,20,0,0">
-                            <!-- Pause/Resume Button -->
-                            <Button x:Name="PauseResumeButton" Width="140" Height="38" Padding="8,6" Margin="0,0,8,0" Foreground="White" FontWeight="SemiBold" FontSize="11" Cursor="Hand" Click="PauseResume_Click" Background="{DynamicResource PrimaryButtonBrush}" BorderThickness="0" Template="{StaticResource SettingsButtonTemplate}" Tag="{StaticResource Icon.Pause}" ToolTip="Pause the download">
-                                <TextBlock VerticalAlignment="Center" HorizontalAlignment="Center" Text="Pause"/>
-                            </Button>
-                            
-                            <!-- Cancel Button -->
-                            <Button x:Name="CancelDownloadButton" Width="140" Height="38" Padding="8,6" Foreground="White" FontWeight="SemiBold" FontSize="11" Cursor="Hand" Click="CancelDownload_Click" Background="{DynamicResource DangerButtonBrush}" BorderThickness="0" Template="{StaticResource SettingsButtonTemplate}" Tag="{StaticResource Icon.Cancel}" ToolTip="Cancel the download">
-                                <TextBlock VerticalAlignment="Center" HorizontalAlignment="Center" Text="Cancel"/>
-                            </Button>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-        </Grid>
 
-        <!-- Header Section -->
-        <Border Grid.Row="0" Background="{DynamicResource BackgroundBrush}" Padding="24,20,24,20" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
 
-                <!-- Left: Title -->
-                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock x:Name="DetailTitle" FontSize="28" FontWeight="Bold" Foreground="{DynamicResource ForegroundBrush}"/>
-                    <TextBlock x:Name="DetailSubtitle" FontSize="12" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,2,0,0"/>
-                </StackPanel>
-
-                <!-- Right: Buttons -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <!-- Add to Library Button -->
-                    <Button x:Name="AddToLibraryButton" Width="130" Height="38" Padding="8,6" Margin="0,0,12,0"
+        <!-- Modern Header Section -->
+        <Border Grid.Row="0" Background="{DynamicResource CardBackgroundBrush}" Padding="16,10" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
+            <Grid MaxWidth="1050" HorizontalAlignment="Center">
+                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="AddToLibraryButton" Height="36" Padding="14,6"
                             Background="{DynamicResource SuccessButtonBrush}"
                             Foreground="White" FontWeight="SemiBold"
-                            Click="AddToLibrary_Click" Cursor="Hand" FontSize="11"
+                            Click="AddToLibrary_Click" Cursor="Hand" FontSize="11.5"
                             BorderThickness="0"
                             Template="{StaticResource SettingsButtonTemplate}" Tag="{StaticResource Icon.Plus}">
-                        <TextBlock VerticalAlignment="Center" HorizontalAlignment="Center" Text="Apply Bypass"/>
+                        <TextBlock x:Name="AddToLibraryButtonText" VerticalAlignment="Center" HorizontalAlignment="Center" Text="Apply Bypass"/>
                     </Button>
-
-                    <!-- Back Button -->
-                    <Button x:Name="BackButton" Width="90" Height="38" Padding="8,6"
-                            Background="{DynamicResource PrimaryButtonBrush}"
-                            Foreground="White" FontWeight="SemiBold"
-                            Click="BackToDashboard_Click" Cursor="Hand" FontSize="11"
-                            BorderThickness="0"
-                            Template="{StaticResource SettingsButtonTemplate}" Tag="{StaticResource Icon.Back}">
-                        <TextBlock VerticalAlignment="Center" HorizontalAlignment="Center" Text="Back"/>
-                    </Button>
-                </StackPanel>
+                </WrapPanel>
             </Grid>
         </Border>
 
         <!-- Content Area -->
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <StackPanel Margin="30,30,30,30">
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0">
+            <StackPanel x:Name="DetailContentPanel" Margin="16,14,16,20" MaxWidth="1050" HorizontalAlignment="Center">
                 <!-- Landscape Banner Image -->
                 <Border x:Name="ThumbnailBorder"
                         Background="{DynamicResource CardBackgroundBrush}"
-                        CornerRadius="18"
-                        Margin="0,0,0,24"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="16"
+                        Margin="0,0,0,18"
                         HorizontalAlignment="Stretch"
                         SnapsToDevicePixels="True"
-                        MinHeight="280">
+                        MinHeight="140"
+                        MaxHeight="320"
+                        ClipToBounds="True">
                     <Grid ClipToBounds="True">
                         <Image x:Name="GameThumbnail"
                                Stretch="UniformToFill"
                                VerticalAlignment="Center"
                                HorizontalAlignment="Stretch"
-                               MaxHeight="340"/>
+                               MaxHeight="320"/>
                         <Rectangle HorizontalAlignment="Stretch"
                                    VerticalAlignment="Bottom"
-                                   Height="140"
+                                   Height="120"
                                    IsHitTestVisible="False">
                             <Rectangle.Fill>
                                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                                     <GradientStop Color="#00000000" Offset="0"/>
-                                    <GradientStop Color="#22000000" Offset="0.45"/>
-                                    <GradientStop Color="#99000000" Offset="1"/>
+                                    <GradientStop Color="#550A0D14" Offset="0.5"/>
+                                    <GradientStop Color="#DD0A0D14" Offset="1"/>
                                 </LinearGradientBrush>
                             </Rectangle.Fill>
                         </Rectangle>
                     </Grid>
                 </Border>
 
+                <!-- Game Header Info Card -->
+                <Border Style="{StaticResource DetailSectionCard}">
+                    <StackPanel>
+                        <!-- Game Title -->
+                        <TextBlock x:Name="GameNameDetail" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,8" TextWrapping="Wrap"/>
 
-                <!-- Game Name (Title) -->
-                <TextBlock x:Name="GameNameDetail" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                        <!-- Genre Badge -->
+                        <Border Background="{DynamicResource ButtonBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="8,4" HorizontalAlignment="Left" Margin="0,0,0,14">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Genre: " FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}"/>
+                                <TextBlock x:Name="GenreDetail" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
+                            </StackPanel>
+                        </Border>
 
-                <!-- Genre (Compact) -->
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
-                    <TextBlock FontSize="12" FontWeight="Bold" Foreground="{DynamicResource MutedForegroundBrush}">
-                        <Run Text="Genre: "/>
-                    </TextBlock>
-                    <TextBlock x:Name="GenreDetail" FontSize="12" Foreground="{DynamicResource MutedForegroundBrush}" Margin="4,0,0,0"/>
-                </StackPanel>
-
-                <!-- Separator -->
-                <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="0,0,0,20"/>
-
-                <!-- Description -->
-                <TextBlock FontSize="12" FontWeight="Bold" Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,8">
-                    <Run Text="Description"/>
-                </TextBlock>
-                <TextBlock x:Name="DescriptionDetail" FontSize="13" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,0,24" TextWrapping="Wrap" LineHeight="18"/>
+                        <!-- Description -->
+                        <TextBlock Text="ABOUT THIS GAME" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,0,6"/>
+                        <TextBlock x:Name="DescriptionDetail" FontSize="12.5" Foreground="{DynamicResource ForegroundBrush}" Opacity="0.9" TextWrapping="Wrap" LineHeight="19"/>
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </ScrollViewer>
     </Grid>

@@ -18,6 +18,11 @@ namespace SteamPluginManager
                 _mainShellInstance.NavigateToOnlineFix();
             }
         }
+
+        public static void RefreshOnlineFixView()
+        {
+            _mainShellInstance?.RefreshOnlineFixView();
+        }
         private static MainWindow? _mainWindowInstance;
         private static Dashboard? _dashboardInstance;
         private static MainShell? _mainShellInstance;
@@ -31,6 +36,31 @@ namespace SteamPluginManager
         public static MainShell? GetMainShell()
         {
             return _mainShellInstance;
+        }
+
+        public static OperationProgressModalView? GetProgressModal()
+        {
+            return _mainShellInstance?.GlobalProgressModal;
+        }
+
+        public static RequestGameModalView? GetRequestModal()
+        {
+            return _mainShellInstance?.GlobalRequestModal;
+        }
+
+        public static void ShowRequestGameModal(Func<int, bool>? isGameAvailableInApp = null, Action? onGameAddedOrRequested = null)
+        {
+            _mainShellInstance?.GlobalRequestModal?.ShowModal(isGameAvailableInApp, onGameAddedOrRequested);
+        }
+
+        public static CustomizeProfileModalView? GetProfileModal()
+        {
+            return _mainShellInstance?.GlobalProfileModal;
+        }
+
+        public static void ShowCustomizeProfileModal(Models.UserProfile? profile = null, Action? onSaved = null)
+        {
+            _mainShellInstance?.GlobalProfileModal?.ShowModal(profile, onSaved);
         }
 
         public static void NavigateToDashboard()
@@ -54,9 +84,24 @@ namespace SteamPluginManager
             _mainShellInstance?.NavigateToSettings();
         }
 
+        public static void NavigateToDev()
+        {
+            _mainShellInstance?.NavigateToDev();
+        }
+
         public static void NavigateToSaweria()
         {
             _mainShellInstance?.NavigateToSaweria();
+        }
+
+        public static void ToggleCommunityChat()
+        {
+            _mainShellInstance?.ToggleCommunityChat();
+        }
+
+        public static void OpenCommunityChat()
+        {
+            _mainShellInstance?.OpenCommunityChat();
         }
 
         public static void NavigateToGenerateToken()
@@ -77,6 +122,14 @@ namespace SteamPluginManager
             if (_mainShellInstance != null)
             {
                 _mainShellInstance.NavigateToHZManifest(forceRefresh);
+            }
+        }
+
+        public static void NavigateToHZManifestWithSort(string sortOrder, bool forceRefresh = false)
+        {
+            if (_mainShellInstance != null)
+            {
+                _mainShellInstance.NavigateToHZManifestWithSort(sortOrder, forceRefresh);
             }
         }
 
@@ -111,12 +164,18 @@ namespace SteamPluginManager
             {
                 var detailView = new HZManifestDetailView();
                 detailView.SetFile(file);
-                _mainShellInstance.TransitionToView(detailView);
+                _mainShellInstance.OpenInspector(detailView, file?.FileName);
             }
         }
 
         public static void NavigateBackFromHZManifestDetail()
         {
+            if (_mainShellInstance != null)
+            {
+                _mainShellInstance.CloseInspector();
+                return;
+            }
+
             if (string.Equals(CurrentHZManifestDetailSource, "Dashboard", StringComparison.OrdinalIgnoreCase))
             {
                 NavigateToDashboard();
@@ -155,7 +214,7 @@ namespace SteamPluginManager
             {
                 var detailView = new GameBypassDetailView();
                 detailView.SetFile(file);
-                _mainShellInstance.TransitionToView(detailView);
+                _mainShellInstance.OpenInspector(detailView, file?.FileName);
             }
         }
 
@@ -165,7 +224,7 @@ namespace SteamPluginManager
             {
                 var detailView = new OnlineFixDetailView();
                 detailView.SetFile(file);
-                _mainShellInstance.TransitionToView(detailView);
+                _mainShellInstance.OpenInspector(detailView, file?.FileName);
             }
         }
 

@@ -13,12 +13,12 @@
             <Setter Property="BorderBrush" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
-            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontSize" Value="13"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}" CornerRadius="8">
+                        <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}" CornerRadius="7">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -37,18 +37,19 @@
             </Setter>
         </Style>
     </UserControl.Resources>
-    <Grid>
+    <Grid Margin="12">
         <Grid.RowDefinitions>
-            <RowDefinition Height="48" />
+            <RowDefinition Height="50" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
+        <!-- Browser Header Toolbar -->
         <Border Grid.Row="0"
-                Background="{DynamicResource HeaderBackgroundBrush}"
+                Background="{DynamicResource CardBackgroundBrush}"
                 BorderBrush="{DynamicResource BorderBrush}"
-                BorderThickness="1"
-                CornerRadius="12,12,0,0">
-            <Grid Margin="10,0,12,0">
+                BorderThickness="1,1,1,0"
+                CornerRadius="14,14,0,0">
+            <Grid Margin="12,0,14,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -60,32 +61,33 @@
                     <Button x:Name="RefreshButton" Style="{StaticResource BrowserToolbarButton}" Content="&#xE72C;" FontFamily="Segoe MDL2 Assets" Click="RefreshButton_Click" ToolTip="Refresh" />
                 </StackPanel>
 
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
-                    <Border Width="26" Height="26" CornerRadius="13" ClipToBounds="True" Margin="0,0,8,0">
-                        <Image Source="/Config/saweria-icon.png" Stretch="UniformToFill"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
+                    <Border Width="26" Height="26" CornerRadius="8" Background="{DynamicResource ButtonBackgroundBrush}" ClipToBounds="True" Margin="0,0,10,0">
+                        <Image Source="/Config/saweria-icon.png" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" Width="20" Height="20"/>
                     </Border>
                     <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="Saweria" FontSize="13" FontWeight="SemiBold" />
-                        <TextBlock Text="Support the creator" FontSize="10" Foreground="{DynamicResource MutedForegroundBrush}" />
+                        <TextBlock Text="Saweria Donation" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}"/>
+                        <TextBlock Text="Support the creator to keep the project active" FontSize="10.5" Foreground="{DynamicResource MutedForegroundBrush}" />
                     </StackPanel>
                 </StackPanel>
             </Grid>
         </Border>
 
+        <!-- Browser Web View Area -->
         <Border Grid.Row="1"
-                Margin="0,6,0,0"
-                Background="{DynamicResource CardBackgroundBrush}"
+                Background="{DynamicResource InputBackgroundBrush}"
                 BorderBrush="{DynamicResource BorderBrush}"
                 BorderThickness="1"
-                CornerRadius="0,0,12,12">
+                CornerRadius="0,0,14,14"
+                ClipToBounds="True">
             <Grid>
-            <wv2:WebView2 x:Name="SaweriaBrowser" />
-            <Border x:Name="LoadingOverlay" Background="{DynamicResource BackgroundBrush}" Opacity="0.96">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <ProgressBar Width="220" Height="5" IsIndeterminate="True" Foreground="{DynamicResource AccentBrush}" />
-                    <TextBlock Text="Loading Saweria..." HorizontalAlignment="Center" Margin="0,12,0,0" Foreground="{DynamicResource MutedForegroundBrush}" />
-                </StackPanel>
-            </Border>
+                <wv2:WebView2 x:Name="SaweriaBrowser" />
+                <Border x:Name="LoadingOverlay" Background="{DynamicResource BackgroundBrush}" Opacity="0.96">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <ProgressBar Width="200" Height="4" IsIndeterminate="True" Foreground="{DynamicResource AccentBrush}" Background="{DynamicResource ButtonBackgroundBrush}" BorderThickness="0"/>
+                        <TextBlock Text="Loading Saweria..." HorizontalAlignment="Center" Margin="0,14,0,0" Foreground="{DynamicResource MutedForegroundBrush}" FontSize="12"/>
+                    </StackPanel>
+                </Border>
             </Grid>
         </Border>
     </Grid>

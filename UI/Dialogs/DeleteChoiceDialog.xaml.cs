@@ -34,7 +34,7 @@ namespace SteamPluginManager
             var template = TryFindResource("DeleteDialog.Confirm.ManifestAndLua") as string ?? "Delete manifest and Lua files for {0} item(s)? This will not trigger Steam uninstall.";
             var confirmTitle = TryFindResource("Dialog.Confirm") as string ?? "Confirm";
             var msg = string.Format(template, _selectedCount);
-            if (MessageBox.Show(this, msg, confirmTitle, MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+            if (ModernMessageBox.Show(this, msg, confirmTitle, MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
             SelectedAction = DeleteAction.ManifestAndLua;
             DialogResult = true;
             Close();
@@ -45,7 +45,7 @@ namespace SteamPluginManager
             var template = TryFindResource("DeleteDialog.Confirm.Uninstall") as string ?? "Trigger uninstall for {0} item(s)? This will not delete manifest or Lua files.";
             var confirmTitle = TryFindResource("Dialog.Confirm") as string ?? "Confirm";
             var msg = string.Format(template, _selectedCount);
-            if (MessageBox.Show(this, msg, confirmTitle, MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+            if (ModernMessageBox.Show(this, msg, confirmTitle, MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
             SelectedAction = DeleteAction.Uninstall;
             DialogResult = true;
             Close();
@@ -56,7 +56,7 @@ namespace SteamPluginManager
             var template = TryFindResource("DeleteDialog.Confirm.Both") as string ?? "Delete manifest and Lua files and trigger uninstall for {0} item(s)? This will remove files and start the uninstall process.";
             var confirmTitle = TryFindResource("Dialog.Confirm") as string ?? "Confirm";
             var msg = string.Format(template, _selectedCount);
-            if (MessageBox.Show(this, msg, confirmTitle, MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+            if (ModernMessageBox.Show(this, msg, confirmTitle, MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
             SelectedAction = DeleteAction.Both;
             DialogResult = true;
             Close();

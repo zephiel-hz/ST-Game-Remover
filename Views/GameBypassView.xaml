@@ -6,24 +6,31 @@
              Foreground="{DynamicResource ForegroundBrush}">
     <UserControl.Resources>
         <Style x:Key="RoundedButtonStyle" TargetType="Button">
-            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" 
-                                CornerRadius="6"
+                        <Border x:Name="btnBorder"
+                                Background="{TemplateBinding Background}" 
+                                CornerRadius="8"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 Width="{TemplateBinding Width}"
-                                Height="{TemplateBinding Height}">
+                                Height="{TemplateBinding Height}"
+                                Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Opacity" Value="0.85"/>
+                                <Setter TargetName="btnBorder" Property="Background" Value="{DynamicResource HoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Opacity" Value="0.7"/>
+                                <Setter TargetName="btnBorder" Property="Opacity" Value="0.8"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -31,44 +38,48 @@
             </Setter>
         </Style>
 
+        <!-- Modern Bypass Card Style (Optimized: Hardware Accelerated, No Blur Shader Overhead) -->
         <Style x:Key="BypassCardStyle" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
-            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="CornerRadius" Value="14"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Margin" Value="8"/>
+            <Setter Property="Margin" Value="0"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
             <Setter Property="UseLayoutRounding" Value="True"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource BackgroundBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                    <Setter Property="Background" Value="{DynamicResource HoverBrush}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
 
         <Style x:Key="PremiumSearchBoxStyle" TargetType="TextBox">
-            <Setter Property="Background" Value="#141826"/>
-            <Setter Property="Foreground" Value="#F7F4EB"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="BorderBrush" Value="#2F3748"/>
+            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Height" Value="34"/>
-            <Setter Property="Padding" Value="12,0,12,0"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="Padding" Value="30,0,12,0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="CaretBrush" Value="#FF8A00"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
-                        <Border x:Name="SearchBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="14" SnapsToDevicePixels="True">
-                            <ScrollViewer x:Name="PART_ContentHost" Margin="0"/>
+                        <Border x:Name="SearchBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10" SnapsToDevicePixels="True">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="0" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="SearchBorder" Property="BorderBrush" Value="#4E5568"/></Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="SearchBorder" Property="BorderBrush" Value="{DynamicResource ButtonHoverBorderBrush}"/>
+                            </Trigger>
                             <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                <Setter TargetName="SearchBorder" Property="BorderBrush" Value="#FF8A00"/>
-                                <Setter TargetName="SearchBorder" Property="Background" Value="#1B2030"/>
-                                <Setter TargetName="SearchBorder" Property="Effect"><Setter.Value><DropShadowEffect Color="#FF8A00" BlurRadius="18" ShadowDepth="0" Opacity="0.2"/></Setter.Value></Setter>
+                                <Setter TargetName="SearchBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="SearchBorder" Property="Background" Value="{DynamicResource InputBackgroundBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -83,188 +94,207 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Loading Overlay -->
-        <Grid Grid.Row="0" Grid.RowSpan="3" x:Name="LoadingOverlay" Background="#CC000000" Visibility="Collapsed" ZIndex="100">
-            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+        <!-- Ultra-Modern Loading Overlay -->
+        <Grid Grid.Row="0" Grid.RowSpan="2" x:Name="LoadingOverlay" Background="#66000000" Visibility="Collapsed" Panel.ZIndex="100">
+            <Border HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="{DynamicResource CardBackgroundBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="16"
+                    Padding="32,24"
+                    MinWidth="260"
+                    MaxWidth="360">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" BlurRadius="32" ShadowDepth="12" Opacity="0.45"/>
+                </Border.Effect>
 
-                <!-- Circular Progress Indicator -->
-                <Canvas Grid.Row="0" Width="120" Height="120" HorizontalAlignment="Center">
-                    <!-- Outer Ring Background -->
-                    <Ellipse Canvas.Left="10" Canvas.Top="10" Width="100" Height="100"
-                             Stroke="#FFFFFF" StrokeThickness="3" Opacity="0.2"/>
-
-                    <!-- Rotating Progress Ring -->
-                    <Canvas Canvas.Left="10" Canvas.Top="10" Width="100" Height="100"
-                            RenderTransformOrigin="0.5,0.5">
-                        <Canvas.RenderTransform>
-                            <TransformGroup>
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <!-- High-Precision Dual Ring Glowing Spinner -->
+                    <Grid Width="56" Height="56" HorizontalAlignment="Center" Margin="0,0,0,16">
+                        <!-- Outer Track Ring -->
+                        <Ellipse Width="56" Height="56"
+                                 Stroke="{DynamicResource BorderBrush}"
+                                 StrokeThickness="3.5"
+                                 Opacity="0.4"/>
+                        <!-- Inner Glowing Accent Rotating Arc -->
+                        <Canvas Width="56" Height="56" RenderTransformOrigin="0.5,0.5">
+                            <Canvas.RenderTransform>
                                 <RotateTransform x:Name="ContinuousRotate" Angle="0"/>
-                            </TransformGroup>
-                        </Canvas.RenderTransform>
-                        <Ellipse Canvas.Left="0" Canvas.Top="0" Width="100" Height="100"
-                                 Stroke="#00D9FF" StrokeThickness="3" Opacity="0.8"
-                                 StrokeDashArray="47 100" StrokeDashOffset="0"/>
-                    </Canvas>
-                </Canvas>
+                            </Canvas.RenderTransform>
+                            <Ellipse Width="56" Height="56"
+                                     Stroke="{DynamicResource AccentBrush}"
+                                     StrokeThickness="3.5"
+                                     StrokeDashArray="42 100"
+                                     StrokeStartLineCap="Round"
+                                     StrokeEndLineCap="Round"/>
+                        </Canvas>
+                    </Grid>
 
-                <!-- Status Text -->
-                <TextBlock Grid.Row="1" x:Name="LoadingStatusText" Text="Loading..."
-                          Foreground="#FFFFFF" FontSize="14" FontWeight="SemiBold"
-                          HorizontalAlignment="Center" Opacity="0.9" Margin="0,24,0,0"/>
-            </Grid>
+                    <!-- Status Main Title -->
+                    <TextBlock x:Name="LoadingStatusText"
+                               Text="Loading bypass files..."
+                               Foreground="{DynamicResource ForegroundBrush}"
+                               FontSize="13.5"
+                               FontWeight="Bold"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"/>
+
+                    <!-- Subtitle / Hint -->
+                    <TextBlock Text="Please wait while data is being prepared..."
+                               Foreground="{DynamicResource MutedForegroundBrush}"
+                               FontSize="11"
+                               Margin="0,4,0,0"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"/>
+                </StackPanel>
+            </Border>
         </Grid>
 
-        <!-- Debug Info (Remove later) -->
+        <!-- Debug Info (Hidden) -->
         <Border Grid.Row="0" Background="Red" Padding="10" Visibility="Collapsed">
-            <TextBlock x:Name="DebugInfo" Text="DEBUG: Loading..." Foreground="White" FontSize="12"/>
+            <TextBlock x:Name="DebugInfo" Text="DEBUG" Foreground="White" FontSize="12"/>
         </Border>
 
         <!-- Content Area -->
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
+        <Grid Grid.Row="1" Margin="14,12,14,14">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
 
-            <!-- Files Cards Grid -->
-            <Border Grid.Column="0" Background="{DynamicResource BackgroundBrush}" Margin="12,10,12,12" Padding="0">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-
-                    <!-- Search Box -->
-                    <Border Grid.Row="0" Background="{DynamicResource CardBackgroundBrush}" CornerRadius="10" Padding="10" Margin="0,0,0,10" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
-                        <Grid VerticalAlignment="Center">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            
-                            <!-- SearchBox -->
-                            <Grid Grid.Column="0">
-                                <TextBox x:Name="SearchBox" Style="{StaticResource PremiumSearchBoxStyle}"
-                                         VerticalAlignment="Center"/>
-                                <TextBlock Text="Search..." Foreground="{DynamicResource MutedForegroundBrush}" Margin="12,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
-                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="{x:Null}">
-                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
-                            </Grid>
-                            
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="10,0,0,0">
-                                <Button x:Name="RefreshButton" Width="104" Height="34" Click="Refresh_Click" Margin="0,0,6,0" Background="{DynamicResource PrimaryButtonBrush}" Foreground="White" FontWeight="SemiBold" Cursor="Hand" Style="{StaticResource CompactIconButtonStyle}" Tag="{StaticResource Icon.Refresh}">
-                                    <TextBlock x:Name="RefreshText" Text="Refresh" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                </Button>
-                                <Button x:Name="BackButton" Width="90" Height="34" Padding="8" Background="{DynamicResource PrimaryButtonBrush}" Foreground="White" FontWeight="SemiBold" Click="BackToDashboard_Click" Cursor="Hand" FontSize="12" Style="{StaticResource CompactIconButtonStyle}" Tag="{StaticResource Icon.Back}">
-                                    <TextBlock x:Name="BackButtonText" Text="Back" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                </Button>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-
-                    <!-- File Cards -->
-                    <Grid Grid.Row="1">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="*"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-                        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,12,0" x:Name="CardsScrollViewer">
-                            <ItemsControl x:Name="FileCards" ItemsSource="{Binding Files, Mode=OneWay}" Margin="0,0,0,10">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel x:Name="CardPanel" IsItemsHost="True" Orientation="Horizontal" HorizontalAlignment="Left"/>
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Style="{StaticResource BypassCardStyle}" ClipToBounds="True" MinWidth="250" Height="270" Margin="0,0,12,12" MouseLeftButtonUp="FileCard_MouseLeftButtonUp" Cursor="Hand" x:Name="CardBorder" Loaded="CardBorder_Loaded">
-                                            <Grid>
-                                                <Grid.RowDefinitions>
-                                                    <RowDefinition Height="126"/>
-                                                    <RowDefinition Height="*"/>
-                                                </Grid.RowDefinitions>
-
-                                                <!-- Thumbnail Image Area -->
-                                                <Border Grid.Row="0" Background="{DynamicResource BorderBrush}" CornerRadius="14,14,0,0" Margin="0,0,0,6" ClipToBounds="True" Loaded="ThumbnailBorder_Loaded" SizeChanged="ThumbnailBorder_SizeChanged">
-                                                    <Grid>
-                                                        <!-- Steam Header Image - Loaded via code-behind CardBorder_Loaded event -->
-                                                        <Image x:Name="ThumbnailImage" Stretch="UniformToFill" VerticalAlignment="Stretch" HorizontalAlignment="Stretch"/>
-                                                        
-                                                        <!-- Fallback Icon if no image -->
-                                                        <TextBlock Text="🎮" FontSize="56" 
-                                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                                   Opacity="0.3"/>
-                                                    </Grid>
-                                                </Border>
-
-                                                <!-- Game Info -->
-                                                <StackPanel Grid.Row="1" VerticalAlignment="Top" Margin="12,7,12,10">
-                                                    <!-- Game Name (Primary) -->
-                                                    <TextBlock Text="{Binding Name}" FontWeight="Bold" HorizontalAlignment="Left" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ForegroundBrush}" FontSize="13" Margin="0,0,0,4" MaxHeight="40"/>
-                                                    
-                                                    <!-- App ID -->
-                                                    <TextBlock Text="{Binding AppId, StringFormat='ID: {0}'}" FontSize="10" Opacity="0.7" HorizontalAlignment="Left" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,2"/>
-                                                </StackPanel>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
-
-                        <!-- Pagination Controls -->
-                        <Border Grid.Row="1" Background="{DynamicResource CardBackgroundBrush}" Padding="8,7" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-
-                                <!-- Previous Button -->
-                                <Button Grid.Column="0" x:Name="PreviousPageButton" Width="110" Height="28" 
-                                    Background="{DynamicResource PrimaryButtonBrush}"
-                                    Foreground="White" FontWeight="SemiBold" Cursor="Hand"
-                                    Click="PreviousPage_Click"
-                                    Style="{StaticResource CompactIconButtonStyle}"
-                                    Tag="{StaticResource Icon.Back}">
-                                    <TextBlock Text="Previous" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="11"/>
-                                </Button>
-
-                                <!-- Page Indicator -->
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
-                                    <TextBlock x:Name="PageIndicator" FontSize="12" Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center"/>
-                                </StackPanel>
-
-                                <!-- Next Button -->
-                                <Button Grid.Column="2" x:Name="NextPageButton" Width="110" Height="28" 
-                                    Background="{DynamicResource PrimaryButtonBrush}"
-                                    Foreground="White" FontWeight="SemiBold" Cursor="Hand"
-                                    Click="NextPage_Click"
-                                    Style="{StaticResource CompactIconButtonStyle}"
-                                    Tag="{StaticResource Icon.Forward}">
-                                    <TextBlock Text="Next" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="11"/>
-                                </Button>
-                            </Grid>
-                        </Border>
+            <!-- Search & Actions Command Bar -->
+            <Border Grid.Row="0" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="14" Padding="14,12" Margin="0,0,0,12">
+                <Grid VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <!-- SearchBox with Placeholder -->
+                    <Grid Grid.Column="0">
+                        <TextBox x:Name="SearchBox" Style="{StaticResource PremiumSearchBoxStyle}"
+                                 VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <StackPanel Orientation="Horizontal" Margin="14,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
+                            <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Search game bypass files..." Foreground="{DynamicResource MutedForegroundBrush}" FontSize="12" VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
                     </Grid>
+                    
+                    <!-- Action Buttons -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="RefreshButton" Width="36" Height="36" Click="Refresh_Click"
+                                Style="{StaticResource RoundedButtonStyle}"
+                                ToolTip="Refresh Bypass Files">
+                            <TextBlock x:Name="RefreshText" Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        </Button>
+                        <StackPanel Visibility="Collapsed">
+                            <Button x:Name="BackButton" Click="BackToDashboard_Click">
+                                <TextBlock x:Name="BackButtonText" Text="Back"/>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
                 </Grid>
             </Border>
+
+            <!-- File Cards Grid & Pagination -->
+            <Grid Grid.Row="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,14,0" x:Name="CardsScrollViewer">
+                    <ItemsControl x:Name="FileCards" ItemsSource="{Binding Files, Mode=OneWay}" Margin="0,0,0,6">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel x:Name="CardPanel" IsItemsHost="True" Orientation="Horizontal" HorizontalAlignment="Left"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource BypassCardStyle}" ClipToBounds="True" MinWidth="180" Height="260" Margin="0,0,12,12" MouseLeftButtonUp="FileCard_MouseLeftButtonUp" Cursor="Hand" x:Name="CardBorder" Loaded="CardBorder_Loaded">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="130"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Thumbnail Image Area -->
+                                        <Border Grid.Row="0" Background="{DynamicResource BackgroundBrush}" CornerRadius="13,13,0,0" ClipToBounds="True" Loaded="ThumbnailBorder_Loaded" SizeChanged="ThumbnailBorder_SizeChanged">
+                                            <Grid>
+                                                <TextBlock Text="🎮" FontSize="44" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.25"/>
+                                                <Image x:Name="ThumbnailImage"
+                                                       Source="{Binding ThumbnailPath, Mode=OneWay, TargetNullValue={x:Null}}"
+                                                       Stretch="UniformToFill"
+                                                       RenderOptions.BitmapScalingMode="Linear"
+                                                       VerticalAlignment="Stretch"
+                                                       HorizontalAlignment="Stretch"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- Game Info -->
+                                        <StackPanel Grid.Row="1" VerticalAlignment="Top" Margin="12,10,12,10">
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" HorizontalAlignment="Left" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ForegroundBrush}" FontSize="12.5" Margin="0,0,0,6" MaxHeight="36"/>
+                                            <Border Background="{DynamicResource ButtonBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left">
+                                                <TextBlock Text="{Binding AppId, StringFormat='ID: {0}'}" FontSize="10" Foreground="{DynamicResource MutedForegroundBrush}"/>
+                                            </Border>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <!-- Modern Pagination Controls -->
+                <Border Grid.Row="1" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="10,8" Margin="0,4,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Previous Button -->
+                        <Button Grid.Column="0" x:Name="PreviousPageButton" Width="105" Height="34" 
+                                Background="{DynamicResource PrimaryButtonBrush}"
+                                Style="{StaticResource CompactIconButtonStyle}"
+                                Tag="{StaticResource Icon.Back}"
+                                Click="PreviousPage_Click">
+                            <TextBlock Text="Previous" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="11.5"/>
+                        </Button>
+
+                        <!-- Page Indicator -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <TextBlock x:Name="PageIndicator" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <!-- Next Button -->
+                        <Button Grid.Column="2" x:Name="NextPageButton" Width="105" Height="34" 
+                                Background="{DynamicResource PrimaryButtonBrush}"
+                                Style="{StaticResource CompactIconButtonStyle}"
+                                Tag="{StaticResource Icon.Forward}"
+                                Click="NextPage_Click">
+                            <TextBlock Text="Next" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="11.5"/>
+                        </Button>
+                    </Grid>
+                </Border>
+            </Grid>
         </Grid>
     </Grid>
 </UserControl>

@@ -27,7 +27,7 @@ namespace SteamPluginManager.Views
                 catch (Exception ex)
                 {
                     Logger.Log($"[GameBypassDetailView] Navigation error: {ex.Message}");
-                    MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ModernMessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
         private BypassFile? _currentFile;
@@ -46,6 +46,7 @@ namespace SteamPluginManager.Views
                 Logger.Log($"[GameBypassDetailView] InitializeComponent error: {ex.Message}");
             }
             Loaded += GameBypassDetailView_Loaded;
+            SizeChanged += GameBypassDetailView_SizeChanged;
         }
 
         private void GameBypassDetailView_Loaded(object sender, RoutedEventArgs e)
@@ -54,10 +55,40 @@ namespace SteamPluginManager.Views
             {
                 RegisterTextElements();
                 DisplayFileDetails();
+                UpdateLayoutMode(ActualWidth < 680);
             }
             catch (Exception ex)
             {
                 Logger.Log($"[GameBypassDetailView] Error: {ex.Message}");
+            }
+        }
+
+        private void GameBypassDetailView_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            bool isCompact = e.NewSize.Width < 680;
+            UpdateLayoutMode(isCompact);
+        }
+
+        private void UpdateLayoutMode(bool isCompact)
+        {
+            try
+            {
+                if (FindName("BackButton") is Button backBtn)
+                {
+                    backBtn.Visibility = isCompact ? Visibility.Collapsed : Visibility.Visible;
+                }
+                if (FindName("DetailContentPanel") is StackPanel contentPanel)
+                {
+                    contentPanel.Margin = isCompact ? new Thickness(14, 12, 14, 16) : new Thickness(24, 20, 24, 24);
+                }
+                if (FindName("ThumbnailBorder") is Border thumbBorder)
+                {
+                    thumbBorder.MaxHeight = isCompact ? 170 : 320;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[GameBypassDetailView] UpdateLayoutMode error: {ex.Message}");
             }
         }
 
@@ -74,14 +105,8 @@ namespace SteamPluginManager.Views
         {
             try
             {
-                if (FindName("DetailTitle") is TextBlock detailTitle)
-                    detailTitle.Text = "Game Details";
-                if (FindName("DetailSubtitle") is TextBlock detailSubtitle)
-                    detailSubtitle.Text = "DRM Protection Bypass Information";
                 if (FindName("AddToLibraryButton") is Button addToLibraryButton)
                     addToLibraryButton.Content = "Apply Bypass";
-                if (FindName("BackButtonText") is TextBlock backButtonText)
-                    backButtonText.Text = "← Back";
             }
             catch (Exception ex)
             {
@@ -101,6 +126,29 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                var modal = WindowNavigator.GetProgressModal();
+                if (modal != null)
+                {
+                    if (show)
+                    {
+                        modal.Configure(
+                            "Applying Bypass...",
+                            "Verify Game",
+                            "Download Bypass",
+                            "Extract Files",
+                            "Apply to Game",
+                            "\uE7FC",
+                            gameTitle: _currentFile?.Name,
+                            appId: _currentFile?.AppId?.ToString());
+                        modal.ShowModal(status, detail);
+                    }
+                    else
+                    {
+                        modal.HideModal();
+                    }
+                    return;
+                }
+
                 if (FindName("ProgressOverlay") is Grid overlay)
                 {
                     overlay.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
@@ -156,6 +204,13 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                var modal = WindowNavigator.GetProgressModal();
+                if (modal != null)
+                {
+                    modal.ShowResultNotification(isSuccess, message);
+                    return;
+                }
+
                 if (FindName("ResultNotification") is Border resultBorder)
                 {
                     resultBorder.Visibility = Visibility.Visible;
@@ -194,6 +249,13 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                var modal = WindowNavigator.GetProgressModal();
+                if (modal != null)
+                {
+                    modal.UpdateProgressStep(stepNumber, completed);
+                    return;
+                }
+
                 string[] stepIcons = new[] { "Step1Icon", "Step2Icon", "Step3Icon", "Step4Icon" };
                 
                 for (int i = 1; i <= 4; i++)
@@ -230,7 +292,7 @@ namespace SteamPluginManager.Views
             {
                 if (_currentFile == null)
                 {
-                    MessageBox.Show("No file selected", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ModernMessageBox.Show("No file selected", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
@@ -250,7 +312,7 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"[GameBypassDetailView] Error displaying details: {ex.Message}");
-                MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -516,6 +578,16 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                var modal = WindowNavigator.GetProgressModal();
+                if (modal != null)
+                {
+                    modal.SetControlButtons(
+                        show,
+                        onPauseResume: () => PauseResume_Click(null!, null!),
+                        onCancel: () => CancelDownload_Click(null!, null!),
+                        isPaused: _isPaused);
+                }
+
                 if (FindName("ControlButtonsPanel") is StackPanel controlPanel)
                 {
                     controlPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
@@ -556,6 +628,12 @@ namespace SteamPluginManager.Views
             {
                 _isPaused = !_isPaused;
 
+                var modal = WindowNavigator.GetProgressModal();
+                if (modal != null)
+                {
+                    modal.UpdatePauseState(_isPaused);
+                }
+
                 if (_isPaused)
                 {
                     Logger.Log("[GameBypassDetailView] Download paused");
@@ -569,6 +647,8 @@ namespace SteamPluginManager.Views
                     
                     if (FindName("ProgressStatus") is TextBlock statusText)
                         statusText.Text = "Download paused...";
+
+                    modal?.UpdateStatus("Download paused...");
                 }
                 else
                 {
@@ -583,6 +663,8 @@ namespace SteamPluginManager.Views
                     
                     if (FindName("ProgressStatus") is TextBlock statusText)
                         statusText.Text = "Downloading bypass file...";
+
+                    modal?.UpdateStatus("Downloading bypass file...");
                 }
             }
             catch (Exception ex)
@@ -626,7 +708,7 @@ namespace SteamPluginManager.Views
             {
                 if (_currentFile == null)
                 {
-                    MessageBox.Show("No file selected", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ModernMessageBox.Show("No file selected", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
@@ -636,6 +718,9 @@ namespace SteamPluginManager.Views
                 // Initialize cancellation token source for this download
                 _downloadCancellationTokenSource = new CancellationTokenSource();
                 _isPaused = false;
+
+                ShowLoadingState(true, "Verifying game installation...", "Checking Steam library...");
+                UpdateProgressStep(1);
 
                 // Cek apakah game sudah terinstal
                 var mainWindow = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w is SteamPluginManager.MainWindow) as SteamPluginManager.MainWindow;
@@ -648,21 +733,18 @@ namespace SteamPluginManager.Views
                 }
                 if (!isInstalled)
                 {
-                    ShowLoadingState(true, "Game not installed!");
-                    ShowResultNotification(false, "✗ Game not installed!");
+                    ShowResultNotification(false, "✗ Game not installed in Steam library!");
                     ShowControlButtons(false);
-                    await Task.Delay(1500);
+                    await Task.Delay(2000);
                     ShowLoadingState(false);
                     if (FindName("AddToLibraryButton") is Button btnError)
                         btnError.IsEnabled = true;
                     return;
                 }
 
-                ShowLoadingState(true, "Downloading bypass file from Cloudflare R2...", GetCurrentFileSizeDetail());
+                ShowLoadingState(true, "Downloading bypass file...", GetCurrentFileSizeDetail());
                 ShowControlButtons(true);
-                UpdateProgressStep(1);
-
-
+                UpdateProgressStep(2);
 
                 // 1. Download file dari R2 (debug log detail)
                 string r2Key = _currentFile.FileName;
@@ -674,15 +756,28 @@ namespace SteamPluginManager.Views
                     {
                         Dispatcher.Invoke(() =>
                         {
+                            string sizeDetail = !string.IsNullOrWhiteSpace(_currentFile?.FileSize)
+                                ? $"Size: {_currentFile.FileSize}"
+                                : "Cloudflare R2";
+                            string statusStr = $"Downloading bypass ({p}%)...";
+                            string detailStr = $"{sizeDetail} • Streaming archive package";
+
+                            var modal = WindowNavigator.GetProgressModal();
+                            if (modal != null)
+                            {
+                                modal.SetProgress(p, 100, false);
+                                modal.UpdateStatus(statusStr, detailStr);
+                            }
+
                             if (FindName("ProgressBar") is ProgressBar pb)
                             {
                                 pb.IsIndeterminate = false;
                                 pb.Value = p;
                             }
                             if (FindName("ProgressStatus") is TextBlock statusText)
-                                statusText.Text = !string.IsNullOrWhiteSpace(_currentFile?.FileSize)
-                                    ? $"Downloading bypass file ({_currentFile.FileSize})... {p}%"
-                                    : $"Downloading bypass file... {p}%";
+                                statusText.Text = statusStr;
+                            if (FindName("ProgressDetail") is TextBlock detailText)
+                                detailText.Text = detailStr;
                         });
                     });
 
@@ -706,16 +801,23 @@ namespace SteamPluginManager.Views
                     throw;
                 }
 
-                ShowLoadingState(true, "Extracting bypass file...");
-                UpdateProgressStep(2);
+                ShowControlButtons(false);
+                ShowLoadingState(true, "Extracting bypass file...", "Unpacking archive contents...");
+                UpdateProgressStep(3);
+
+                var progressModal = WindowNavigator.GetProgressModal();
+                if (progressModal != null)
+                {
+                    progressModal.SetProgress(0, 100, true);
+                }
 
                 // 2. Ekstrak file ZIP
                 string extractDir = Path.Combine(Path.GetTempPath(), $"bypass_extract_{Guid.NewGuid()}");
                 Directory.CreateDirectory(extractDir);
-                ZipFile.ExtractToDirectory(tempZip, extractDir);
+                await Task.Run(() => ZipFile.ExtractToDirectory(tempZip, extractDir));
 
-                ShowLoadingState(true, "Checking target folder...");
-                UpdateProgressStep(3);
+                ShowLoadingState(true, "Checking target folder...", "Verifying directory structure...");
+                UpdateProgressStep(4);
 
                 // 3. Cari folder target yang paling sesuai berdasarkan isi ekstrak
                 if (string.IsNullOrEmpty(gameFolder) || !Directory.Exists(gameFolder))
@@ -739,18 +841,29 @@ namespace SteamPluginManager.Views
                     return;
                 }
 
-                ShowLoadingState(true, "Copying bypass files to game folder...");
-                UpdateProgressStep(4);
+                ShowLoadingState(true, "Applying bypass files to game folder...", "Deploying files...");
 
                 // 4. Copy file hasil ekstrak ke target folder
-                foreach (var file in Directory.GetFiles(extractDir, "*", SearchOption.AllDirectories))
+                var allFiles = Directory.GetFiles(extractDir, "*", SearchOption.AllDirectories);
+                int totalFiles = allFiles.Length;
+                int currentFileIndex = 0;
+
+                foreach (var file in allFiles)
                 {
+                    currentFileIndex++;
                     string relPath = Path.GetRelativePath(extractDir, file);
                     string targetPath = Path.Combine(targetFolder, relPath);
                     Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
                     
                     bool fileExists = File.Exists(targetPath);
                     File.Copy(file, targetPath, true);
+
+                    int pct = totalFiles > 0 ? (int)((currentFileIndex / (double)totalFiles) * 100) : 100;
+                    if (progressModal != null)
+                    {
+                        progressModal.SetProgress(pct, 100, false);
+                        progressModal.UpdateStatus($"Copying files ({currentFileIndex}/{totalFiles})", relPath);
+                    }
                     
                     if (fileExists)
                     {
@@ -762,11 +875,18 @@ namespace SteamPluginManager.Views
                     }
                 }
 
-                await Task.Delay(1000);
+                UpdateProgressStep(4, true);
+                if (progressModal != null)
+                {
+                    progressModal.SetProgress(100, 100, false);
+                    progressModal.UpdateStatus("Bypass applied successfully!", "All files deployed to game folder.");
+                }
+
+                await Task.Delay(800);
 
                 Dispatcher.Invoke(() =>
                 {
-                    ShowResultNotification(true, $"✓ Successfully applied bypass to '{_currentFile.Name}'!");
+                    ShowResultNotification(true, $"Successfully applied bypass to '{_currentFile.Name}'!");
                     Logger.Log($"[GameBypassDetailView] ✓ Showing success notification");
                 });
 

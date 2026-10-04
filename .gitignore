@@ -58,6 +58,8 @@ cache/
 data/
 logs/
 *.bak
+Database/
+hubcap_app.js
 
 # Logs and diagnostic output
 *.log

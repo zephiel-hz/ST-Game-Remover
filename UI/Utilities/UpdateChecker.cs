@@ -184,40 +184,7 @@ namespace SteamPluginManager
 
         public static string GetCurrentVersion()
         {
-            try
-            {
-                var assembly = System.Reflection.Assembly.GetEntryAssembly() ?? System.Reflection.Assembly.GetExecutingAssembly();
-
-                var informationalVersionAttribute = assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
-                    .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
-                    .FirstOrDefault();
-                var informationalVersion = informationalVersionAttribute?.InformationalVersion;
-                if (!string.IsNullOrWhiteSpace(informationalVersion))
-                {
-                    return NormalizeVersionString(informationalVersion);
-                }
-
-                var fileVersionAttribute = assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyFileVersionAttribute), false)
-                    .OfType<System.Reflection.AssemblyFileVersionAttribute>()
-                    .FirstOrDefault();
-                var fileVersion = fileVersionAttribute?.Version;
-                if (!string.IsNullOrWhiteSpace(fileVersion))
-                {
-                    return NormalizeVersionString(fileVersion);
-                }
-
-                var version = assembly.GetName().Version;
-                if (version != null)
-                {
-                    return $"{version.Major}.{version.Minor}.{version.Build}";
-                }
-
-                return "0.0.0";
-            }
-            catch
-            {
-                return "0.0.0";
-            }
+            return AppInfo.Version;
         }
 
         /// <summary>

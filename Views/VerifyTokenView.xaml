@@ -4,55 +4,32 @@
              Background="{DynamicResource BackgroundBrush}"
              Foreground="{DynamicResource ForegroundBrush}">
     <UserControl.Resources>
-        <DropShadowEffect x:Key="CardGlow" Color="#FF8A00" BlurRadius="42" ShadowDepth="0" Opacity="0.18"/>
-        <DropShadowEffect x:Key="SoftShadow" Color="#000000" BlurRadius="26" ShadowDepth="8" Opacity="0.28"/>
-
-        <Style x:Key="PremiumButtonStyle" TargetType="Button">
-            <Setter Property="Background">
-                <Setter.Value>
-                    <DynamicResource ResourceKey="AccentBrush"/>
-                </Setter.Value>
-            </Setter>
-            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+        <!-- Modern Premium Button Style -->
+        <Style x:Key="ModernVerifyButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="FontSize" Value="15"/>
-            <Setter Property="Height" Value="54"/>
-            <Setter Property="Margin" Value="0,0,0,18"/>
+            <Setter Property="FontSize" Value="13.5"/>
+            <Setter Property="Height" Value="48"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="border"
                                 Background="{TemplateBinding Background}"
-                                CornerRadius="15"
-                                BorderBrush="{DynamicResource AccentBrush}"
-                                BorderThickness="1"
-                                SnapsToDevicePixels="True"
-                                RenderTransformOrigin="0.5,0.5">
-                            <Border.Effect>
-                                <DropShadowEffect Color="#000000" BlurRadius="18" ShadowDepth="0" Opacity="0.28"/>
-                            </Border.Effect>
-                            <Border.RenderTransform>
-                                <TranslateTransform X="0" Y="0"/>
-                            </Border.RenderTransform>
+                                CornerRadius="12"
+                                SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="border" Property="Background" Value="{DynamicResource HoverBrush}"/>
-                                <Setter TargetName="border" Property="RenderTransform">
-                                    <Setter.Value>
-                                        <TranslateTransform Y="-1"/>
-                                    </Setter.Value>
-                                </Setter>
+                                <Setter TargetName="border" Property="Opacity" Value="0.92"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{DynamicResource PrimaryButtonBrush}"/>
-                                <Setter TargetName="border" Property="RenderTransform">
-                                    <Setter.Value>
-                                        <TranslateTransform Y="1"/>
-                                    </Setter.Value>
-                                </Setter>
+                                <Setter TargetName="border" Property="Opacity" Value="0.82"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border" Property="Opacity" Value="0.55"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -60,42 +37,23 @@
             </Setter>
         </Style>
 
-        <Style x:Key="PremiumTextBoxStyle" TargetType="TextBox">
-            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource InputForegroundBrush}"/>
-            <Setter Property="FontSize" Value="15"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
-            <Setter Property="BorderThickness" Value="1.2"/>
-            <Setter Property="Height" Value="56"/>
-            <Setter Property="Padding" Value="16,0,16,0"/>
-            <Setter Property="TextAlignment" Value="Center"/>
+        <!-- Modern Token Input Style with Left & Right Action clearance -->
+        <Style x:Key="ModernTokenTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontFamily" Value="Consolas, Segoe UI"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Height" Value="50"/>
+            <Setter Property="Padding" Value="40,0,95,0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="CaretBrush" Value="{DynamicResource AccentBrush}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
-                        <Border x:Name="Bd"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="14"
-                                SnapsToDevicePixels="True">
-                            <ScrollViewer x:Name="PART_ContentHost" Margin="0"/>
+                        <Border Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="0" VerticalAlignment="Center"/>
                         </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource HoverBrush}"/>
-                            </Trigger>
-                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
-                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BackgroundBrush}"/>
-                                <Setter TargetName="Bd" Property="Effect">
-                                    <Setter.Value>
-                                        <DropShadowEffect Color="#FF8A00" BlurRadius="22" ShadowDepth="0" Opacity="0.22"/>
-                                    </Setter.Value>
-                                </Setter>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -103,148 +61,268 @@
     </UserControl.Resources>
 
     <Grid>
-        <Grid.Background>
-            <SolidColorBrush Color="#00000000"/>
-        </Grid.Background>
+        <!-- Ambient Glowing Aura Behind Card -->
+        <Canvas HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
+            <Ellipse Width="540" Height="280" Fill="{DynamicResource AccentBrush}" Opacity="0.08"
+                     Canvas.Left="-270" Canvas.Top="-140">
+                <Ellipse.Effect>
+                    <BlurEffect Radius="110"/>
+                </Ellipse.Effect>
+            </Ellipse>
+        </Canvas>
 
-        <Rectangle Width="720" Height="720" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-180,-140,0,0" Opacity="0.24" IsHitTestVisible="False">
-            <Rectangle.Fill>
-                <SolidColorBrush Color="#00000000"/>
-            </Rectangle.Fill>
-        </Rectangle>
+        <!-- Centered Card Container -->
+        <Border HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Width="500"
+                MaxWidth="500"
+                CornerRadius="20"
+                Background="{DynamicResource CardBackgroundBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="1"
+                ClipToBounds="True">
+            <Border.Effect>
+                <DropShadowEffect Color="#000000" BlurRadius="40" ShadowDepth="14" Opacity="0.4"/>
+            </Border.Effect>
 
-        <Border Width="560" Height="400" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,-90" CornerRadius="180" Opacity="0.08" Background="{DynamicResource AccentBrush}" IsHitTestVisible="False"/>
+            <Grid>
+                <!-- Top Accent Line -->
+                <Border Height="3" Background="{DynamicResource AccentBrush}" VerticalAlignment="Top"/>
 
-        <Path Data="M0,0 L320,0 L520,220" Stroke="{DynamicResource BorderBrush}" StrokeThickness="1" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,80,64,0" Opacity="0.4" IsHitTestVisible="False"/>
-        <Path Data="M120,0 L0,220" Stroke="{DynamicResource AccentBrush}" StrokeThickness="1" Opacity="0.15" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="90,70,0,0" IsHitTestVisible="False"/>
-
-        <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0">
-            <Border Width="560"
-                    MaxWidth="560"
-                    Padding="42"
-                    CornerRadius="30"
-                    BorderBrush="{DynamicResource BorderBrush}"
-                    BorderThickness="1"
-                    Effect="{StaticResource CardGlow}">
-                <Border.RenderTransform>
-                    <TranslateTransform X="0"/>
-                </Border.RenderTransform>
-                <Border.Background>
-                    <SolidColorBrush Color="#00000000"/>
-                </Border.Background>
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <Border Grid.Row="0"
-                            Width="92"
-                            Height="92"
-                            CornerRadius="46"
+                <StackPanel Margin="36,32,36,28">
+                    <!-- Brand Avatar with Glowing Aura -->
+                    <Border Width="68"
+                            Height="68"
+                            CornerRadius="20"
                             HorizontalAlignment="Center"
-                            Margin="0,0,0,24"
-                            Background="{DynamicResource InputBackgroundBrush}"
-                            BorderBrush="{DynamicResource AccentBrush}"
-                            BorderThickness="1.2">
+                            Margin="0,0,0,16"
+                            Background="{DynamicResource ButtonBackgroundBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="1.5">
                         <Border.Effect>
-                            <DropShadowEffect Color="#FF8A00" BlurRadius="24" ShadowDepth="0" Opacity="0.22"/>
+                            <DropShadowEffect Color="#000000" BlurRadius="12" ShadowDepth="4" Opacity="0.25"/>
                         </Border.Effect>
-                        <Image x:Name="VerifyLogoImage" Source="/Config/SGR.ico" Width="58" Height="58" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        <Image x:Name="VerifyLogoImage" Source="/Config/SGR.ico" Width="36" Height="36" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </Border>
 
-                    <StackPanel Grid.Row="1" HorizontalAlignment="Center" Margin="0,0,0,18">
-                        <TextBlock FontSize="12"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource AccentBrush}"
-                                   HorizontalAlignment="Center"
-                                   Text="SECURE ACCESS"
-                                   Margin="0,0,0,8"/>
-                        <TextBlock FontSize="30"
-                                   FontWeight="Bold"
-                                   Foreground="{DynamicResource ForegroundBrush}"
-                                   HorizontalAlignment="Center">
-                            <Run Text="VERIFY YOUR "/>
-                            <Run Text="TOKEN" Foreground="{DynamicResource AccentBrush}"/>
+                    <!-- Header Typography & Security Badge -->
+                    <StackPanel HorizontalAlignment="Center" Margin="0,0,0,12">
+                        <Border Background="{DynamicResource InputBackgroundBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="10,3"
+                                Margin="0,0,0,10"
+                                HorizontalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="&#xE72E;" FontFamily="Segoe MDL2 Assets" FontSize="10" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                <TextBlock FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Text="DEVICE AUTHORIZATION"/>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock FontSize="22" FontWeight="Bold" Foreground="{DynamicResource ForegroundBrush}" HorizontalAlignment="Center">
+                            <Run Text="Verify Your "/>
+                            <Run Text="Token" Foreground="{DynamicResource AccentBrush}"/>
                         </TextBlock>
                     </StackPanel>
 
-                    <TextBlock Grid.Row="2"
-                               Text="Paste the token you received from the token panel to continue securely."
-                               FontSize="14"
+                    <!-- Subtitle -->
+                    <TextBlock Text="Enter your device authorization token below to unlock full access to game manifests and library features."
+                               FontSize="12"
                                Foreground="{DynamicResource MutedForegroundBrush}"
                                TextAlignment="Center"
                                TextWrapping="Wrap"
-                               Margin="0,0,0,28"
-                               LineHeight="22"/>
+                               Margin="0,0,0,14"
+                               LineHeight="17"/>
 
-                    <TextBox x:Name="TokenInput"
-                             Grid.Row="3"
-                             Style="{StaticResource PremiumTextBoxStyle}"
-                             Margin="0,0,0,18"/>
+                    <!-- Device ID Chip -->
+                    <Border Background="{DynamicResource ButtonBackgroundBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="10,5"
+                            HorizontalAlignment="Center"
+                            Margin="0,0,0,16">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="&#xE770;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock x:Name="DeviceIdBadgeText" Text="Hardware ID: Detecting..." FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource MutedForegroundBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
 
+                    <!-- Token Input Box with Left Icon, Watermark & Right Actions -->
+                    <Border x:Name="TokenInputBorder"
+                            Background="{DynamicResource InputBackgroundBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="12"
+                            Height="50"
+                            Margin="0,0,0,14">
+                        <Grid>
+                            <!-- Left Key Icon -->
+                            <TextBlock Text="&#xE8D7;"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="14"
+                                       Foreground="{DynamicResource AccentBrush}"
+                                       VerticalAlignment="Center"
+                                       Margin="14,0,0,0"
+                                       HorizontalAlignment="Left"
+                                       IsHitTestVisible="False"/>
+
+                            <!-- Watermark / Placeholder -->
+                            <TextBlock Text="Paste your access token here..."
+                                       Foreground="{DynamicResource MutedForegroundBrush}"
+                                       FontSize="12.5"
+                                       Margin="40,0,95,0"
+                                       VerticalAlignment="Center"
+                                       IsHitTestVisible="False">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=TokenInput}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Text, ElementName=TokenInput}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+
+                            <!-- Actual TextBox -->
+                            <TextBox x:Name="TokenInput" Style="{StaticResource ModernTokenTextBoxStyle}"/>
+
+                            <!-- Right Actions (Clear & Paste) -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0">
+                                <!-- Clear Button -->
+                                <Button Click="ClearButton_Click"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Cursor="Hand"
+                                        Padding="6,4"
+                                        ToolTip="Clear token input"
+                                        Foreground="{DynamicResource MutedForegroundBrush}">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Text, ElementName=TokenInput}" Value="">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Text, ElementName=TokenInput}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                    <TextBlock Text="✕" FontSize="11" FontWeight="Bold"/>
+                                </Button>
+
+                                <!-- Quick Paste Button -->
+                                <Button Click="PasteButton_Click"
+                                        Background="{DynamicResource ButtonBackgroundBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        BorderThickness="1"
+                                        Cursor="Hand"
+                                        Padding="8,5"
+                                        Margin="2,0,0,0"
+                                        ToolTip="Paste token from clipboard">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="7" Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE77F;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBlock Text="Paste" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Verify Action Button -->
                     <Button x:Name="VerifyButton"
-                            Grid.Row="4"
                             Click="VerifyButton_Click"
-                            Style="{StaticResource PremiumButtonStyle}"
-                            Margin="0,0,0,18">
+                            Style="{StaticResource ModernVerifyButtonStyle}"
+                            Margin="0,0,0,12">
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                            <TextBlock Text="✓"
-                                       FontSize="16"
-                                       FontWeight="Bold"
+                            <TextBlock Text="&#xE73E;"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="13"
                                        Margin="0,0,8,0"
                                        VerticalAlignment="Center"/>
-                            <TextBlock Text="Verify Token" VerticalAlignment="Center"/>
+                            <TextBlock Text="Verify &amp; Activate Device" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
 
+                    <!-- Animated Loading State -->
                     <Grid x:Name="LoadingGrid"
-                          Grid.Row="5"
                           Visibility="Collapsed"
                           HorizontalAlignment="Center"
-                          Margin="0,0,0,12">
+                          Margin="0,0,0,10">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <Ellipse Grid.Column="0" Width="18" Height="18" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" Margin="0,0,8,0"/>
+                        <Canvas Grid.Column="0" Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                            <Canvas.RenderTransform>
+                                <RotateTransform x:Name="VerifySpinnerRotate" Angle="0"/>
+                            </Canvas.RenderTransform>
+                            <Ellipse Width="16" Height="16" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2.5" StrokeDashArray="28 100"/>
+                        </Canvas>
                         <TextBlock x:Name="LoadingText"
                                    Grid.Column="1"
                                    VerticalAlignment="Center"
-                                   Foreground="{DynamicResource MutedForegroundBrush}"
-                                   FontSize="12"/>
+                                   Foreground="{DynamicResource AccentBrush}"
+                                   FontWeight="SemiBold"
+                                   FontSize="11.5"/>
                     </Grid>
 
+                    <!-- Status / Error / Success Message -->
                     <TextBlock x:Name="StatusMessage"
-                               Grid.Row="6"
-                               FontSize="12"
+                               FontSize="11.5"
+                               FontWeight="SemiBold"
                                TextWrapping="Wrap"
-                               Foreground="{DynamicResource MutedForegroundBrush}"
-                               Margin="0,0,0,16"
+                               Foreground="{DynamicResource DangerButtonBrush}"
+                               Margin="0,0,0,12"
                                TextAlignment="Center"/>
 
-                    <Border Grid.Row="7"
-                            Margin="0,8,0,0"
-                            Padding="0,16,0,0"
+                    <!-- Footer Link -->
+                    <Border Margin="0,4,0,0"
+                            Padding="0,14,0,0"
                             BorderBrush="{DynamicResource BorderBrush}"
                             BorderThickness="0,1,0,0">
                         <TextBlock HorizontalAlignment="Center"
-                                   FontSize="13"
+                                   FontSize="12"
                                    Foreground="{DynamicResource MutedForegroundBrush}">
-                            <Run Text="Don't have a token? "/>
-                            <Hyperlink Click="OnClickHere" Foreground="{DynamicResource AccentBrush}" TextDecorations="None">
-                                <Run Text="Click here"/>
+                            <Run Text="Don't have a token yet? "/>
+                            <Hyperlink Click="OnClickHere" Foreground="{DynamicResource AccentBrush}" TextDecorations="None" Cursor="Hand">
+                                <Run Text="Get a token here →" FontWeight="SemiBold"/>
                             </Hyperlink>
                         </TextBlock>
                     </Border>
-                </Grid>
-            </Border>
-        </Grid>
+                </StackPanel>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>

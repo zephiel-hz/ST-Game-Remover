@@ -67,19 +67,10 @@ namespace SteamPluginManager
         {
             try
             {
-                var version = Assembly.GetExecutingAssembly().GetName().Version;
-                if (version != null)
-                {
-                    VersionText.Text = $"v{version.Major}.{version.Minor}.{version.Build}";
-                }
-                else
-                {
-                    VersionText.Text = "v2.2.2";
-                }
+                VersionText.Text = AppInfo.FormattedVersion;
             }
             catch
             {
-                VersionText.Text = "v2.2.2";
             }
         }
         

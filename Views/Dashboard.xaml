@@ -222,7 +222,7 @@
                         <StackPanel HorizontalAlignment="Center" Width="280">
                             <TextBlock FontSize="48" TextAlignment="Center" Foreground="{DynamicResource AccentBrush}" FontWeight="Bold" Margin="0,0,0,10">🔄</TextBlock>
                             <TextBlock Text="Restore Backup" FontSize="14" FontWeight="SemiBold" TextAlignment="Center" Margin="0,0,0,5"/>
-                            <TextBlock Text="Restore games from backup .spmb files" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" TextAlignment="Center" TextWrapping="Wrap"/>
+                            <TextBlock Text="Restore games from backup .hzbak files" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" TextAlignment="Center" TextWrapping="Wrap"/>
                             <TextBlock Text="Recover previously removed games safely" FontSize="10" Foreground="{DynamicResource MutedForegroundBrush}" TextAlignment="Center" TextWrapping="Wrap" Margin="0,4,0,0" Opacity="0.8"/>
                         </StackPanel>
                     </Button>

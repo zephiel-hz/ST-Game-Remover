@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0103 // The name does not exist
+#pragma warning disable CS0103 // The name does not exist
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -151,36 +151,7 @@ namespace SteamPluginManager
         // Method to get saved language preference or detect Windows language
         private string GetLanguagePreference()
         {
-            try
-            {
-                // First, try to get saved language preference
-                var savedLanguage = GetSavedLanguagePreference();
-                if (!string.IsNullOrEmpty(savedLanguage))
-                {
-                    Log($"Using saved language preference: {savedLanguage}");
-                    return savedLanguage;
-                }
-                
-                // If no saved preference, detect Windows language
-                var culture = System.Globalization.CultureInfo.CurrentCulture;
-                
-                // Check if the language is Chinese (Simplified or Traditional)
-                if (culture.Name.StartsWith("zh", StringComparison.OrdinalIgnoreCase))
-                {
-                    Log($"Detected Windows language: Chinese ({culture.Name})");
-                    return "zh"; // Chinese
-                }
-                
-                // Default to English for all other languages
-                Log($"Detected Windows language: English ({culture.Name})");
-                return "en"; // English
-            }
-            catch (Exception ex)
-            {
-                // Log error and default to English
-                try { SteamPluginManager.Logger.Log($"Failed to get language preference: {ex.Message}"); } catch { }
-                return "en"; // Fallback to English
-            }
+            return "en"; // English only
         }
 
         // Method to save language preference
@@ -193,9 +164,9 @@ namespace SteamPluginManager
                 Directory.CreateDirectory(appFolder);
                 
                 var configFile = System.IO.Path.Combine(appFolder, "language.txt");
-                File.WriteAllText(configFile, language);
+                File.WriteAllText(configFile, "en");
                 
-                Log($"Language preference saved: {language}");
+                Log("Language preference saved: en");
             }
             catch (Exception ex)
             {
@@ -206,27 +177,7 @@ namespace SteamPluginManager
         // Method to get saved language preference
         private string GetSavedLanguagePreference()
         {
-            try
-            {
-                var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                var appFolder = System.IO.Path.Combine(appDataPath, "SteamPluginManager");
-                var configFile = System.IO.Path.Combine(appFolder, "language.txt");
-                
-                if (File.Exists(configFile))
-                {
-                    var savedLanguage = File.ReadAllText(configFile).Trim();
-                    if (savedLanguage == "en" || savedLanguage == "zh")
-                    {
-                        return savedLanguage;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                try { SteamPluginManager.Logger.Log($"Failed to read language preference: {ex.Message}"); } catch { }
-            }
-            
-            return null; // No saved preference
+            return "en";
         }
 
         // Method to set ComboBox language selection
@@ -454,7 +405,7 @@ namespace SteamPluginManager
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to initialize MainWindow: {ex.Message}", GetLocalizedString("Dialog.Error"), MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Failed to initialize MainWindow: {ex.Message}", GetLocalizedString("Dialog.Error"), MessageBoxButton.OK, MessageBoxImage.Error);
                 throw;
             }
         }
@@ -922,7 +873,7 @@ namespace SteamPluginManager
             try
             {
                 var dictionaries = Application.Current.Resources.MergedDictionaries;
-                var stringsUri = new Uri(language == "zh" ? "Strings/zh.xaml" : "Strings/en.xaml", UriKind.Relative);
+                var stringsUri = new Uri("Strings/en.xaml", UriKind.Relative);
                 if (dictionaries.Count >= 2 && dictionaries[1].Source != null && dictionaries[1].Source.OriginalString.StartsWith("Strings/"))
                 {
                     dictionaries[1] = new ResourceDictionary { Source = stringsUri };
@@ -1016,23 +967,13 @@ namespace SteamPluginManager
             try
             {
                 var versionText = FindName("VersionText") as TextBlock;
-                if (versionText == null) return;
-
-                var version = Assembly.GetExecutingAssembly().GetName().Version;
-                if (version != null)
+                if (versionText != null)
                 {
-                    versionText.Text = $"{version.Major}.{version.Minor}.{version.Build}";
-                }
-                else
-                {
-                    versionText.Text = "2.2.2";
+                    versionText.Text = AppInfo.Version;
                 }
             }
             catch
             {
-                var versionText = FindName("VersionText") as TextBlock;
-                if (versionText != null)
-                    versionText.Text = "2.2.2";
             }
         }
 
@@ -1457,40 +1398,35 @@ namespace SteamPluginManager
         {
             try
             {
-                if (sender is ComboBox combo && combo.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+                _currentLanguage = "en";
+                SaveLanguagePreference("en");
+                ApplyLanguageResources("en");
+                
+                // Refresh display from cache first, then fetch missing
+                foreach (var g in Games)
                 {
-                    _currentLanguage = tag == "zh" ? "zh" : "en";
-                    
-                    // Save language preference
-                    SaveLanguagePreference(_currentLanguage);
-                    
-                    ApplyLanguageResources(_currentLanguage);
-                    // Refresh display from cache first, then fetch missing
-                    foreach (var g in Games)
-                    {
-                        string? cachedName = CacheManager.GetGameName(g.AppId, _currentLanguage);
-                        string? cachedGenre = CacheManager.GetGameGenre(g.AppId, _currentLanguage);
-                        if (!string.IsNullOrWhiteSpace(cachedName)) g.Name = cachedName!; else g.Name = $"Game {g.AppId}";
-                        if (!string.IsNullOrWhiteSpace(cachedGenre)) g.Genre = cachedGenre!; else g.Genre = "Unknown";
-                        // Update installation status
-                        string? installPath = GetGameInstallationPath(g.AppId);
-                        g.IsInstalled = installPath != null;
-                        g.InstallationPath = installPath;
-                    }
-                    ApplyFilterAndSort();
-                    
-                    // Reload details if a game is currently selected
-                    if (_selectedGameForDetails != null)
-                    {
-                        // Update installation status for selected game
-                        string? installPath = GetGameInstallationPath(_selectedGameForDetails.AppId);
-                        _selectedGameForDetails.IsInstalled = installPath != null;
-                        _selectedGameForDetails.InstallationPath = installPath;
-                        _ = LoadGameDetailsAsync(_selectedGameForDetails);
-                    }
-                    
-                    _ = UpdateGameNamesAsync();
+                    string? cachedName = CacheManager.GetGameName(g.AppId, _currentLanguage);
+                    string? cachedGenre = CacheManager.GetGameGenre(g.AppId, _currentLanguage);
+                    if (!string.IsNullOrWhiteSpace(cachedName)) g.Name = cachedName!; else g.Name = $"Game {g.AppId}";
+                    if (!string.IsNullOrWhiteSpace(cachedGenre)) g.Genre = cachedGenre!; else g.Genre = "Unknown";
+                    // Update installation status
+                    string? installPath = GetGameInstallationPath(g.AppId);
+                    g.IsInstalled = installPath != null;
+                    g.InstallationPath = installPath;
                 }
+                ApplyFilterAndSort();
+                
+                // Reload details if a game is currently selected
+                if (_selectedGameForDetails != null)
+                {
+                    // Update installation status for selected game
+                    string? installPath = GetGameInstallationPath(_selectedGameForDetails.AppId);
+                    _selectedGameForDetails.IsInstalled = installPath != null;
+                    _selectedGameForDetails.InstallationPath = installPath;
+                    _ = LoadGameDetailsAsync(_selectedGameForDetails);
+                }
+                
+                _ = UpdateGameNamesAsync();
             }
             catch (Exception ex)
             {
@@ -1935,7 +1871,7 @@ namespace SteamPluginManager
                 var selected = Games.Where(g => g.IsSelected).ToList();
                 if (selected.Count == 0)
                 {
-                    MessageBox.Show(GetLocalizedString("Dialog.NoGameSelected"), GetLocalizedString("Dialog.Warning"), MessageBoxButton.OK, MessageBoxImage.Warning);
+                    ModernMessageBox.Show(GetLocalizedString("Dialog.NoGameSelected"), GetLocalizedString("Dialog.Warning"), MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
@@ -2024,7 +1960,7 @@ namespace SteamPluginManager
             var selected = Games.Where(g => g.IsSelected).ToList();
             if (selected.Count == 0)
             {
-                MessageBox.Show(GetLocalizedString("Dialog.NoGameSelected"), GetLocalizedString("Dialog.Warning"), MessageBoxButton.OK, MessageBoxImage.Warning);
+                ModernMessageBox.Show(GetLocalizedString("Dialog.NoGameSelected"), GetLocalizedString("Dialog.Warning"), MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -2137,7 +2073,7 @@ namespace SteamPluginManager
             catch (Exception ex)
             {
                 Log($"Delete operation error: {ex.Message}");
-                MessageBox.Show($"Delete operation failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Delete operation failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -2146,15 +2082,15 @@ namespace SteamPluginManager
             var selected = Games.Where(g => g.IsSelected).ToList();
             if (selected.Count == 0)
             {
-                MessageBox.Show(GetLocalizedString("Dialog.NoGameSelected"), GetLocalizedString("Dialog.Warning"), MessageBoxButton.OK, MessageBoxImage.Warning);
+                ModernMessageBox.Show(GetLocalizedString("Dialog.NoGameSelected"), GetLocalizedString("Dialog.Warning"), MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             var saveFileDialog = new SaveFileDialog
             {
-                Filter = "SPM Backup (*.spmb)|*.spmb",
+                Filter = "HZ Backup (*.hzbak)|*.hzbak|SPM Backup (*.spmb)|*.spmb|All Files (*.*)|*.*",
                 Title = GetLocalizedString("Dialog.BackupTitle"),
-                FileName = $"SteamPluginBackup_{DateTime.Now:yyyyMMdd}.spmb"
+                FileName = $"HZBackup_{DateTime.Now:yyyyMMdd}.hzbak"
             };
 
             if (saveFileDialog.ShowDialog() != true) return;
@@ -2200,7 +2136,7 @@ namespace SteamPluginManager
         {
             var openFileDialog = new OpenFileDialog
             {
-                Filter = "SPM Backup (*.spmb)|*.spmb",
+                Filter = "HZ Backup (*.hzbak)|*.hzbak|SPM Backup (*.spmb)|*.spmb|All Files (*.*)|*.*",
                 Title = GetLocalizedString("Dialog.RestoreTitle")
             };
 
@@ -2374,7 +2310,7 @@ namespace SteamPluginManager
                 Log(GetLocalizedString("Log.WelcomeReset"));
                 
                 // Show welcome screen immediately for testing
-                var result = MessageBox.Show(GetLocalizedString("Dialog.WelcomeResetConfirm"), 
+                var result = ModernMessageBox.Show(GetLocalizedString("Dialog.WelcomeResetConfirm"), 
                     GetLocalizedString("Dialog.ResetComplete"), MessageBoxButton.YesNo, MessageBoxImage.Question);
                 
                 if (result == MessageBoxResult.Yes)
@@ -3175,7 +3111,7 @@ namespace SteamPluginManager
                 catch (Exception ex)
                 {
                     Log($"Error accessing dropped files: {ex.Message}");
-                    MessageBox.Show($"Failed to access dropped files: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ModernMessageBox.Show($"Failed to access dropped files: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
@@ -3184,7 +3120,7 @@ namespace SteamPluginManager
                 // Check if Steam path is valid
                 if (string.IsNullOrWhiteSpace(steamPath) || !Directory.Exists(steamPath))
                 {
-                    MessageBox.Show("Steam path not found. Please check your Steam installation.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ModernMessageBox.Show("Steam path not found. Please check your Steam installation.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     Log("Error: Steam path is invalid or not set.");
                     return;
                 }
@@ -3209,7 +3145,7 @@ namespace SteamPluginManager
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Failed to create required directories: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ModernMessageBox.Show($"Failed to create required directories: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     Log($"Error creating directories: {ex.Message}");
                     return;
                 }
@@ -3268,7 +3204,7 @@ namespace SteamPluginManager
                     if (manifestCount > 0) summary += $"  • {manifestCount} Manifest file(s)";
                     if (failedCount > 0) summary += $"\n\nFailed to import: {failedCount} file(s)";
                     
-                    MessageBox.Show(summary, "Import Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ModernMessageBox.Show(summary, "Import Complete", MessageBoxButton.OK, MessageBoxImage.Information);
                     Log(GetLocalizedString("Log.DragDropComplete", luaCount, manifestCount));
                     
                     // Refresh game list
@@ -3276,17 +3212,17 @@ namespace SteamPluginManager
                 }
                 else if (failedCount > 0)
                 {
-                    MessageBox.Show($"Failed to import {failedCount} file(s). Check log for details.", "Import Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    ModernMessageBox.Show($"Failed to import {failedCount} file(s). Check log for details.", "Import Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
                 else
                 {
-                    MessageBox.Show("No .lua or .manifest files were found in the dropped items.", "No Valid Files", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ModernMessageBox.Show("No .lua or .manifest files were found in the dropped items.", "No Valid Files", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             }
             catch (Exception ex)
             {
                 Log($"Error in RootGrid_Drop: {ex.Message}\n{ex.StackTrace}");
-                MessageBox.Show($"An error occurred during drag and drop: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"An error occurred during drag and drop: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -3392,7 +3328,7 @@ namespace SteamPluginManager
                 }
                 else
                 {
-                    MessageBox.Show(
+                    ModernMessageBox.Show(
                         $"Failed to download and install update:\n{message}",
                         "Update Failed",
                         MessageBoxButton.OK,
@@ -3402,7 +3338,7 @@ namespace SteamPluginManager
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error during update: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Error during update: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -3415,17 +3351,8 @@ namespace SteamPluginManager
 
                 if (updateInfo.HasUpdate)
                 {
-                    var dialog = new StyledMessageDialog(
-                        "Update Available",
-                        $"New Version Available!\n\nCurrent: {updateInfo.CurrentVersion}\nLatest: {updateInfo.LatestVersion}\n\n{updateInfo.ReleaseNotes}\n\nWould you like to download and install the update now?",
-                        showCancel: true
-                    );
-                    dialog.Owner = this;
-                    dialog.PrimaryButton.Content = "Download";
-                    dialog.SecondaryButton.Content = "Cancel";
-                    var result = dialog.ShowDialog();
-
-                    if (result == true && !string.IsNullOrEmpty(updateInfo.DownloadUrl))
+                    bool shouldUpdate = UpdateAvailableDialog.ShowUpdate(this, updateInfo);
+                    if (shouldUpdate && !string.IsNullOrEmpty(updateInfo.DownloadUrl))
                     {
                         await DownloadAndInstallUpdateAsync(updateInfo.DownloadUrl);
                     }
@@ -3484,17 +3411,8 @@ namespace SteamPluginManager
                             // Show notification about available update
                             Application.Current.Dispatcher.Invoke(() =>
                             {
-                                var dialog = new StyledMessageDialog(
-                                    "Update Available",
-                                    $"New Version Available!\n\nCurrent: {updateInfo.CurrentVersion}\nLatest: {updateInfo.LatestVersion}\n\n{updateInfo.ReleaseNotes}\n\nDownload and install now?",
-                                    showCancel: true
-                                );
-                                dialog.Owner = this;
-                                dialog.PrimaryButton.Content = "Download";
-                                dialog.SecondaryButton.Content = "Cancel";
-                                var result = dialog.ShowDialog();
-
-                                if (result == true && !string.IsNullOrEmpty(updateInfo.DownloadUrl))
+                                bool shouldUpdate = UpdateAvailableDialog.ShowUpdate(this, updateInfo);
+                                if (shouldUpdate && !string.IsNullOrEmpty(updateInfo.DownloadUrl))
                                 {
                                     _ = DownloadAndInstallUpdateAsync(updateInfo.DownloadUrl);
                                 }

@@ -29,15 +29,16 @@ namespace SteamPluginManager.Views
         public string Description { get; set; } = "";
         public string Genre { get; set; } = "";
         public DateTime? CreatedAt { get; set; }
-        private string _thumbnailPath = "";
-        public string ThumbnailPath 
+        private string? _thumbnailPath = null;
+        public string? ThumbnailPath 
         { 
-            get => _thumbnailPath;
+            get => string.IsNullOrWhiteSpace(_thumbnailPath) ? null : _thumbnailPath;
             set
             {
-                if (_thumbnailPath != value)
+                var normalized = string.IsNullOrWhiteSpace(value) ? null : value;
+                if (_thumbnailPath != normalized)
                 {
-                    _thumbnailPath = value;
+                    _thumbnailPath = normalized;
                     PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(ThumbnailPath)));
                 }
             }
@@ -64,6 +65,23 @@ namespace SteamPluginManager.Views
         private static List<OnlineFixFile>? _cachedFiles = null;
         private static DateTime _lastFetchTime = DateTime.MinValue;
         private static readonly TimeSpan _cacheDuration = TimeSpan.FromMinutes(5); // Cache for 5 minutes
+
+        public static OnlineFixView? ActiveInstance { get; private set; }
+
+        public static void InvalidateCache()
+        {
+            _cachedFiles = null;
+            _lastFetchTime = DateTime.MinValue;
+        }
+
+        public async Task ReloadFilesAsync(bool forceRefresh = false)
+        {
+            if (forceRefresh)
+            {
+                InvalidateCache();
+            }
+            await LoadFilesFromSource();
+        }
 
         public ObservableCollection<OnlineFixFile> Files { get; set; }
         private System.ComponentModel.ICollectionView _filesView;
@@ -103,6 +121,7 @@ namespace SteamPluginManager.Views
 
             private async Task<bool> FetchAndCacheSteamThumbnailWithRetry(OnlineFixFile file, int maxRetries = 2)
             {
+                string requestKey = file.AppId?.ToString() ?? file.FileName;
                 for (int attempt = 0; attempt <= maxRetries; attempt++)
                 {
                     try
@@ -117,10 +136,12 @@ namespace SteamPluginManager.Views
                     }
                     catch (Exception _)
                     {
-                        if (attempt == maxRetries) return false;
+                        if (attempt == maxRetries) break;
                         await Task.Delay((int)Math.Pow(2, attempt) * 500);
                     }
                 }
+
+                _thumbnailLoadRequestedKeys.Remove(requestKey);
                 return false;
             }
 
@@ -196,6 +217,45 @@ namespace SteamPluginManager.Views
                             return false;
                         }
                     }
+
+                    // Fallback: Try store page scrape for og:image
+                    try
+                    {
+                        string storeUrl = $"https://store.steampowered.com/app/{file.AppId}";
+                        var resp = await _httpClient.GetAsync(storeUrl);
+                        if (resp.IsSuccessStatusCode)
+                        {
+                            var html = await resp.Content.ReadAsStringAsync();
+                            var m = System.Text.RegularExpressions.Regex.Match(html, "<meta[^>]*property=[\"']og:image[\"'][^>]*content=[\"']([^\"']+)[\"']", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                            if (!m.Success)
+                            {
+                                m = System.Text.RegularExpressions.Regex.Match(html, "<meta[^>]*content=[\"']([^\"']+)[\"'][^>]*property=[\"']og:image[\"']", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                            }
+
+                            if (m.Success && Uri.IsWellFormedUriString(m.Groups[1].Value, UriKind.Absolute))
+                            {
+                                var assetUrl = m.Groups[1].Value;
+                                using var cts2 = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(6));
+                                var assetResp = await _httpClient.GetAsync(assetUrl, cts2.Token);
+                                if (assetResp.IsSuccessStatusCode)
+                                {
+                                    var bytes = await assetResp.Content.ReadAsByteArrayAsync();
+                                    if (bytes != null && bytes.Length > 0)
+                                    {
+                                        Directory.CreateDirectory(Path.GetDirectoryName(cachedPath)!);
+                                        await File.WriteAllBytesAsync(cachedPath, bytes);
+                                        file.ThumbnailPath = new Uri(cachedPath, UriKind.Absolute).ToString();
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore scrape errors
+                    }
+
                     return false;
                 }
                 catch
@@ -224,14 +284,31 @@ namespace SteamPluginManager.Views
                         }
                         if (file != null && thumbnailImage != null)
                         {
-                            file.PropertyChanged += (s, args) =>
+                            if (thumbnailImage.Tag is Tuple<OnlineFixFile, PropertyChangedEventHandler> existingBinding)
+                            {
+                                if (ReferenceEquals(existingBinding.Item1, file))
+                                {
+                                    LoadThumbnailImage(file, thumbnailImage);
+                                    return;
+                                }
+
+                                existingBinding.Item1.PropertyChanged -= existingBinding.Item2;
+                            }
+
+                            PropertyChangedEventHandler thumbnailChangedHandler = (s, args) =>
                             {
                                 if (args.PropertyName == nameof(OnlineFixFile.ThumbnailPath))
                                 {
                                     LoadThumbnailImage(file, thumbnailImage);
                                 }
                             };
-                            if (file.AppId.HasValue && file.AppId > 0 && string.IsNullOrEmpty(file.ThumbnailPath))
+
+                            file.PropertyChanged += thumbnailChangedHandler;
+                            thumbnailImage.Tag = Tuple.Create(file, thumbnailChangedHandler);
+
+                            LoadThumbnailImage(file, thumbnailImage);
+
+                            if (string.IsNullOrEmpty(file.ThumbnailPath) && file.AppId.HasValue && file.AppId.Value > 0)
                             {
                                 string requestKey = file.AppId?.ToString() ?? file.FileName;
                                 if (_thumbnailLoadRequestedKeys.Add(requestKey))
@@ -239,7 +316,6 @@ namespace SteamPluginManager.Views
                                     _ = FetchAndCacheSteamThumbnailWithRetry(file);
                                 }
                             }
-                            LoadThumbnailImage(file, thumbnailImage);
                         }
                     }
                 }
@@ -251,17 +327,17 @@ namespace SteamPluginManager.Views
 
             private void ThumbnailBorder_Loaded(object sender, RoutedEventArgs e)
             {
-                if (sender is Border thumbnailBorder)
+                if (sender is Border thumbnailBorder && thumbnailBorder.ActualWidth > 0 && thumbnailBorder.ActualHeight > 0)
                 {
-                    thumbnailBorder.Clip = new RectangleGeometry(new Rect(0, 0, thumbnailBorder.ActualWidth, thumbnailBorder.ActualHeight), 20, 20);
+                    thumbnailBorder.Clip = new RectangleGeometry(new Rect(0, 0, thumbnailBorder.ActualWidth, thumbnailBorder.ActualHeight), 13, 13);
                 }
             }
 
             private void ThumbnailBorder_SizeChanged(object sender, SizeChangedEventArgs e)
             {
-                if (sender is Border thumbnailBorder)
+                if (sender is Border thumbnailBorder && e.NewSize.Width > 0 && e.NewSize.Height > 0)
                 {
-                    thumbnailBorder.Clip = new RectangleGeometry(new Rect(0, 0, e.NewSize.Width, e.NewSize.Height), 20, 20);
+                    thumbnailBorder.Clip = new RectangleGeometry(new Rect(0, 0, e.NewSize.Width, e.NewSize.Height), 13, 13);
                 }
             }
 
@@ -271,29 +347,43 @@ namespace SteamPluginManager.Views
                 {
                     if (thumbnailImage == null || file == null)
                         return;
-                    
+
+                    if (!thumbnailImage.Dispatcher.CheckAccess())
+                    {
+                        thumbnailImage.Dispatcher.BeginInvoke(new Action(() => LoadThumbnailImage(file, thumbnailImage)));
+                        return;
+                    }
+
                     thumbnailImage.Stretch = Stretch.UniformToFill;
                     thumbnailImage.HorizontalAlignment = HorizontalAlignment.Stretch;
                     thumbnailImage.VerticalAlignment = VerticalAlignment.Stretch;
-                    
-                    if (string.IsNullOrEmpty(file.ThumbnailPath))
-                        return;
 
-                    try
+                    // Clear existing source only when the image is changing to a different path
+                    if (thumbnailImage.Source is System.Windows.Media.Imaging.BitmapImage existingBitmap &&
+                        existingBitmap.UriSource?.OriginalString == file.ThumbnailPath)
                     {
-                        var bitmap = new System.Windows.Media.Imaging.BitmapImage();
-                        bitmap.BeginInit();
-                        bitmap.UriSource = new Uri(file.ThumbnailPath, UriKind.Absolute);
-                        bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                        bitmap.DecodePixelWidth = 220;
-                        bitmap.EndInit();
-                        bitmap.Freeze();
-                        thumbnailImage.Source = bitmap;
+                        return;
                     }
-                    catch (Exception _)
+
+                    thumbnailImage.Source = null;
+
+                    if (!string.IsNullOrEmpty(file.ThumbnailPath))
                     {
-                        // Image loading failed - set to null
-                        thumbnailImage.Source = null;
+                        try
+                        {
+                            var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                            bitmap.BeginInit();
+                            bitmap.UriSource = new Uri(file.ThumbnailPath, UriKind.Absolute);
+                            bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                            bitmap.DecodePixelWidth = 280;
+                            bitmap.EndInit();
+                            bitmap.Freeze();
+                            thumbnailImage.Source = bitmap;
+                        }
+                        catch (Exception)
+                        {
+                            thumbnailImage.Source = null;
+                        }
                     }
                 }
                 catch
@@ -327,6 +417,7 @@ namespace SteamPluginManager.Views
             }
             Files = new ObservableCollection<OnlineFixFile>();
             DataContext = this;
+            ActiveInstance = this;
             _filesView = CollectionViewSource.GetDefaultView(Files);
             _filesView.Filter = FileFilterPredicate;
             Directory.CreateDirectory(_thumbnailCacheFolder);
@@ -405,10 +496,16 @@ namespace SteamPluginManager.Views
             {
                 if (sender is ScrollViewer scrollViewer)
                 {
-                    if (e.VerticalChange == 0)
-                        return;
+                    if (e.VerticalChange != 0)
+                    {
+                        _cachedScrollOffset = scrollViewer.VerticalOffset;
+                        SetupLazyThumbnailLoading();
+                    }
 
-                    _cachedScrollOffset = scrollViewer.VerticalOffset;
+                    if (e.ViewportWidthChange != 0)
+                    {
+                        UpdateCardPanelLayout();
+                    }
                 }
             }
             catch { }
@@ -496,11 +593,11 @@ namespace SteamPluginManager.Views
                 var debugInfo = FindName("DebugInfo") as TextBlock;
                 if (loadingOverlay != null) loadingOverlay.Visibility = Visibility.Visible;
                 if (loadingStatusText != null) loadingStatusText.Text = "Fetching data from database...";
-                if (debugInfo != null) debugInfo.Text = "DEBUG: Fetching data from R2...";
+                if (debugInfo != null) debugInfo.Text = "DEBUG: Fetching data from B2...";
 
 
-                // Ambil file list dari R2 (onlinefix/ folder)
-                var onlineFixFiles = await SteamPluginManager.R2Config.ListFilesAsync("onlinefix/");
+                // Ambil file list dari Backblaze B2 (onlinefix/ folder)
+                var onlineFixFiles = await SteamPluginManager.B2Config.ListFilesAsync("onlinefix/");
 
                 // Ambil metadata dari Supabase
                 var supabaseRecords = await SteamPluginManager.SteamDataUpdater.GetAllRecordsAsync();
@@ -508,24 +605,35 @@ namespace SteamPluginManager.Views
                 Files.Clear();
                 _allFiles.Clear();
 
-                foreach (var r2file in onlineFixFiles)
+                foreach (var b2file in onlineFixFiles)
                 {
-                    string r2FileName = System.IO.Path.GetFileName(r2file.Key);
-                    int? appId = SteamPluginManager.SteamManifestHelper.ExtractAppIdFromFilename(r2FileName);
-                    var meta = supabaseRecords.FirstOrDefault(m => (appId != null && m.AppId == appId) || string.Equals(m.FileName, r2FileName, StringComparison.OrdinalIgnoreCase));
+                    string b2FileName = System.IO.Path.GetFileName(b2file.Key);
+                    int? appId = SteamPluginManager.SteamManifestHelper.ExtractAppIdFromFilename(b2FileName);
+                    var meta = supabaseRecords.FirstOrDefault(m => (appId != null && m.AppId == appId) || string.Equals(m.FileName, b2FileName, StringComparison.OrdinalIgnoreCase));
                     if (meta != null && meta.AppId > 0)
                         appId = meta.AppId;
                     var fixFile = new OnlineFixFile
                     {
-                        FileName = r2file.Key,
-                        FileUrl = r2file.Url,
-                        Name = meta?.Name ?? System.IO.Path.GetFileNameWithoutExtension(r2FileName),
+                        FileName = b2file.Key,
+                        FileUrl = b2file.Url,
+                        Name = meta?.Name ?? System.IO.Path.GetFileNameWithoutExtension(b2FileName),
                         AppId = appId,
                         Id = meta?.Id,
                         Description = meta?.Description ?? string.Empty,
                         Genre = meta?.Genre ?? string.Empty,
-                        FileSize = r2file.Size >= 0 ? FormatFileSize(r2file.Size) : string.Empty
+                        FileSize = b2file.Size >= 0 ? FormatFileSize(b2file.Size) : string.Empty
                     };
+
+                    if (appId.HasValue && appId.Value > 0)
+                    {
+                        string cacheFileName = $"{appId.Value}_header.jpg";
+                        string cachedPath = Path.Combine(_thumbnailCacheFolder, cacheFileName);
+                        if (File.Exists(cachedPath))
+                        {
+                            fixFile.ThumbnailPath = new Uri(cachedPath, UriKind.Absolute).ToString();
+                        }
+                    }
+
                     _allFiles.Add(fixFile);
                 }
 
@@ -613,7 +721,7 @@ namespace SteamPluginManager.Views
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error loading OnlineFixView: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Error loading OnlineFixView: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 var loadingOverlay = FindName("LoadingOverlay") as Grid;
                 if (loadingOverlay != null)
                 {
@@ -627,6 +735,9 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                if (ReferenceEquals(ActiveInstance, this))
+                    ActiveInstance = null;
+
                 // Clean up debounce timer
                 if (_sizeChangeDebounceTimer != null)
                 {
@@ -655,16 +766,21 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                if (e.WidthChanged)
+                {
+                    UpdateCardPanelLayout();
+                }
+
                 // Cancel previous debounce timer
                 if (_sizeChangeDebounceTimer != null)
                 {
                     _sizeChangeDebounceTimer.Stop();
                 }
                 
-                // Create new debounce timer - only update after 250ms of no size changes
+                // Debounce timer for smooth resize
                 _sizeChangeDebounceTimer = new System.Windows.Threading.DispatcherTimer
                 {
-                    Interval = TimeSpan.FromMilliseconds(250)
+                    Interval = TimeSpan.FromMilliseconds(50)
                 };
                 
                 _sizeChangeDebounceTimer.Tick += (s, args) =>
@@ -672,7 +788,6 @@ namespace SteamPluginManager.Views
                     try
                     {
                         _sizeChangeDebounceTimer.Stop();
-                        // Only recalculate layout, don't reload data
                         RecalculateLayout();
                     }
                     catch (Exception ex)
@@ -687,6 +802,14 @@ namespace SteamPluginManager.Views
             {
                 // Log error
             }
+        }
+
+        /// <summary>
+        /// Public method to force layout recalculation when window state changes (e.g. Maximize/Restore)
+        /// </summary>
+        public void RecalculateActiveLayout()
+        {
+            RecalculateLayout();
         }
 
         /// <summary>
@@ -714,6 +837,11 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                if (CardPanel == null && FileCards != null)
+                {
+                    CardPanel = FindVisualChild<WrapPanel>(FileCards);
+                }
+
                 if (CardsScrollViewer == null || CardPanel == null)
                     return;
 
@@ -723,13 +851,16 @@ namespace SteamPluginManager.Views
                 if (availableWidth <= 0)
                     return;
 
-                const double cardGap = 12;
-                int columns = Math.Max(1, (int)((availableWidth + cardGap) / (MIN_CARD_WIDTH + cardGap)));
-                double computedWidth = Math.Floor((availableWidth - columns * cardGap) / columns);
-                if (computedWidth < MIN_CARD_WIDTH)
-                    computedWidth = MIN_CARD_WIDTH;
+                const double cardMarginRight = 14;
+                const double targetCardWidth = 230;
+                const double rightClearance = 36; // Accounts for scrollbar, padding, and drop shadow projection
+
+                double usableWidth = Math.Max(targetCardWidth + cardMarginRight, availableWidth - rightClearance);
+                int columns = Math.Max(1, (int)(usableWidth / (targetCardWidth + cardMarginRight)));
+                double computedWidth = Math.Floor(usableWidth / columns);
 
                 CardPanel.ItemWidth = computedWidth;
+                CardPanel.ItemHeight = 272; // 260 card height + 12 bottom margin
             }
             catch (Exception _)
             {
@@ -799,7 +930,7 @@ namespace SteamPluginManager.Views
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Refresh failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Refresh failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -830,7 +961,7 @@ namespace SteamPluginManager.Views
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error opening file details: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Error opening file details: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -894,6 +1025,7 @@ namespace SteamPluginManager.Views
                 pageIndicator.Visibility = Visibility.Visible;
                 pageIndicator.Text = $"Total: {_allFiles.Count} files";
             }
+            SetupLazyThumbnailLoading();
             // Restore scrolling state once items are displayed
             RestoreScrollPosition();
         }
@@ -928,7 +1060,7 @@ namespace SteamPluginManager.Views
                     {
                         From = 0,
                         To = 360,
-                        Duration = new System.Windows.Duration(System.TimeSpan.FromSeconds(2)),
+                        Duration = new System.Windows.Duration(System.TimeSpan.FromSeconds(1)),
                         RepeatBehavior = RepeatBehavior.Forever
                     };
                     continuousRotate.BeginAnimation(System.Windows.Media.RotateTransform.AngleProperty, animation);

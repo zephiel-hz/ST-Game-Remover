@@ -5,19 +5,19 @@
              Foreground="{DynamicResource ForegroundBrush}">
     <UserControl.Resources>
         <Style x:Key="SectionTitle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontSize" Value="17"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
-            <Setter Property="Margin" Value="0,0,0,16"/>
+            <Setter Property="Margin" Value="0,0,0,14"/>
         </Style>
 
         <Style x:Key="PanelCard" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="24"/>
-            <Setter Property="Padding" Value="24"/>
-            <Setter Property="Margin" Value="0,0,0,22"/>
+            <Setter Property="CornerRadius" Value="16"/>
+            <Setter Property="Padding" Value="20"/>
+            <Setter Property="Margin" Value="0,0,0,18"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
             <Setter Property="UseLayoutRounding" Value="True"/>
         </Style>
@@ -26,7 +26,7 @@
             <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="20"/>
+            <Setter Property="CornerRadius" Value="16"/>
             <Setter Property="Padding" Value="20"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
             <Setter Property="UseLayoutRounding" Value="True"/>
@@ -36,7 +36,7 @@
             <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="22"/>
+            <Setter Property="CornerRadius" Value="14"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
@@ -47,54 +47,146 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+
+        <Style x:Key="SeeMoreButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="12,5"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="btnBorder"
+                                Background="{TemplateBinding Background}" 
+                                CornerRadius="8"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="btnBorder" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                <Setter TargetName="btnBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="btnBorder" Property="Opacity" Value="0.8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <Grid Margin="28" MaxWidth="1260">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0">
+        <Grid Margin="24,20,24,24" MaxWidth="1280">
             <StackPanel>
-                <Grid Margin="0,4,0,0">
+                <!-- Hero Greeting Banner -->
+                <Border Style="{StaticResource PanelCard}" Padding="24,20" Margin="0,0,0,18">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <TextBlock Text="Overview &amp; Statistics" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource ForegroundBrush}"/>
+                            </StackPanel>
+                            <TextBlock Text="Quick access to latest manifests, DRM bypass, and online fix patches." FontSize="12.5" Foreground="{DynamicResource MutedForegroundBrush}"/>
+                        </StackPanel>
+
+                        <!-- Subtle Status Indicator on Right -->
+                        <Border Grid.Column="1" Background="{DynamicResource ButtonBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="12,8" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="8" Height="8" Fill="{DynamicResource SuccessButtonBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="All Services Operational" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Border>
+
+                <!-- Top Metric Stat Cards -->
+                <Grid Margin="0,0,0,18">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
+                    <!-- HZ Manifest Stat Card -->
                     <Border Grid.Column="0" Style="{StaticResource StatCard}" Margin="0,0,12,0">
                         <StackPanel>
-                            <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="{DynamicResource AccentBrush}"/>
-                            <TextBlock Text="HZ Manifest Files" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}" Margin="0,12,0,0"/>
-                            <TextBlock x:Name="HZManifestFileCountText" Text="Loading..." FontSize="28" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,8,0,0"/>
-                            <TextBlock Text="Fresh entries available in the manifest feed." FontSize="12" Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                            <Border Width="42" Height="42" CornerRadius="12" Background="{DynamicResource ButtonBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" HorizontalAlignment="Left">
+                                <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="HZ Manifest Files" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,14,0,2"/>
+                            <TextBlock x:Name="HZManifestFileCountText" Text="Loading..." FontSize="30" FontWeight="Bold" Foreground="{DynamicResource ForegroundBrush}"/>
+                            <TextBlock Text="Fresh entries available in the manifest repository." FontSize="11.5" Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                         </StackPanel>
                     </Border>
 
+                    <!-- Game Bypass Stat Card -->
                     <Border Grid.Column="1" Style="{StaticResource StatCard}" Margin="0,0,12,0">
                         <StackPanel>
-                            <TextBlock Text="&#xE72E;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="{DynamicResource AccentBrush}"/>
-                            <TextBlock Text="Game Bypass Files" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}" Margin="0,12,0,0"/>
-                            <TextBlock x:Name="GameBypassFileCountText" Text="Loading..." FontSize="28" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,8,0,0"/>
-                            <TextBlock Text="Support files ready for straight-through access." FontSize="12" Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                            <Border Width="42" Height="42" CornerRadius="12" Background="{DynamicResource ButtonBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" HorizontalAlignment="Left">
+                                <TextBlock Text="&#xE72E;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="Game Bypass Files" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,14,0,2"/>
+                            <TextBlock x:Name="GameBypassFileCountText" Text="Loading..." FontSize="30" FontWeight="Bold" Foreground="{DynamicResource ForegroundBrush}"/>
+                            <TextBlock Text="Support files ready for straight-through access." FontSize="11.5" Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                         </StackPanel>
                     </Border>
 
+                    <!-- Online Fix Stat Card -->
                     <Border Grid.Column="2" Style="{StaticResource StatCard}">
                         <StackPanel>
-                            <TextBlock Text="&#xE774;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="{DynamicResource AccentBrush}"/>
-                            <TextBlock Text="Online Fix Files" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}" Margin="0,12,0,0"/>
-                            <TextBlock x:Name="OnlineFixFileCountText" Text="Loading..." FontSize="28" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,8,0,0"/>
-                            <TextBlock Text="Ready for multiplayer and online patching support." FontSize="12" Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                            <Border Width="42" Height="42" CornerRadius="12" Background="{DynamicResource ButtonBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" HorizontalAlignment="Left">
+                                <TextBlock Text="&#xE774;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="Online Fix Files" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,14,0,2"/>
+                            <TextBlock x:Name="OnlineFixFileCountText" Text="Loading..." FontSize="30" FontWeight="Bold" Foreground="{DynamicResource ForegroundBrush}"/>
+                            <TextBlock Text="Patches ready for multiplayer &amp; coop support." FontSize="11.5" Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                         </StackPanel>
                     </Border>
                 </Grid>
 
-                <Border Style="{StaticResource PanelCard}" Margin="0,18,0,0">
+                <!-- Newest Manifest Cards Section -->
+                <Border Style="{StaticResource PanelCard}">
                     <StackPanel>
-                        <TextBlock Text="Newest manifest entries" Style="{StaticResource SectionTitle}"/>
+                        <Grid Margin="0,0,0,16">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="&#xE734;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="{DynamicResource AccentBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Newest Manifest Entries" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Button x:Name="SeeMoreManifestsButton"
+                                    Style="{StaticResource SeeMoreButtonStyle}"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Click="SeeMoreManifests_Click">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="See more" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="6,1,0,0" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                        
                         <UniformGrid x:Name="NewestManifestCardsPanel"
                                      Rows="2"
                                      HorizontalAlignment="Stretch"
-                                     Margin="0,6,0,8"
-                                     SnapsToDevicePixels="True" />
-                        <TextBlock x:Name="NewestManifestPlaceholder" Text="Loading newest manifests..." Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,14,0,0" Visibility="Collapsed"/>
+                                     Margin="0,4,0,0"
+                                     SnapsToDevicePixels="True"/>
+                        
+                        <TextBlock x:Name="NewestManifestPlaceholder" 
+                                   Text="Loading newest manifests..." 
+                                   Foreground="{DynamicResource MutedForegroundBrush}" 
+                                   FontSize="13"
+                                   Margin="0,20,0,10" 
+                                   HorizontalAlignment="Center"
+                                   Visibility="Collapsed"/>
                     </StackPanel>
                 </Border>
             </StackPanel>

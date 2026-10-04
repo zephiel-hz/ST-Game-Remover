@@ -22,7 +22,7 @@ using System.Threading.Tasks;
 using System.Management;
 using System.Linq;
 using System.Net.NetworkInformation;
-using System.Windows.Input;
+using SteamPluginManager.Models;
 
 namespace SteamPluginManager.Views
 {
@@ -88,12 +88,38 @@ namespace SteamPluginManager.Views
                 Directory.CreateDirectory(_thumbnailCacheFolder);
                 _isInitialized = true;
                 _ = LoadUserProfileAsync();
-                _ = LoadDashboardStatsAsync();
-                _ = LoadNewestManifestCardsAsync();
             }
+
+            // Always reload newest manifests and stats whenever user visits Dashboard
+            _ = LoadDashboardStatsAsync();
+            _ = LoadNewestManifestCardsAsync();
+
             App.LanguageChanged += LanguageChanged_Handler;
             InitializeSteamCheckTimer();
             _ = CheckForUpdatesOnStartupAsync();
+        }
+
+        /// <summary>
+        /// Refreshes the newest manifest cards and stats on the active DashboardView instance.
+        /// Can be called from any other view (e.g. HZManifestView) when a new manifest is added.
+        /// </summary>
+        public static async Task RefreshNewestManifestsAsync()
+        {
+            if (_currentInstance != null)
+            {
+                await _currentInstance.Dispatcher.InvokeAsync(async () =>
+                {
+                    try
+                    {
+                        await _currentInstance.LoadDashboardStatsAsync();
+                        await _currentInstance.LoadNewestManifestCardsAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log($"[DashboardView] RefreshNewestManifestsAsync error: {ex.Message}");
+                    }
+                });
+            }
         }
 
         private void InitializeDashboardResizeDebounceTimer()
@@ -185,23 +211,16 @@ namespace SteamPluginManager.Views
                     // Hanya tampilkan error popup untuk manual check, tidak untuk auto update
                     if (!isAutoUpdate)
                     {
-                        MessageBox.Show($"Failed to check for updates: {updateInfo.ErrorMessage}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        ModernMessageBox.Show($"Failed to check for updates: {updateInfo.ErrorMessage}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     }
                     return;
                 }
 
                 if (updateInfo.HasUpdate)
                 {
-                    var dialog = new StyledMessageDialog(
-                        "Update Available",
-                        $"New Version Available!\n\nCurrent: {updateInfo.CurrentVersion}\nLatest: {updateInfo.LatestVersion}\n\n{updateInfo.ReleaseNotes}\n\nDownload and install the latest version?",
-                        showCancel: true
-                    );
-                    dialog.Owner = Window.GetWindow(this);
-                    dialog.PrimaryButton.Content = "Download";
-                    dialog.SecondaryButton.Content = "Cancel";
-                    var result = dialog.ShowDialog();
-                    if (result == true && !string.IsNullOrEmpty(updateInfo.DownloadUrl)) await DownloadAndInstallUpdateAsync(updateInfo.DownloadUrl);
+                    bool shouldUpdate = UpdateAvailableDialog.ShowUpdate(Window.GetWindow(this), updateInfo);
+                    if (shouldUpdate && !string.IsNullOrEmpty(updateInfo.DownloadUrl)) 
+                        await DownloadAndInstallUpdateAsync(updateInfo.DownloadUrl);
                 }
                 else if (!isAutoUpdate)
                 {
@@ -217,7 +236,7 @@ namespace SteamPluginManager.Views
                 // Hanya tampilkan error popup untuk manual check, tidak untuk auto update
                 if (!isAutoUpdate)
                 {
-                    MessageBox.Show($"Failed to check for updates: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ModernMessageBox.Show($"Failed to check for updates: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
         }
@@ -247,7 +266,7 @@ namespace SteamPluginManager.Views
 
         private void LanguageChanged_Handler(object? sender, EventArgs e) => RefreshLanguageUI();
 
-        public static async Task OpenProfileEditorAsync()
+        public static async Task OpenProfileEditorAsync(bool isMandatorySetup = false)
         {
             try
             {
@@ -257,8 +276,24 @@ namespace SteamPluginManager.Views
                     return;
                 }
 
-                var ownerWindow = GetProfileEditorOwnerWindow();
-                await ShowProfileEditorDialogInternalAsync(profile, ownerWindow);
+                bool isMandatory = isMandatorySetup || string.IsNullOrWhiteSpace(profile.DisplayName);
+                var mainShell = WindowNavigator.GetMainShell();
+                if (mainShell != null)
+                {
+                    mainShell.GlobalProfileModal.ShowModal(profile, onSaved: () =>
+                    {
+                        if (_currentInstance != null && profile != null)
+                        {
+                            _currentInstance._currentUserProfile = profile;
+                            _currentInstance.UpdateProfileUI();
+                        }
+                    }, isMandatorySetup: isMandatory);
+                }
+                else
+                {
+                    var ownerWindow = GetProfileEditorOwnerWindow();
+                    await ShowProfileEditorDialogInternalAsync(profile, ownerWindow);
+                }
             }
             catch (Exception ex)
             {
@@ -284,7 +319,7 @@ namespace SteamPluginManager.Views
             }
         }
 
-        private static async Task<UserProfile?> LoadUserProfileForEditingAsync()
+        public static async Task<UserProfile?> LoadUserProfileForEditingAsync()
         {
             try
             {
@@ -346,11 +381,16 @@ namespace SteamPluginManager.Views
 
         private void UpdateProfileUI()
         {
-            // Forward profile display name/status to global sidebar
+            // Forward profile display name/status to global sidebar and top header
             try
             {
-                var win = Window.GetWindow(this) as MainShell;
-                win?.GlobalSidebar?.SetProfile(_currentUserProfile?.DisplayName ?? "Set display name", string.IsNullOrWhiteSpace(_currentUserProfile?.DisplayName) ? "Profile loaded, but display name is empty." : string.Empty);
+                var win = Window.GetWindow(this) as MainShell ?? WindowNavigator.GetMainShell();
+                string name = _currentUserProfile?.DisplayName ?? string.Empty;
+                win?.GlobalSidebar?.SetProfile(string.IsNullOrWhiteSpace(name) ? "Set display name" : name, string.IsNullOrWhiteSpace(name) ? "Profile loaded, but display name is empty." : string.Empty);
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    win?.SetHeaderProfile(name);
+                }
             }
             catch { }
         }
@@ -360,8 +400,8 @@ namespace SteamPluginManager.Views
             try
             {
                 var hzManifestCountTask = FetchHZManifestFileCountAsync();
-                var gameBypassCountTask = FetchR2FileCountAsync("gamebypass/");
-                var onlineFixCountTask = FetchR2FileCountAsync("onlinefix/");
+                var gameBypassCountTask = FetchR2FileCountAsync("gamebypass/");  // GameBypass tetap di R2
+                var onlineFixCountTask = FetchB2FileCountAsync("onlinefix/");    // OnlineFix sudah di B2
 
                 await Task.WhenAll(hzManifestCountTask, gameBypassCountTask, onlineFixCountTask);
 
@@ -396,6 +436,20 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"[DashboardView] FetchR2FileCountAsync failed for {folderPrefix}: {ex.Message}");
+                return 0;
+            }
+        }
+
+        private async Task<int> FetchB2FileCountAsync(string folderPrefix)
+        {
+            try
+            {
+                var files = await SteamPluginManager.B2Config.ListFilesAsync(folderPrefix);
+                return files?.Count ?? 0;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[DashboardView] FetchB2FileCountAsync failed for {folderPrefix}: {ex.Message}");
                 return 0;
             }
         }
@@ -440,6 +494,26 @@ namespace SteamPluginManager.Views
                 }
 
                 UpdateProfileUI();
+
+                // Force user to set display name on startup if it has never been set
+                if (string.IsNullOrWhiteSpace(_currentUserProfile.DisplayName))
+                {
+                    var mainShell = WindowNavigator.GetMainShell();
+                    if (mainShell != null)
+                    {
+                        _ = Dispatcher.InvokeAsync(async () =>
+                        {
+                            await Task.Delay(400);
+                            mainShell.GlobalProfileModal.ShowModal(_currentUserProfile, onSaved: () =>
+                            {
+                                if (_currentInstance != null && _currentUserProfile != null)
+                                {
+                                    _currentInstance.UpdateProfileUI();
+                                }
+                            }, isMandatorySetup: true);
+                        });
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -828,9 +902,14 @@ namespace SteamPluginManager.Views
             WindowNavigator.NavigateToHZManifestDetail(manifest, source: "Dashboard");
         }
 
+        private void SeeMoreManifests_Click(object sender, RoutedEventArgs e)
+        {
+            WindowNavigator.NavigateToHZManifestWithSort("DateDesc");
+        }
+
         private void ViewAllManifests_Click(object sender, RoutedEventArgs e)
         {
-            WindowNavigator.NavigateToHZManifest();
+            WindowNavigator.NavigateToHZManifestWithSort("DateDesc");
         }
 
         private static async Task<UserProfile?> QueryUserProfileByDeviceIdAsync(string deviceId)
@@ -865,7 +944,7 @@ namespace SteamPluginManager.Views
             await SaveUserProfileAsync(_currentUserProfile);
         }
 
-        private static async Task SaveUserProfileAsync(UserProfile profile)
+        public static async Task<(bool Success, string? ErrorMessage)> SaveUserProfileAsync(UserProfile profile)
         {
             try
             {
@@ -875,6 +954,7 @@ namespace SteamPluginManager.Views
                     ["device_id"] = profile.DeviceId,
                     ["display_name"] = profile.DisplayName,
                     ["bio"] = profile.Bio,
+                    ["avatar_url"] = profile.AvatarUrl,
                     ["updated_at"] = DateTime.UtcNow.ToString("o")
                 };
 
@@ -899,19 +979,21 @@ namespace SteamPluginManager.Views
                     Logger.Log($"[DashboardView] SaveUserProfileAsync failed - {errorMessage}");
                     Logger.Log($"[DashboardView] Request payload: {JsonSerializer.Serialize(payload)}");
 
+                    string userFriendlyError;
                     if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
                     {
-                        UpdateSidebarProfile(profile.DisplayName, "Device ID already exists. Contact support if this persists.");
+                        userFriendlyError = "Device ID already exists. Contact support if this persists.";
                     }
                     else if (response.StatusCode == System.Net.HttpStatusCode.Forbidden || response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                     {
-                        UpdateSidebarProfile(profile.DisplayName, "Permission denied. API configuration may need updating.");
+                        userFriendlyError = "Permission denied. API configuration may need updating.";
                     }
                     else
                     {
-                        UpdateSidebarProfile(profile.DisplayName, "Failed to save profile.");
+                        userFriendlyError = "Failed to save profile.";
                     }
-                    return;
+                    UpdateSidebarProfile(profile.DisplayName, userFriendlyError);
+                    return (false, userFriendlyError);
                 }
 
                 if (!profile.Id.HasValue)
@@ -925,12 +1007,14 @@ namespace SteamPluginManager.Views
                 }
 
                 UpdateSidebarProfile(profile.DisplayName, string.IsNullOrWhiteSpace(profile.DisplayName) ? "Profile saved, but display name is empty." : string.Empty);
+                return (true, null);
             }
             catch (Exception ex)
             {
                 Logger.Log($"[DashboardView] SaveUserProfileAsync failed: {ex.Message}");
                 Logger.Log($"[DashboardView] Stack trace: {ex.StackTrace}");
                 UpdateSidebarProfile(profile.DisplayName, "Failed to save profile.");
+                return (false, ex.Message);
             }
         }
 
@@ -947,302 +1031,37 @@ namespace SteamPluginManager.Views
             await ShowProfileEditorDialogInternalAsync(_currentUserProfile, Window.GetWindow(this));
         }
 
-        private static async Task ShowProfileEditorDialogInternalAsync(UserProfile profile, Window? ownerWindow)
+        private static Task ShowProfileEditorDialogInternalAsync(UserProfile profile, Window? ownerWindow)
         {
             if (profile == null)
-                return;
+                return Task.CompletedTask;
 
             var window = new Window
             {
                 Title = "Customize Profile",
                 Owner = ownerWindow,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                Width = 420,
-                SizeToContent = SizeToContent.Height,
+                SizeToContent = SizeToContent.WidthAndHeight,
                 ResizeMode = ResizeMode.NoResize,
                 WindowStyle = WindowStyle.None,
                 Background = System.Windows.Media.Brushes.Transparent,
                 AllowsTransparency = true
             };
 
-            var accentBrush = Application.Current.TryFindResource("AccentBrush") as System.Windows.Media.Brush ?? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 138, 0));
-            var foregroundBrush = Application.Current.TryFindResource("ForegroundBrush") as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.White;
-            var mutedBrush = Application.Current.TryFindResource("MutedForegroundBrush") as System.Windows.Media.Brush ?? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(148, 163, 184));
-            var cardBrush = Application.Current.TryFindResource("CardBackgroundBrush") as System.Windows.Media.Brush ?? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(22, 26, 34));
-            var inputBackgroundBrush = Application.Current.TryFindResource("BackgroundBrush") as System.Windows.Media.Brush ?? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 20, 30));
-            var borderBrush = Application.Current.TryFindResource("BorderBrush") as System.Windows.Media.Brush ?? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(44, 50, 64));
-            var secondaryBrush = Application.Current.TryFindResource("SecondaryButtonBrush") as System.Windows.Media.Brush ?? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(36, 42, 54));
-            var hoverBrush = Application.Current.TryFindResource("HoverBrush") as System.Windows.Media.Brush ?? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(33, 39, 54));
-
-            var inputTextBoxStyle = new Style(typeof(TextBox));
-            inputTextBoxStyle.Setters.Add(new Setter(Control.BackgroundProperty, inputBackgroundBrush));
-            inputTextBoxStyle.Setters.Add(new Setter(Control.ForegroundProperty, foregroundBrush));
-            inputTextBoxStyle.Setters.Add(new Setter(Control.BorderBrushProperty, borderBrush));
-            inputTextBoxStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(1)));
-            inputTextBoxStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(12, 10, 12, 10)));
-            inputTextBoxStyle.Setters.Add(new Setter(Control.FontSizeProperty, 13.0));
-            inputTextBoxStyle.Setters.Add(new Setter(Control.FontWeightProperty, FontWeights.Normal));
-            inputTextBoxStyle.Setters.Add(new Setter(TextBox.CaretBrushProperty, accentBrush));
-            inputTextBoxStyle.Setters.Add(new Setter(Control.SnapsToDevicePixelsProperty, true));
-            inputTextBoxStyle.Setters.Add(new Setter(Control.FocusVisualStyleProperty, null));
-
-            var focusTrigger = new Trigger { Property = UIElement.IsKeyboardFocusedProperty, Value = true };
-            focusTrigger.Setters.Add(new Setter(Control.BorderBrushProperty, accentBrush));
-            focusTrigger.Setters.Add(new Setter(Control.BackgroundProperty, new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(18, 24, 35))));
-            focusTrigger.Setters.Add(new Setter(Control.EffectProperty, new DropShadowEffect { Color = System.Windows.Media.Color.FromArgb(96, 255, 138, 0), BlurRadius = 16, ShadowDepth = 0, Opacity = 0.16 }));
-            inputTextBoxStyle.Triggers.Add(focusTrigger);
-
-            var nameTextBox = new TextBox
+            var modal = new CustomizeProfileModalView();
+            modal.ShowModal(profile, onSaved: () =>
             {
-                Text = profile.DisplayName ?? string.Empty,
-                Height = 40,
-                Margin = new Thickness(0, 6, 0, 18),
-                Style = inputTextBoxStyle,
-                VerticalContentAlignment = VerticalAlignment.Center
-            };
-
-            var bioTextBox = new TextBox
-            {
-                Text = profile.Bio ?? string.Empty,
-                Height = 120,
-                AcceptsReturn = true,
-                TextWrapping = TextWrapping.Wrap,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                Style = inputTextBoxStyle,
-                Margin = new Thickness(0, 6, 0, 12)
-            };
-
-            var validationText = new TextBlock
-            {
-                Text = string.Empty,
-                Foreground = System.Windows.Media.Brushes.Tomato,
-                FontSize = 12,
-                Visibility = Visibility.Collapsed,
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 0, 0, 10)
-            };
-
-            var buttonTemplate = new ControlTemplate(typeof(Button));
-            var buttonRoot = new FrameworkElementFactory(typeof(Border), "buttonRoot");
-            buttonRoot.SetValue(Border.CornerRadiusProperty, new CornerRadius(12));
-            buttonRoot.SetBinding(Border.BackgroundProperty, new Binding("Background") { RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent) });
-            buttonRoot.SetBinding(Border.BorderBrushProperty, new Binding("BorderBrush") { RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent) });
-            buttonRoot.SetBinding(Border.BorderThicknessProperty, new Binding("BorderThickness") { RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent) });
-            buttonRoot.SetValue(Border.SnapsToDevicePixelsProperty, true);
-            buttonRoot.SetValue(Border.PaddingProperty, new Thickness(0));
-            buttonRoot.SetValue(Border.HorizontalAlignmentProperty, HorizontalAlignment.Stretch);
-            buttonRoot.SetValue(Border.VerticalAlignmentProperty, VerticalAlignment.Stretch);
-
-            var buttonPanelTemplate = new FrameworkElementFactory(typeof(StackPanel));
-            buttonPanelTemplate.SetValue(StackPanel.OrientationProperty, Orientation.Horizontal);
-            buttonPanelTemplate.SetValue(StackPanel.HorizontalAlignmentProperty, HorizontalAlignment.Center);
-            buttonPanelTemplate.SetValue(StackPanel.VerticalAlignmentProperty, VerticalAlignment.Center);
-            buttonPanelTemplate.SetValue(StackPanel.MarginProperty, new Thickness(14, 0, 14, 0));
-
-            var iconCircle = new FrameworkElementFactory(typeof(Border));
-            iconCircle.SetValue(Border.WidthProperty, 20.0);
-            iconCircle.SetValue(Border.HeightProperty, 20.0);
-            iconCircle.SetValue(Border.CornerRadiusProperty, new CornerRadius(10));
-            iconCircle.SetValue(Border.BackgroundProperty, new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 255, 255, 255)));
-            iconCircle.SetValue(Border.MarginProperty, new Thickness(0, 0, 8, 0));
-            iconCircle.SetValue(Border.VerticalAlignmentProperty, VerticalAlignment.Center);
-            iconCircle.SetValue(Border.HorizontalAlignmentProperty, HorizontalAlignment.Center);
-
-            var iconText = new FrameworkElementFactory(typeof(TextBlock));
-            iconText.SetBinding(TextBlock.TextProperty, new Binding("Tag") { RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent) });
-            iconText.SetBinding(TextBlock.ForegroundProperty, new Binding("Foreground") { RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent) });
-            iconText.SetValue(TextBlock.FontFamilyProperty, new System.Windows.Media.FontFamily("Segoe MDL2 Assets"));
-            iconText.SetValue(TextBlock.FontSizeProperty, 12.0);
-            iconText.SetValue(TextBlock.HorizontalAlignmentProperty, HorizontalAlignment.Center);
-            iconText.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
-            iconCircle.AppendChild(iconText);
-
-            var contentPresenter = new FrameworkElementFactory(typeof(ContentPresenter));
-            contentPresenter.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
-            contentPresenter.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
-            contentPresenter.SetValue(ContentPresenter.MarginProperty, new Thickness(0, 0, 0, 0));
-
-            buttonPanelTemplate.AppendChild(iconCircle);
-            buttonPanelTemplate.AppendChild(contentPresenter);
-            buttonRoot.AppendChild(buttonPanelTemplate);
-            buttonTemplate.VisualTree = buttonRoot;
-
-            var buttonStyle = new Style(typeof(Button));
-            buttonStyle.Setters.Add(new Setter(Control.TemplateProperty, buttonTemplate));
-            buttonStyle.Setters.Add(new Setter(Control.ForegroundProperty, System.Windows.Media.Brushes.White));
-            buttonStyle.Setters.Add(new Setter(Control.FontWeightProperty, FontWeights.SemiBold));
-            buttonStyle.Setters.Add(new Setter(Control.HeightProperty, 40.0));
-            buttonStyle.Setters.Add(new Setter(Control.WidthProperty, Double.NaN));
-            buttonStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(0)));
-            buttonStyle.Setters.Add(new Setter(Control.CursorProperty, Cursors.Hand));
-            buttonStyle.Setters.Add(new Setter(Control.RenderTransformProperty, new ScaleTransform(1.0, 1.0)));
-
-            var hoverTrigger = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
-            hoverTrigger.Setters.Add(new Setter(Control.OpacityProperty, 0.95));
-            hoverTrigger.Setters.Add(new Setter(Control.RenderTransformProperty, new ScaleTransform(1.01, 1.01)));
-            buttonStyle.Triggers.Add(hoverTrigger);
-
-            var pressedTrigger = new Trigger { Property = Button.IsPressedProperty, Value = true };
-            pressedTrigger.Setters.Add(new Setter(Control.OpacityProperty, 0.88));
-            buttonStyle.Triggers.Add(pressedTrigger);
-
-            var saveButtonStyle = new Style(typeof(Button), buttonStyle);
-            saveButtonStyle.Setters.Add(new Setter(Control.BackgroundProperty, accentBrush));
-            saveButtonStyle.Setters.Add(new Setter(Control.BorderBrushProperty, accentBrush));
-            saveButtonStyle.Setters.Add(new Setter(Control.ForegroundProperty, System.Windows.Media.Brushes.White));
-
-            var cancelButtonStyle = new Style(typeof(Button), buttonStyle);
-            cancelButtonStyle.Setters.Add(new Setter(Control.BackgroundProperty, secondaryBrush));
-            cancelButtonStyle.Setters.Add(new Setter(Control.BorderBrushProperty, new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(120, 255, 138, 0))));
-            cancelButtonStyle.Setters.Add(new Setter(Control.ForegroundProperty, foregroundBrush));
-
-            var saveButton = new Button
-            {
-                Content = "Save",
-                Width = 110,
-                Height = 40,
-                Margin = new Thickness(0, 0, 0, 0),
-                Style = saveButtonStyle,
-                Tag = Application.Current.TryFindResource("Icon.Check")
-            };
-
-            var cancelButton = new Button
-            {
-                Content = "Cancel",
-                Width = 110,
-                Height = 40,
-                Margin = new Thickness(0, 0, 12, 0),
-                Style = cancelButtonStyle,
-                Tag = Application.Current.TryFindResource("Icon.Cancel")
-            };
-
-            var buttonPanel = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                Margin = new Thickness(0, 20, 0, 0)
-            };
-            buttonPanel.Children.Add(cancelButton);
-            buttonPanel.Children.Add(saveButton);
-
-            var headerIcon = new Border
-            {
-                Width = 44,
-                Height = 44,
-                CornerRadius = new CornerRadius(14),
-                Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(24, 255, 138, 0)),
-                BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(80, 255, 138, 0)),
-                BorderThickness = new Thickness(1),
-                Child = new TextBlock
-                {
-                    Text = "\uE77B",
-                    FontFamily = new System.Windows.Media.FontFamily("Segoe MDL2 Assets"),
-                    FontSize = 20,
-                    Foreground = accentBrush,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    TextAlignment = TextAlignment.Center
-                }
-            };
-
-            var headerStack = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Margin = new Thickness(0, 0, 0, 22)
-            };
-            headerStack.Children.Add(headerIcon);
-
-            var titleStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(14, 0, 0, 0) };
-            titleStack.Children.Add(new TextBlock
-            {
-                Text = "Customize Profile",
-                FontSize = 18,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = foregroundBrush
-            });
-            titleStack.Children.Add(new TextBlock
-            {
-                Text = "Customize your profile information.",
-                FontSize = 12,
-                Foreground = mutedBrush,
-                Margin = new Thickness(0, 6, 0, 0)
-            });
-            headerStack.Children.Add(titleStack);
-
-            var panel = new StackPanel();
-            panel.Children.Add(headerStack);
-            panel.Children.Add(new TextBlock { Text = "Display Name", FontSize = 12, FontWeight = FontWeights.Medium, Foreground = mutedBrush, Margin = new Thickness(0, 0, 0, 6) });
-            panel.Children.Add(nameTextBox);
-            panel.Children.Add(new TextBlock { Text = "Bio", FontSize = 12, FontWeight = FontWeights.Medium, Foreground = mutedBrush, Margin = new Thickness(0, 0, 0, 6) });
-            panel.Children.Add(bioTextBox);
-            panel.Children.Add(validationText);
-            panel.Children.Add(buttonPanel);
-
-            var border = new Border
-            {
-                Width = 420,
-                Padding = new Thickness(24),
-                CornerRadius = new CornerRadius(18),
-                Background = cardBrush,
-                BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(30, 255, 138, 0)),
-                BorderThickness = new Thickness(1),
-                Effect = new DropShadowEffect { Color = System.Windows.Media.Color.FromArgb(90, 0, 0, 0), BlurRadius = 28, ShadowDepth = 8, Opacity = 0.18 },
-                Child = panel
-            };
-
-            var outer = new Grid
-            {
-                Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(150, 0, 0, 0)),
-                Children = { border }
-            };
-            outer.HorizontalAlignment = HorizontalAlignment.Stretch;
-            outer.VerticalAlignment = VerticalAlignment.Stretch;
-            border.HorizontalAlignment = HorizontalAlignment.Center;
-            border.VerticalAlignment = VerticalAlignment.Center;
-
-            window.Content = outer;
-
-            cancelButton.Click += (_, _) => window.Close();
-            saveButton.Click += async (_, _) =>
-            {
-                if (string.IsNullOrWhiteSpace(nameTextBox.Text))
-                {
-                    validationText.Text = "Display Name tidak boleh kosong.";
-                    validationText.Visibility = Visibility.Visible;
-                    return;
-                }
-
-                validationText.Visibility = Visibility.Collapsed;
-                saveButton.IsEnabled = false;
-                saveButton.Content = "Saving...";
-
-                profile.DisplayName = nameTextBox.Text.Trim();
-                profile.Bio = bioTextBox.Text.Trim();
-
-                await SaveUserProfileAsync(profile);
-
                 if (_currentInstance != null)
                 {
                     _currentInstance._currentUserProfile = profile;
+                    _currentInstance.UpdateProfileUI();
                 }
-
                 window.Close();
-            };
+            });
 
+            window.Content = modal;
             window.ShowDialog();
-        }
-
-        private class UserProfile
-        {
-            public int? Id { get; set; }
-
-            [JsonPropertyName("device_id")]
-            public string DeviceId { get; set; } = string.Empty;
-
-            [JsonPropertyName("display_name")]
-            public string DisplayName { get; set; } = string.Empty;
-
-            public string Bio { get; set; } = string.Empty;
+            return Task.CompletedTask;
         }
 
         private void Library_Click(object sender, RoutedEventArgs e) => WindowNavigator.NavigateToGameLibrary();
@@ -1262,24 +1081,24 @@ namespace SteamPluginManager.Views
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 Logger.Log($"[DashboardView] GameBypass navigation error: {ex.Message}");
             }
         }
 
         private void Restore_Click(object sender, RoutedEventArgs e)
         {
-            var openFileDialog = new OpenFileDialog { Filter = "SPM Backup (*.spmb)|*.spmb|All Files (*.*)|*.*", Title = "Restore Game Backup", Multiselect = false };
+            var openFileDialog = new OpenFileDialog { Filter = "HZ Backup (*.hzbak)|*.hzbak|SPM Backup (*.spmb)|*.spmb|All Files (*.*)|*.*", Title = "Restore Game Backup", Multiselect = false };
             if (openFileDialog.ShowDialog() != true) return;
             try
             {
                 string backupFilePath = openFileDialog.FileName;
-                if (!File.Exists(backupFilePath)) { MessageBox.Show("Selected backup file does not exist.", "Error", MessageBoxButton.OK, MessageBoxImage.Error); return; }
-                var result = MessageBox.Show($"This will restore the backup from:\n{Path.GetFileName(backupFilePath)}\n\nExisting plugin and manifest files will be overwritten.\nContinue?", "Confirm Restore", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (!File.Exists(backupFilePath)) { ModernMessageBox.Show("Selected backup file does not exist.", "Error", MessageBoxButton.OK, MessageBoxImage.Error); return; }
+                var result = ModernMessageBox.Show($"This will restore the backup from:\n{Path.GetFileName(backupFilePath)}\n\nExisting plugin and manifest files will be overwritten.\nContinue?", "Confirm Restore", MessageBoxButton.YesNo, MessageBoxImage.Question);
                 if (result != MessageBoxResult.Yes) return;
                 _ = RestoreBackupAsync(backupFilePath);
             }
-            catch (Exception ex) { MessageBox.Show($"Error opening backup file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error); }
+            catch (Exception ex) { ModernMessageBox.Show($"Error opening backup file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error); }
         }
 
         private void RestartSteam_Click(object sender, RoutedEventArgs e) { if (SteamHelper.IsSteamRunning()) SteamHelper.RestartSteam(); else SteamHelper.LaunchSteam(); }
@@ -1296,7 +1115,7 @@ namespace SteamPluginManager.Views
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to check for updates: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Failed to check for updates: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -1341,12 +1160,12 @@ namespace SteamPluginManager.Views
                 }
                 else
                 {
-                    MessageBox.Show($"Failed to download and install update:\n{message}", "Update Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ModernMessageBox.Show($"Failed to download and install update:\n{message}", "Update Failed", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error during update: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Error during update: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -1358,7 +1177,7 @@ namespace SteamPluginManager.Views
                 var panel = new StackPanel { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
                 var textBlock = new TextBlock { Text = "Restoring backup files...", FontSize = 14, Foreground = Application.Current.Resources["ForegroundBrush"] as System.Windows.Media.Brush, Margin = new Thickness(20) };
                 panel.Children.Add(textBlock); progressWindow.Content = panel; progressWindow.Show();
-                string steamPath = SteamHelper.GetSteamPath(); if (string.IsNullOrEmpty(steamPath)) { progressWindow.Close(); MessageBox.Show("Could not find Steam installation directory.", "Error", MessageBoxButton.OK, MessageBoxImage.Error); return; }
+                string steamPath = SteamHelper.GetSteamPath(); if (string.IsNullOrEmpty(steamPath)) { progressWindow.Close(); ModernMessageBox.Show("Could not find Steam installation directory.", "Error", MessageBoxButton.OK, MessageBoxImage.Error); return; }
                 using (var memoryStream = DecryptStream(backupFilePath))
                 {
                     string stplugInPath = Path.Combine(steamPath, "config", "stplug-in"); string depotCachePath = Path.Combine(steamPath, "depotcache"); string depotCachePathOld = Path.Combine(steamPath, "config", "depotcache"); Directory.CreateDirectory(stplugInPath); Directory.CreateDirectory(depotCachePath); Directory.CreateDirectory(depotCachePathOld);
@@ -1374,10 +1193,10 @@ namespace SteamPluginManager.Views
                     Logger.Log($"[Restore] Extraction complete: {luaFiles} lua files, {manifestFiles} manifest files"); progressWindow.Close();
                     try { Logger.Log("[Restore] Navigating to GameLibrary..."); WindowNavigator.NavigateToGameLibrary(); await Task.Delay(500); if (Window.GetWindow(this) is MainShell mainShell) { Logger.Log("[Restore] Calling RefreshGameLibrary..."); mainShell.RefreshGameLibrary(); Logger.Log("[Restore] RefreshGameLibrary completed"); } }
                     catch (Exception ex) { Logger.Log($"[Restore] Error during navigation: {ex.Message}"); }
-                    MessageBox.Show($"Backup restored successfully!\n\nLua Files: {luaFiles}\nManifest Files: {manifestFiles}\n\nYour game plugins and manifests have been restored.", "Restore Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ModernMessageBox.Show($"Backup restored successfully!\n\nLua Files: {luaFiles}\nManifest Files: {manifestFiles}\n\nYour game plugins and manifests have been restored.", "Restore Complete", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             }
-            catch (Exception ex) { MessageBox.Show($"Failed to restore backup:\n{ex.Message}", "Restore Error", MessageBoxButton.OK, MessageBoxImage.Error); }
+            catch (Exception ex) { ModernMessageBox.Show($"Failed to restore backup:\n{ex.Message}", "Restore Error", MessageBoxButton.OK, MessageBoxImage.Error); }
         }
 
         private MemoryStream DecryptStream(string inputFile)
@@ -1396,17 +1215,38 @@ namespace SteamPluginManager.Views
             memoryStream.Position = 0; return memoryStream;
         }
 
-        private void InitializeSteamCheckTimer() { _steamCheckTimer = new DispatcherTimer(); _steamCheckTimer.Interval = TimeSpan.FromSeconds(10); _steamCheckTimer.Tick += SteamCheckTimer_Tick; _steamCheckTimer.Start(); UpdateSteamStatus(); }
-
-        private void SteamCheckTimer_Tick(object? sender, EventArgs e) => UpdateSteamStatus();
+        private void InitializeSteamCheckTimer()
+        {
+            // Steam status is actively and efficiently monitored by MainShell
+        }
 
         private void UpdateSteamStatus(bool forceUpdate = false)
         {
-            bool isSteamRunning = SteamHelper.IsSteamRunning();
-            if (forceUpdate || _isSteamRunning != isSteamRunning)
+        }
+
+        public static async Task<bool> IsDeviceBlockedAsync(string? deviceId = null)
+        {
+            try
             {
-                _isSteamRunning = isSteamRunning;
-                // Removed dashboard Steam button labels; sidebar shows the current actions now.
+                string id = deviceId ?? GetDeviceId();
+                if (string.IsNullOrWhiteSpace(id) || id == "UNKNOWN") return false;
+
+                var http = SharedHttpClient.Instance;
+                var url = $"{SupabaseConfig.SupabaseUrl}/rest/v1/blocked_devices?device_id=eq.{Uri.EscapeDataString(id)}&select=id";
+                var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Add("apikey", SupabaseConfig.SupabaseKey);
+                request.Headers.Add("Authorization", $"Bearer {SupabaseConfig.SupabaseKey}");
+                request.Headers.Add("Accept", "application/json");
+
+                var response = await http.SendAsync(request);
+                if (!response.IsSuccessStatusCode) return false;
+
+                var content = await response.Content.ReadAsStringAsync();
+                return !string.IsNullOrWhiteSpace(content) && content != "[]";
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -1415,6 +1255,12 @@ namespace SteamPluginManager.Views
             try
             {
                 string deviceId = GetDeviceId();
+                if (await IsDeviceBlockedAsync(deviceId))
+                {
+                    Logger.Log($"[DashboardView] Access denied: Hardware ID '{deviceId}' is permanently blocked.");
+                    return false;
+                }
+
                 var http = SharedHttpClient.Instance;
                 var queryDeviceId = Uri.EscapeDataString(deviceId);
                 var url = $"{SupabaseConfig.SupabaseUrl}/rest/v1/device_tokens?or=(device_id.eq.{queryDeviceId},device_ids.cs.{{{queryDeviceId}}})&select=device_id,device_ids,is_active";
@@ -1473,7 +1319,7 @@ namespace SteamPluginManager.Views
             catch { return string.Empty; }
         }
 
-        private static string GetDeviceId()
+        public static string GetDeviceId()
         {
             try
             {

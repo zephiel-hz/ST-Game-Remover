@@ -42,7 +42,8 @@ namespace SteamPluginManager
             _singleInstanceMutex = new Mutex(true, "Local\\HZLuaManagerSingleInstance", out bool createdNew);
             if (!createdNew)
             {
-                MessageBox.Show("HZ Lua Manager is already running.", "Already Running", MessageBoxButton.OK, MessageBoxImage.Information);
+                try { ApplySavedTheme(); } catch { }
+                ModernMessageBox.Show("HZ Lua Manager is already running.", "Already Running", MessageBoxButton.OK, MessageBoxImage.Information);
                 Shutdown();
                 return;
             }
@@ -109,6 +110,16 @@ namespace SteamPluginManager
         {
             try
             {
+                string deviceId = Views.DashboardView.GetDeviceId();
+                if (!string.IsNullOrWhiteSpace(deviceId) && deviceId != "UNKNOWN")
+                {
+                    Services.API.CommunityChatService.SetUserOfflineAsync(deviceId).Wait(600);
+                }
+            }
+            catch { }
+
+            try
+            {
                 _singleInstanceMutex?.ReleaseMutex();
                 _singleInstanceMutex?.Dispose();
             }
@@ -164,17 +175,6 @@ namespace SteamPluginManager
         {
             try
             {
-                string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                string appFolder = Path.Combine(appDataPath, "SteamPluginManager");
-                string configFile = Path.Combine(appFolder, "language.txt");
-
-                string lang = "en";
-                if (File.Exists(configFile))
-                {
-                    var txt = File.ReadAllText(configFile).Trim();
-                    if (txt == "zh") lang = "zh";
-                }
-
                 var app = Application.Current;
                 ResourceDictionary? existing = null;
                 foreach (var dict in app.Resources.MergedDictionaries)
@@ -186,8 +186,7 @@ namespace SteamPluginManager
                 }
                 if (existing != null) app.Resources.MergedDictionaries.Remove(existing);
 
-                string langFile = lang == "zh" ? "Strings/zh.xaml" : "Strings/en.xaml";
-                var langDict = new ResourceDictionary { Source = new Uri(langFile, UriKind.Relative) };
+                var langDict = new ResourceDictionary { Source = new Uri("Strings/en.xaml", UriKind.Relative) };
                 app.Resources.MergedDictionaries.Add(langDict);
             }
             catch (Exception ex)

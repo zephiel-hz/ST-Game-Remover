@@ -17,6 +17,7 @@ namespace SteamPluginManager.Views
         public SplashWindow()
         {
             InitializeComponent();
+            SplashVersionText.Text = $"{AppInfo.FormattedVersion} • Ready to Launch";
             var icon = new BitmapImage();
             icon.BeginInit();
             icon.UriSource = new Uri(App.GetThemeIconPath(), UriKind.Absolute);

@@ -3,26 +3,24 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Message" SizeToContent="WidthAndHeight" MinWidth="420" MinHeight="160" MaxWidth="900" MaxHeight="750" WindowStartupLocation="CenterOwner" ResizeMode="NoResize" WindowStyle="None" Background="Transparent" AllowsTransparency="True" ShowInTaskbar="False">
     <Window.Resources>
-        <!-- Window Button Style -->
         <Style x:Key="WindowButton" TargetType="Button">
-            <Setter Property="Width" Value="40"/>
+            <Setter Property="Width" Value="34"/>
             <Setter Property="Height" Value="28"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FontSize" Value="16"/>
-            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="13"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="6">
+                        <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="7">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="root" Property="Background" Value="{DynamicResource HoverBrush}"/>
-                                <Setter TargetName="root" Property="Opacity" Value="0.95"/>
+                                <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="root" Property="Opacity" Value="0.8"/>
@@ -32,19 +30,18 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
         <Style x:Key="CloseWindowButton" BasedOn="{StaticResource WindowButton}" TargetType="Button">
-            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="6">
+                        <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="7">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="root" Property="Background" Value="{DynamicResource DangerButtonBrush}"/>
                                 <Setter Property="Foreground" Value="White"/>
-                                <Setter TargetName="root" Property="Opacity" Value="0.95"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="root" Property="Opacity" Value="0.85"/>
@@ -58,13 +55,15 @@
         <!-- Dialog Button Styles -->
         <Style x:Key="DialogButton" TargetType="Button">
             <Setter Property="MinWidth" Value="90"/>
-            <Setter Property="Height" Value="36"/>
-            <Setter Property="Margin" Value="8,0"/>
-            <Setter Property="Padding" Value="12,6"/>
-            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Margin" Value="6,0"/>
+            <Setter Property="Padding" Value="14,6"/>
+            <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -75,7 +74,6 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="root" Property="Background" Value="{DynamicResource HoverBrush}"/>
-                                <Setter TargetName="root" Property="Opacity" Value="0.98"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="root" Property="Opacity" Value="0.85"/>
@@ -87,26 +85,22 @@
         </Style>
 
         <Style x:Key="PrimaryDialogButton" BasedOn="{StaticResource DialogButton}" TargetType="Button">
-            <Setter Property="Background" Value="{DynamicResource PrimaryButtonBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
             <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryButtonBrush}"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" CornerRadius="8">
+                        <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="8">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="6,0"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="root" Property="Opacity" Value="0.95"/>
-                                <Setter TargetName="root" Property="Effect">
-                                    <Setter.Value>
-                                        <DropShadowEffect Color="#000000" Opacity="0.12" BlurRadius="6" ShadowDepth="1"/>
-                                    </Setter.Value>
-                                </Setter>
+                                <Setter TargetName="root" Property="Opacity" Value="0.9"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="root" Property="Opacity" Value="0.85"/>
+                                <Setter TargetName="root" Property="Opacity" Value="0.8"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -115,56 +109,64 @@
         </Style>
     </Window.Resources>
 
-    <Grid Margin="10">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-
-        <!-- Background Card -->
-        <Border Grid.RowSpan="2" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="0"/>
-
-        <!-- Top Window Controls Bar -->
-        <Border Grid.Row="0" Background="{DynamicResource HeaderBackgroundBrush}" Height="50" VerticalAlignment="Top" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
-            <Grid>
-                <!-- Title -->
-                <TextBlock x:Name="DialogTitle" Text="Message" 
-                           FontSize="16" 
-                           FontWeight="SemiBold" 
-                           Foreground="{DynamicResource ForegroundBrush}"
-                           Margin="20,0,0,0"
-                           VerticalAlignment="Center"/>
-                
-                <!-- Window Controls -->
-                <StackPanel Orientation="Horizontal" 
-                            HorizontalAlignment="Right" 
-                            Margin="0,0,10,0"
-                            VerticalAlignment="Center">
-                    <Button x:Name="CloseBtn" 
-                            Style="{StaticResource CloseWindowButton}" 
-                            Click="CloseButton_Click"
-                            Content="✕" 
-                            ToolTip="Close"/>
-                </StackPanel>
-            </Grid>
-        </Border>
-        
-        <!-- Content Area -->
-        <Border Grid.Row="1" Padding="20" Margin="0,8,0,0">
+    <Grid Margin="12">
+        <Border Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="16" ClipToBounds="True">
+            <Border.Effect>
+                <DropShadowEffect Color="#000000" BlurRadius="28" ShadowDepth="10" Opacity="0.35"/>
+            </Border.Effect>
             <Grid>
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="46"/>
                     <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" MaxHeight="520">
-                    <TextBlock x:Name="MessageText" TextWrapping="Wrap" FontWeight="Normal" FontSize="13" Foreground="{DynamicResource ForegroundBrush}" MaxWidth="680"/>
-                </ScrollViewer>
+                <!-- Top Window Controls Bar -->
+                <Border Grid.Row="0" Background="{DynamicResource HeaderBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                    <Grid Margin="16,0,10,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border x:Name="DialogIconBadge" Width="26" Height="26" CornerRadius="7" Background="{DynamicResource AccentBrush}" Margin="0,0,9,0" Visibility="Collapsed">
+                                <TextBlock x:Name="DialogIconText" Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock x:Name="DialogTitle" Text="Message" 
+                                       FontSize="13.5" 
+                                       FontWeight="Bold" 
+                                       Foreground="{DynamicResource ForegroundBrush}"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <StackPanel Orientation="Horizontal" 
+                                    HorizontalAlignment="Right" 
+                                    VerticalAlignment="Center">
+                            <Button x:Name="CloseBtn" 
+                                    Style="{StaticResource CloseWindowButton}" 
+                                    Click="CloseButton_Click"
+                                    Content="✕" 
+                                    ToolTip="Close"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                
+                <!-- Content Area -->
+                <Border Grid.Row="1" Padding="20">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                <WrapPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0" ItemHeight="Auto" ItemWidth="Auto">
-                    <Button x:Name="PrimaryButton" Style="{StaticResource PrimaryDialogButton}" MinWidth="100" Click="PrimaryButton_Click" Content="OK"/>
-                    <Button x:Name="SecondaryButton" Style="{StaticResource DialogButton}" MinWidth="100" Click="SecondaryButton_Click" Content="Cancel" Visibility="Collapsed"/>
-                </WrapPanel>
+                        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" MaxHeight="520">
+                            <StackPanel MaxWidth="680">
+                                <TextBlock x:Name="MessageText" TextWrapping="Wrap" FontWeight="Normal" FontSize="12.5" Foreground="{DynamicResource ForegroundBrush}" LineHeight="19"/>
+                                <ContentControl x:Name="RichContentHost" Visibility="Collapsed"/>
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <WrapPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0" ItemHeight="Auto" ItemWidth="Auto">
+                            <Button x:Name="SecondaryButton" Style="{StaticResource DialogButton}" MinWidth="90" Click="SecondaryButton_Click" Content="Cancel" Visibility="Collapsed"/>
+                            <Button x:Name="PrimaryButton" Style="{StaticResource PrimaryDialogButton}" MinWidth="90" Click="PrimaryButton_Click" Content="OK"/>
+                        </WrapPanel>
+                    </Grid>
+                </Border>
             </Grid>
         </Border>
     </Grid>

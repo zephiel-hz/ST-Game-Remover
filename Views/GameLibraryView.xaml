@@ -13,26 +13,27 @@
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
         <helpers:InstalledBadgeTextConverter x:Key="InstalledBadgeTextConverter"/>
         
-        <!-- Rounded Button Style -->
+        <!-- Modern Rounded Button Style -->
         <Style x:Key="RoundedButtonStyle" TargetType="Button">
-            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" 
-                                CornerRadius="6"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                Width="{TemplateBinding Width}"
-                                Height="{TemplateBinding Height}">
+                        <Border x:Name="btnBorder" Background="{TemplateBinding Background}" CornerRadius="10" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Opacity" Value="0.85"/>
+                                <Setter TargetName="btnBorder" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                <Setter TargetName="btnBorder" Property="BorderBrush" Value="{DynamicResource ButtonHoverBorderBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Opacity" Value="0.7"/>
+                                <Setter TargetName="btnBorder" Property="Opacity" Value="0.8"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -40,124 +41,118 @@
             </Setter>
         </Style>
         
-        
-        <!-- Stretch Icon Button Style for full-width buttons like Copy Log -->
-        <Style x:Key="StretchIconButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
-            <Setter Property="Padding" Value="8,6" />
-            <Setter Property="FontSize" Value="12" />
+        <!-- Modern Search Box Style -->
+        <Style x:Key="LibrarySearchBoxStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="Padding" Value="30,0,12,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
             <Setter Property="Template">
-              <Setter.Value>
-                <ControlTemplate TargetType="Button">
-                  <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
-                      <Border Width="20" Height="20" CornerRadius="10" Background="{DynamicResource ButtonIconBackground}" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,8,0">
-                        <TextBlock Text="{TemplateBinding Tag}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource ForegroundBrush}" FontSize="11" FontFamily="Segoe MDL2 Assets"/>
-                      </Border>
-                      <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                    </StackPanel>
-                  </Border>
-                  <ControlTemplate.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True">
-                      <Setter TargetName="root" Property="Background" Value="{DynamicResource HoverBrush}"/>
-                      <Setter TargetName="root" Property="Opacity" Value="0.95"/>
-                    </Trigger>
-                    <Trigger Property="IsPressed" Value="True">
-                      <Setter TargetName="root" Property="Opacity" Value="0.8"/>
-                    </Trigger>
-                    <Trigger Property="IsEnabled" Value="False">
-                      <Setter TargetName="root" Property="Opacity" Value="0.6"/>
-                    </Trigger>
-                  </ControlTemplate.Triggers>
-                </ControlTemplate>
-              </Setter.Value>
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="SearchBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10"
+                                SnapsToDevicePixels="True">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="0" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="SearchBorder" Property="BorderBrush" Value="{DynamicResource ButtonHoverBorderBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="SearchBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="SearchBorder" Property="Background" Value="{DynamicResource InputBackgroundBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
             </Setter>
         </Style>
-        
+
+        <!-- Modern ComboBox Style -->
         <Style x:Key="ManifestComboBoxStyle" TargetType="ComboBox">
             <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="Height" Value="36"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
-            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
-            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBox">
-                        <Grid>
+                        <Grid Background="Transparent">
                             <ToggleButton Name="DropDownToggle"
-                                         Grid.Column="0"
-                                         IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                                         ClickMode="Press"
-                                         Background="{TemplateBinding Background}"
-                                         BorderBrush="{TemplateBinding BorderBrush}"
-                                         BorderThickness="{TemplateBinding BorderThickness}"
-                                         Foreground="{TemplateBinding Foreground}"
-                                         Padding="0">
+                                          Grid.Column="0"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                          ClickMode="Press"
+                                          Background="{TemplateBinding Background}"
+                                          BorderBrush="{TemplateBinding BorderBrush}"
+                                          BorderThickness="{TemplateBinding BorderThickness}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          Padding="0">
                                 <ToggleButton.Template>
                                     <ControlTemplate TargetType="ToggleButton">
                                         <Border Name="toggleBorder"
-                                               Background="{TemplateBinding Background}"
-                                               BorderBrush="{TemplateBinding BorderBrush}"
-                                               BorderThickness="{TemplateBinding BorderThickness}"
-                                               CornerRadius="4"
-                                               Padding="{TemplateBinding Padding}">
+                                                Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="10"
+                                                Padding="{TemplateBinding Padding}">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="28"/>
+                                                    <ColumnDefinition Width="26"/>
                                                 </Grid.ColumnDefinitions>
                                                 <ContentPresenter Grid.Column="0"
-                                                                 Content="{TemplateBinding Content}"
-                                                                 Margin="8,0,0,0"
-                                                                 VerticalAlignment="Center"/>
+                                                                  Content="{TemplateBinding Content}"
+                                                                  Margin="10,0,0,0"
+                                                                  VerticalAlignment="Center"/>
                                                 <TextBlock Grid.Column="1"
-                                                          Text="▼"
-                                                          Foreground="{TemplateBinding Foreground}"
-                                                          HorizontalAlignment="Center"
-                                                          VerticalAlignment="Center"
-                                                          FontSize="10"
-                                                          Margin="0,2,4,0"/>
+                                                           Text="&#xE70D;"
+                                                           FontFamily="Segoe MDL2 Assets"
+                                                           Foreground="{DynamicResource MutedForegroundBrush}"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           FontSize="9"/>
                                             </Grid>
                                         </Border>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="toggleBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
-                                                <Setter TargetName="toggleBorder" Property="Opacity" Value="0.9"/>
-                                            </Trigger>
-                                            <Trigger Property="IsPressed" Value="True">
-                                                <Setter TargetName="toggleBorder" Property="Opacity" Value="0.8"/>
-                                            </Trigger>
-                                            <Trigger Property="IsChecked" Value="True">
                                                 <Setter TargetName="toggleBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </ToggleButton.Template>
                                 <ContentPresenter Name="contentPresenter"
-                                                 Content="{TemplateBinding SelectionBoxItem}"
-                                                 ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                                                 ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"/>
+                                                  Content="{TemplateBinding SelectionBoxItem}"
+                                                  ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                  ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"/>
                             </ToggleButton>
                             <Popup Name="PART_Popup"
-                                  AllowsTransparency="True"
-                                  IsOpen="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                                  Placement="Bottom"
-                                  PopupAnimation="Fade"
-                                  Margin="0,2,0,0">
+                                   AllowsTransparency="True"
+                                   IsOpen="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                   Placement="Bottom"
+                                   PopupAnimation="Fade"
+                                   Margin="0,4,0,0">
                                 <Border Background="{DynamicResource CardBackgroundBrush}"
-                                       BorderBrush="{DynamicResource AccentBrush}"
-                                       BorderThickness="1"
-                                       CornerRadius="4"
-                                       Padding="4">
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="10"
+                                        Padding="4">
                                     <ScrollViewer CanContentScroll="True"
-                                                 MinWidth="{Binding ActualWidth, ElementName=DropDownToggle}"
-                                                 MaxHeight="150">
+                                                  MinWidth="{Binding ActualWidth, ElementName=DropDownToggle}"
+                                                  MaxHeight="200">
                                         <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
                                     </ScrollViewer>
                                 </Border>
@@ -171,22 +166,20 @@
         <Style TargetType="ComboBoxItem">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
-            <Setter Property="Padding" Value="12,8"/>
-            <Setter Property="Margin" Value="0"/>
+            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="Margin" Value="1"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBoxItem">
                         <Border x:Name="itemBorder"
-                               Background="{TemplateBinding Background}"
-                               Padding="{TemplateBinding Padding}"
-                               CornerRadius="3"
-                               Margin="2">
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="6">
                             <ContentPresenter VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource AccentBrush}"/>
-                                <Setter Property="Foreground" Value="White"/>
+                                <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource HoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource AccentBrush}"/>
@@ -198,241 +191,251 @@
             </Setter>
         </Style>
 
+        <!-- Modern Game Card Style with Hardware Acceleration -->
         <Style x:Key="GameCardStyle" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
-            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="CornerRadius" Value="16"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Margin" Value="8"/>
-            <Setter Property="Effect">
-                <Setter.Value>
-                    <DropShadowEffect Color="#000000" BlurRadius="8" ShadowDepth="0" Opacity="0.15"/>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="Margin" Value="0,0,14,14"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="UseLayoutRounding" Value="True"/>
             <Style.Triggers>
-                <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
-                    <Setter Property="Effect">
-                        <Setter.Value>
-                            <DropShadowEffect Color="#000000" BlurRadius="12" ShadowDepth="2" Opacity="0.25"/>
-                        </Setter.Value>
-                    </Setter>
+                    <Setter Property="Background" Value="{DynamicResource HoverBrush}"/>
+                </Trigger>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                    <Setter Property="Background" Value="{DynamicResource SelectedBrush}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+
+        <!-- Modern Squircle CheckBox Style for Cards -->
+        <Style x:Key="CardCheckBoxStyle" TargetType="CheckBox">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Border x:Name="checkBorder" Width="26" Height="26" CornerRadius="8"
+                                Background="#99000000" BorderBrush="#55FFFFFF" BorderThickness="1.5">
+                            <TextBlock x:Name="checkMark" Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                                       Foreground="White" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Visibility="Collapsed"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="checkBorder" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="checkBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="checkMark" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="checkBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
     
-    <Grid>
+    <Grid Margin="14,12,14,14">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Header Section -->
-        <Border Grid.Row="0" Background="{DynamicResource BackgroundBrush}" Padding="20,16,20,24" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
-            <Grid>
+        <!-- Command & Filter Toolbar -->
+        <Border Grid.Row="0" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="14" Padding="14,12" Margin="0,0,0,12">
+            <Grid VerticalAlignment="Center">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
+                
+                <!-- SearchBox with Permanent Icon & Placeholder -->
+                <Grid Grid.Column="0" Margin="0,0,10,0">
+                    <TextBox x:Name="SearchBox" Style="{StaticResource LibrarySearchBoxStyle}"
+                             TextChanged="SearchBox_TextChanged"
+                             GotFocus="SearchBox_GotFocus"
+                             LostFocus="SearchBox_LostFocus"
+                             VerticalAlignment="Center"/>
+                    <StackPanel Orientation="Horizontal" Margin="14,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
+                        <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Search games by title or genre..." Foreground="{DynamicResource MutedForegroundBrush}" FontSize="12" VerticalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+                </Grid>
 
-                <!-- Left: Title -->
-                <StackPanel Grid.Column="0" VerticalAlignment="Top">
-                    <TextBlock x:Name="GameLibraryTitleText" FontSize="32" FontWeight="Bold" Foreground="{DynamicResource ForegroundBrush}"/>
-                    <TextBlock x:Name="GameLibrarySubtitleText" FontSize="14" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,4,0,0"/>
-                </StackPanel>
+                <!-- Category Filter Dropdown -->
+                <ComboBox Grid.Column="1" x:Name="CategoryFilterComboBox" Width="160" Height="36"
+                          Style="{StaticResource ManifestComboBoxStyle}"
+                          VerticalAlignment="Center" Margin="0,0,10,0"
+                          SelectionChanged="CategoryFilterComboBox_SelectionChanged">
+                    <ComboBoxItem Content="All Games" Tag="All" IsSelected="True"/>
+                    <ComboBoxItem Content="Installed" Tag="Installed"/>
+                    <ComboBoxItem Content="Not Installed" Tag="NotInstalled"/>
+                </ComboBox>
+                 
+                <!-- Actions Toolbar -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Selection Counter Badge -->
+                    <Border x:Name="HeaderSelectionBadge" Background="{DynamicResource SelectedBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" CornerRadius="8" Padding="10,6" Margin="0,0,8,0" VerticalAlignment="Center" Visibility="Collapsed">
+                        <TextBlock x:Name="HeaderSelectionCounterText" 
+                                   Foreground="{DynamicResource AccentBrush}" FontSize="11.5" FontWeight="SemiBold"
+                                   VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    </Border>
 
-                <!-- Right: Controls -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
-                        <Button x:Name="SelectAllBtn" Width="120" Height="34" Click="SelectAll_Click" Margin="0,0,8,0" Padding="8,6"
+                    <!-- Contextual Actions -->
+                    <!-- Backup Button -->
+                    <Button x:Name="BackupBtn" Width="105" Height="36" Click="BackupSelected_Click" Margin="0,0,6,0"
+                            Visibility="Collapsed" VerticalAlignment="Center"
+                            Style="{StaticResource CompactIconButtonStyle}"
+                            Tag="{StaticResource Icon.Save}">
+                        <TextBlock x:Name="BackupBtnText" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="11.5"/>
+                    </Button>
+                    
+                    <!-- Delete Button -->
+                    <Button x:Name="DeleteBtn" Width="95" Height="36" Click="DeleteSelected_Click" Margin="0,0,6,0"
+                            Background="{DynamicResource DangerButtonBrush}"
+                            Visibility="Collapsed" VerticalAlignment="Center"
+                            Style="{StaticResource CompactIconButtonStyle}"
+                            Tag="{StaticResource Icon.Delete}"
+                            Content="Delete"/>
+                    
+                    <!-- Clear All Selection Button -->
+                    <Button x:Name="ClearAllBtn" Width="85" Height="36" Click="ClearAll_Click" Margin="0,0,8,0"
+                            Background="{DynamicResource ButtonBackgroundBrush}"
+                            Visibility="Collapsed" VerticalAlignment="Center"
+                            Style="{StaticResource CompactIconButtonStyle}"
+                            Tag="{StaticResource Icon.Cancel}"
+                            Content="Clear"/>
+
+                    <!-- Global Buttons: Select All, Refresh, Import -->
+                    <Button x:Name="SelectAllBtn" Width="105" Height="36" Click="SelectAll_Click" Margin="0,0,6,0"
                             Background="{DynamicResource PrimaryButtonBrush}"
-                            Foreground="White" FontWeight="SemiBold" Cursor="Hand" FontSize="12"
                             Style="{StaticResource CompactIconButtonStyle}"
                             Tag="{StaticResource Icon.Check}">
-                        <TextBlock x:Name="SelectAllText" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="12"/>
+                        <TextBlock x:Name="SelectAllText" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="11.5"/>
                     </Button>
-                        <Button x:Name="RefreshBtn" Width="120" Height="34" Click="Refresh_Click" Margin="0,0,8,0" Padding="8,6"
-                            Background="{DynamicResource SuccessButtonBrush}"
-                            Foreground="White" FontWeight="SemiBold" Cursor="Hand" FontSize="12"
+                    <Button x:Name="RefreshBtn" Width="105" Height="36" Click="Refresh_Click" Margin="0,0,6,0"
+                            Background="{DynamicResource PrimaryButtonBrush}"
                             Style="{StaticResource CompactIconButtonStyle}"
                             Tag="{StaticResource Icon.Refresh}">
-                        <TextBlock x:Name="RefreshText" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="12"/>
+                        <TextBlock x:Name="RefreshText" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="11.5"/>
                     </Button>
-                    <Button x:Name="ImportBtn" Width="120" Height="34" Click="ImportButton_Click" Margin="0,0,8,0" Padding="8,6"
+                    <Button x:Name="ImportBtn" Width="105" Height="36" Click="ImportButton_Click"
                             Background="{DynamicResource PrimaryButtonBrush}"
-                            Foreground="White" FontWeight="SemiBold" Cursor="Hand" FontSize="12"
                             Style="{StaticResource CompactIconButtonStyle}"
                             Tag="{StaticResource Icon.Download}">
-                        <TextBlock x:Name="ImportText" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="12"/>
+                        <TextBlock x:Name="ImportText" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="11.5"/>
                     </Button>
-                    <StackPanel Orientation="Vertical" Margin="8,0,0,0">
-                        <Button x:Name="BackButton" Width="120" Height="34" Padding="8,6"
-                                Background="{DynamicResource PrimaryButtonBrush}"
-                                Foreground="White" FontWeight="SemiBold" FontSize="12"
-                                Click="BackToDashboard_Click" Cursor="Hand"
-                                Style="{StaticResource CompactIconButtonStyle}"
-                                Tag="{StaticResource Icon.Back}"
-                                Content="Back"/>
-                        <TextBlock x:Name="BackButtonText" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed">Back</TextBlock>
-                        <TextBlock x:Name="HeaderSelectionCounterText" 
-                                   Foreground="{DynamicResource AccentBrush}" FontSize="11" FontWeight="SemiBold"
-                                   TextAlignment="Center" Margin="0,4,0,0" Visibility="Collapsed"/>
+
+                    <!-- Hidden BackButton for compatibility -->
+                    <StackPanel Visibility="Collapsed">
+                        <Button x:Name="BackButton" Click="BackToDashboard_Click">
+                            <TextBlock x:Name="BackButtonText" Text="Back"/>
+                        </Button>
                     </StackPanel>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <!-- Content Area with Game Cards -->
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
+            <!-- Cards Grid Area -->
+            <Grid Grid.Row="1">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" x:Name="CardsScrollViewer" Padding="0,0,8,0">
+                    <ItemsControl x:Name="GameCards" ItemsSource="{Binding Games}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid x:Name="CardGrid" IsItemsHost="True" Columns="3" HorizontalAlignment="Stretch" VerticalAlignment="Top"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource GameCardStyle}" ClipToBounds="True" MouseLeftButtonUp="GameCard_MouseLeftButtonUp" Cursor="Hand" Height="270">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="155"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
 
-            <!-- Left: Game Cards Grid -->
-            <Border Grid.Column="0" Background="{DynamicResource BackgroundBrush}" Margin="20,0,10,20" Padding="0">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-                
-                    <!-- Content Grid (Search Box + Game Cards) -->
-                    <Grid Grid.Row="0" Grid.RowSpan="2">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
+                                        <!-- Image Banner & Badges -->
+                                        <Border Grid.Row="0" Background="{DynamicResource BackgroundBrush}" CornerRadius="15,15,0,0" ClipToBounds="True">
+                                            <Grid>
+                                                <!-- Game Artwork -->
+                                                <Image x:Name="CardImage" Source="{Binding ScreenshotUrl}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                    <Image.Style>
+                                                        <Style TargetType="Image">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding ScreenshotUrl}" Value="">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding ScreenshotUrl}" Value="{x:Null}">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Image.Style>
+                                                </Image>
 
-                        <!-- Search Box -->
-                        <Border Grid.Row="0" Background="{DynamicResource InputBackgroundBrush}" Padding="6" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
-                        <Grid VerticalAlignment="Center">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="300"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            
-                            <!-- SearchBox -->
-                            <TextBox Grid.Column="0" x:Name="SearchBox" Height="30"
-                                     Background="{DynamicResource BackgroundBrush}"
-                                     Foreground="{DynamicResource ForegroundBrush}"
-                                     CaretBrush="{DynamicResource ForegroundBrush}"
-                                     Padding="8,2" FontSize="12"
-                                     TextChanged="SearchBox_TextChanged"
-                                     GotFocus="SearchBox_GotFocus"
-                                     LostFocus="SearchBox_LostFocus"
-                                     BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}"
-                                     VerticalAlignment="Center"/>
+                                                <!-- Modern Placeholder fallback -->
+                                                <Grid x:Name="Placeholder">
+                                                    <Grid.Style>
+                                                        <Style TargetType="Grid">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding ScreenshotUrl}" Value="">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding ScreenshotUrl}" Value="{x:Null}">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Grid.Style>
+                                                    <Border Background="{DynamicResource CardBackgroundBrush}">
+                                                        <Grid>
+                                                            <!-- Subtle background mesh -->
+                                                            <TextBlock Text="&#xE7FC;" FontFamily="Segoe MDL2 Assets" FontSize="64" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource BorderBrush}" Opacity="0.3"/>
+                                                            <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,16">
+                                                                <TextBlock Text="STEAM GAME" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource MutedForegroundBrush}" HorizontalAlignment="Center" Opacity="0.6"/>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </Border>
+                                                </Grid>
 
-                            <!-- Category Filter -->
-                            <ComboBox Grid.Column="1" x:Name="CategoryFilterComboBox" MinWidth="180" MaxWidth="260" Height="32"
-                                      Style="{StaticResource ManifestComboBoxStyle}"
-                                      VerticalAlignment="Center" Margin="8,0,0,0"
-                                      SelectionChanged="CategoryFilterComboBox_SelectionChanged">
-                                <ComboBoxItem Content="All" Tag="All" IsSelected="True"/>
-                                <ComboBoxItem Content="Installed" Tag="Installed"/>
-                                <ComboBoxItem Content="Not Installed" Tag="NotInstalled"/>
-                            </ComboBox>
-                             
-                            <!-- Spacer -->
-                            <Border Grid.Column="2"/>
-                            
-                            <!-- Backup Button -->
-                                    <Button Grid.Column="3" x:Name="BackupBtn" Width="140" Height="32" Click="BackupSelected_Click" Margin="4,0,0,0" Padding="8,6"
-                                    Visibility="Collapsed" VerticalAlignment="Center"
-                                    	    Style="{StaticResource CompactIconButtonStyle}"
-                                    Tag="{StaticResource Icon.Save}">
-                                <TextBlock x:Name="BackupBtnText" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="11"/>
-                            </Button>
-                            
-                            <!-- Delete Button -->
-                                <Button Grid.Column="4" x:Name="DeleteBtn" Width="140" Height="32" Click="DeleteSelected_Click" Margin="4,0,0,0" Padding="8,6"
-                                    Foreground="White" FontWeight="SemiBold" Cursor="Hand" FontSize="11"
-                                    	    Visibility="Collapsed" VerticalAlignment="Center"
-                                    	    Style="{StaticResource CompactIconButtonStyle}"
-                                    Tag="{StaticResource Icon.Delete}"
-                                    Content="Delete"/>
-                            
-                            <!-- Clear All Button -->
-                                <Button Grid.Column="5" x:Name="ClearAllBtn" Width="120" Height="32" Click="ClearAll_Click" Margin="4,0,0,0" Padding="8,6"
-                                    Background="{DynamicResource BorderBrush}"
-                                    Foreground="White" FontWeight="SemiBold" Cursor="Hand" FontSize="11"
-                                    	    Visibility="Collapsed" VerticalAlignment="Center"
-                                    	    Style="{StaticResource CompactIconButtonStyle}"
-                                    Tag="{StaticResource Icon.Cancel}"
-                                    Content="Clear"/>
-                        </Grid>
-                    </Border>
+                                                <!-- Bottom Gradient Vignette for readability -->
+                                                <Border VerticalAlignment="Bottom" Height="50">
+                                                    <Border.Background>
+                                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                            <GradientStop Color="#00000000" Offset="0"/>
+                                                            <GradientStop Color="#B2000000" Offset="1"/>
+                                                        </LinearGradientBrush>
+                                                    </Border.Background>
+                                                </Border>
 
-                    <!-- Game Cards -->
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" x:Name="CardsScrollViewer">
-                        <ItemsControl x:Name="GameCards" ItemsSource="{Binding Games}" Margin="16,16,16,16">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <UniformGrid x:Name="CardGrid" IsItemsHost="True" Columns="3" HorizontalAlignment="Left" VerticalAlignment="Top"/>
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Style="{StaticResource GameCardStyle}" ClipToBounds="True" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" MouseLeftButtonUp="GameCard_MouseLeftButtonUp" Cursor="Hand">
-                                        <Grid>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="180"/>
-                                                <RowDefinition Height="*"/>
-                                            </Grid.RowDefinitions>
-
-                                            <!-- Image area -->
-                                            <Border Grid.Row="0" Background="{DynamicResource BorderBrush}" CornerRadius="8,8,0,0" Margin="0,0,0,8">
-                                                <Grid>
-                                                    <!-- Screenshot if available -->
-                                                    <Image x:Name="CardImage" Source="{Binding ScreenshotUrl}" Stretch="UniformToFill" Margin="4" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                        <Image.Style>
-                                                            <Style TargetType="Image">
-                                                                <Setter Property="Visibility" Value="Visible"/>
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding ScreenshotUrl}" Value="">
-                                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                                    </DataTrigger>
-                                                                    <DataTrigger Binding="{Binding ScreenshotUrl}" Value="{x:Null}">
-                                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </Image.Style>
-                                                    </Image>
-
-                                                    <!-- Placeholder -->
-                                                    <Grid x:Name="Placeholder" Background="{DynamicResource BackgroundBrush}" Opacity="0.5">
-                                                        <Grid.Style>
-                                                            <Style TargetType="Grid">
-                                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding ScreenshotUrl}" Value="">
-                                                                        <Setter Property="Visibility" Value="Visible"/>
-                                                                    </DataTrigger>
-                                                                    <DataTrigger Binding="{Binding ScreenshotUrl}" Value="{x:Null}">
-                                                                        <Setter Property="Visibility" Value="Visible"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </Grid.Style>
-                                                    </Grid>
-
-                                                    <!-- Selection checkbox overlay -->
-                                                    <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" Width="24" Height="24"
-                                                              HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8"
-                                                              VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
-                                                              Checked="ItemCheckBox_Changed" Unchecked="ItemCheckBox_Changed"/>
-
-                                                    <!-- Installed badge -->
-                                                    <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8" CornerRadius="4" Padding="6,3" Background="{DynamicResource SuccessButtonBrush}" Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVisibility}}">
-                                                        <TextBlock Foreground="White" FontWeight="SemiBold" FontSize="11">
+                                                <!-- Top Left: Installed Badge -->
+                                                <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10" CornerRadius="6" Padding="8,4" Background="#E610B981" Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVisibility}}">
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="10" Foreground="White" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                                        <TextBlock Foreground="White" FontWeight="Bold" FontSize="10" VerticalAlignment="Center">
                                                             <TextBlock.Text>
                                                                 <MultiBinding Converter="{StaticResource InstalledBadgeTextConverter}">
                                                                     <Binding Path="IsInstalled"/>
@@ -440,93 +443,143 @@
                                                                 </MultiBinding>
                                                             </TextBlock.Text>
                                                         </TextBlock>
-                                                    </Border>
-                                                </Grid>
-                                            </Border>
+                                                    </StackPanel>
+                                                </Border>
 
-                                            <!-- Game Info -->
-                                            <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="12,8,12,8" MinHeight="60">
-                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,4" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ForegroundBrush}"/>
-                                                <TextBlock Text="{Binding Genre}" FontSize="11" Opacity="0.7" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ForegroundBrush}"/>
-                                            </StackPanel>
+                                                <!-- Top Right: Modern Squircle Selection CheckBox -->
+                                                <CheckBox Style="{StaticResource CardCheckBoxStyle}"
+                                                          IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                          HorizontalAlignment="Right" VerticalAlignment="Top" Margin="10"
+                                                          Checked="ItemCheckBox_Changed" Unchecked="ItemCheckBox_Changed"/>
+
+                                                <!-- Bottom Left: App ID Pill Tag -->
+                                                <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="10,0,0,10" Background="#99000000" CornerRadius="5" Padding="6,2" BorderBrush="#33FFFFFF" BorderThickness="1">
+                                                    <TextBlock Text="{Binding AppId, StringFormat='AppID: {0}'}" FontSize="10" FontWeight="SemiBold" Foreground="#E2E8F0"/>
+                                                </Border>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- Card Info Content -->
+                                        <Grid Grid.Row="1" Margin="14,10,14,12">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+
+                                            <!-- Game Title -->
+                                            <TextBlock Grid.Row="0" Text="{Binding Name}" FontWeight="Bold" FontSize="13" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,3"/>
+                                            
+                                            <!-- Genre -->
+                                            <TextBlock Grid.Row="1" Text="{Binding Genre}" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" TextTrimming="CharacterEllipsis" Margin="0,0,0,6"/>
+
+                                            <!-- Card Footer Row -->
+                                            <Grid Grid.Row="3" VerticalAlignment="Bottom">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <!-- Status Dot & Label -->
+                                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Ellipse Width="6" Height="6" VerticalAlignment="Center" Margin="0,0,6,0">
+                                                        <Ellipse.Style>
+                                                            <Style TargetType="Ellipse">
+                                                                <Setter Property="Fill" Value="{DynamicResource MutedForegroundBrush}"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsInstalled}" Value="True">
+                                                                        <Setter Property="Fill" Value="#10B981"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Ellipse.Style>
+                                                    </Ellipse>
+                                                    <TextBlock Text="{Binding InstallationStatus}" FontSize="10.5" Foreground="{DynamicResource MutedForegroundBrush}" VerticalAlignment="Center"/>
+                                                </StackPanel>
+
+                                                <!-- Lua / Config Icon Tag -->
+                                                <Border Grid.Column="1" Background="{DynamicResource ButtonBackgroundBrush}" CornerRadius="4" Padding="5,2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                                                    <TextBlock Text="LUA" FontSize="9.5" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"/>
+                                                </Border>
+                                            </Grid>
                                         </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                    </Grid>
-                    
-                    <!-- Delete Progress Overlay (on top of content) -->
-                    <Grid x:Name="DeleteProgressOverlay" Visibility="Collapsed" Background="#88000000" Grid.Row="0" Grid.RowSpan="2">
-                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="320">
-                            <!-- Progress Box -->
-                                <Border Background="{DynamicResource CardBackgroundBrush}" CornerRadius="12" Padding="24" 
-                                    Effect="{DynamicResource DropShadow}"
-                                    BorderBrush="{DynamicResource DangerButtonBrush}" BorderThickness="2">
-                                <StackPanel>
-                                    <!-- Title -->
-                                    <TextBlock x:Name="DeleteProgressTitle" 
-                                               Text="Deleting Games..."
-                                               FontSize="18" FontWeight="Bold" 
-                                               Foreground="{DynamicResource DangerButtonBrush}"
-                                               TextAlignment="Center" Margin="0,0,0,12"/>
-                                    
-                                    <!-- Progress Bar -->
-                                    <ProgressBar x:Name="DeleteProgressBar" Height="6" 
-                                                 Background="{DynamicResource BorderBrush}"
-                                                 Foreground="{DynamicResource DangerButtonBrush}"
-                                                 IsIndeterminate="True" Margin="0,0,0,12"/>
-                                    
-                                    <!-- Status Text -->
-                                    <TextBlock x:Name="DeleteProgressStatus"
-                                               Text="Processing..."
-                                               FontSize="12"
-                                               Foreground="{DynamicResource MutedForegroundBrush}"
-                                               TextAlignment="Center"
-                                               TextWrapping="Wrap"/>
-                    
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
-                    </Grid>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
 
-                    <!-- Import Progress Overlay (sibling to DeleteProgressOverlay) -->
-                    <Grid x:Name="ImportProgressOverlay" Visibility="Collapsed" Background="#88000000" Grid.Row="0" Grid.RowSpan="2">
-                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="320">
-                            <!-- Progress Box -->
-                            <Border Background="{DynamicResource CardBackgroundBrush}" CornerRadius="12" Padding="24" 
-                                    Effect="{DynamicResource DropShadow}"
-                                    BorderBrush="{DynamicResource SuccessButtonBrush}" BorderThickness="2">
-                                <StackPanel>
-                                    <!-- Title -->
-                                    <TextBlock x:Name="ImportProgressTitle" 
-                                               Text="Importing Games..."
-                                               FontSize="18" FontWeight="Bold" 
-                                               Foreground="{DynamicResource SuccessButtonBrush}"
-                                               TextAlignment="Center" Margin="0,0,0,12"/>
+            <!-- Modern Delete Progress Overlay (covers entire GameLibraryView) -->
+            <Grid x:Name="DeleteProgressOverlay" Visibility="Collapsed" Background="#B8000000" Grid.Row="0" Grid.RowSpan="2" Panel.ZIndex="1000">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="380">
+                        <Border Background="{DynamicResource CardBackgroundBrush}" CornerRadius="18" Padding="28,24" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#000000" BlurRadius="36" ShadowDepth="12" Opacity="0.45"/>
+                            </Border.Effect>
+                            <StackPanel>
+                                <Border Width="48" Height="48" CornerRadius="14" Background="#26EF4444" BorderBrush="#55EF4444" BorderThickness="1" HorizontalAlignment="Center" Margin="0,0,0,16">
+                                    <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="{DynamicResource DangerButtonBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
 
-                                    <!-- Progress Bar -->
-                                    <ProgressBar x:Name="ImportProgressBar" Height="6" 
-                                                 Background="{DynamicResource BorderBrush}"
-                                                 Foreground="{DynamicResource SuccessButtonBrush}"
-                                                 IsIndeterminate="True" Margin="0,0,0,12"/>
-
-                                    <!-- Status Text -->
-                                    <TextBlock x:Name="ImportProgressStatus"
-                                               Text="Processing..."
-                                               FontSize="12"
-                                               Foreground="{DynamicResource MutedForegroundBrush}"
-                                               TextAlignment="Center"
-                                               TextWrapping="Wrap"/>
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
-                    </Grid>
+                                <TextBlock x:Name="DeleteProgressTitle" 
+                                           Text="Deleting Games..."
+                                           FontSize="16" FontWeight="Bold" 
+                                           Foreground="{DynamicResource ForegroundBrush}"
+                                           TextAlignment="Center" Margin="0,0,0,14"/>
+                                
+                                <ProgressBar x:Name="DeleteProgressBar" Height="4" 
+                                             Background="{DynamicResource ButtonBackgroundBrush}"
+                                             Foreground="{DynamicResource DangerButtonBrush}"
+                                             BorderThickness="0"
+                                             IsIndeterminate="True" Margin="0,0,0,14"/>
+                                
+                                <TextBlock x:Name="DeleteProgressStatus"
+                                           Text="Processing..."
+                                           FontSize="12"
+                                           Foreground="{DynamicResource MutedForegroundBrush}"
+                                           TextAlignment="Center"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
                 </Grid>
-            </Border>
 
-            <!-- Activity log panel removed (no longer needed) -->
+            <!-- Modern Import Progress Overlay (covers entire GameLibraryView) -->
+            <Grid x:Name="ImportProgressOverlay" Visibility="Collapsed" Background="#B8000000" Grid.Row="0" Grid.RowSpan="2" Panel.ZIndex="1000">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="380">
+                    <Border Background="{DynamicResource CardBackgroundBrush}" CornerRadius="18" Padding="28,24" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                        <Border.Effect>
+                            <DropShadowEffect Color="#000000" BlurRadius="36" ShadowDepth="12" Opacity="0.45"/>
+                        </Border.Effect>
+                        <StackPanel>
+                            <Border Width="48" Height="48" CornerRadius="14" Background="#2610B981" BorderBrush="#5510B981" BorderThickness="1" HorizontalAlignment="Center" Margin="0,0,0,16">
+                                <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="{DynamicResource SuccessButtonBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+
+                            <TextBlock x:Name="ImportProgressTitle" 
+                                       Text="Importing Games..."
+                                       FontSize="16" FontWeight="Bold" 
+                                       Foreground="{DynamicResource ForegroundBrush}"
+                                       TextAlignment="Center" Margin="0,0,0,14"/>
+
+                            <ProgressBar x:Name="ImportProgressBar" Height="4" 
+                                         Background="{DynamicResource ButtonBackgroundBrush}"
+                                         Foreground="{DynamicResource SuccessButtonBrush}"
+                                         BorderThickness="0"
+                                         IsIndeterminate="True" Margin="0,0,0,14"/>
+
+                            <TextBlock x:Name="ImportProgressStatus"
+                                       Text="Processing..."
+                                       FontSize="12"
+                                       Foreground="{DynamicResource MutedForegroundBrush}"
+                                       TextAlignment="Center"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
         </Grid>
-    </Grid>
 </UserControl>

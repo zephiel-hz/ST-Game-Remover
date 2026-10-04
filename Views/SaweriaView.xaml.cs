@@ -40,7 +40,7 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 LoadingOverlay.Visibility = Visibility.Collapsed;
-                MessageBox.Show(
+                ModernMessageBox.Show(
                     $"WebView2 Runtime is required to display Saweria inside the app.\n\n{ex.Message}",
                     "Saweria",
                     MessageBoxButton.OK,

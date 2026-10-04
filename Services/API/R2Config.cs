@@ -190,6 +190,47 @@ namespace SteamPluginManager
             return ms.ToArray();
         }
 
+        // Hapus file dari R2
+        public static async Task<bool> DeleteFileAsync(string key, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var service = "s3";
+                var region = "auto";
+                var host = new Uri(R2Endpoint).Host;
+                var now = DateTime.UtcNow;
+                var amzDate = now.ToString("yyyyMMddTHHmmssZ");
+                var dateStamp = now.ToString("yyyyMMdd");
+                var canonicalUri = $"/{R2Bucket}/{key}";
+                var canonicalQueryString = "";
+                var payloadHash = ToHex(HashSHA256(""));
+                var canonicalHeaders = $"host:{host}\nx-amz-content-sha256:{payloadHash}\nx-amz-date:{amzDate}\n";
+                var signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+                var canonicalRequest = $"DELETE\n{canonicalUri}\n{canonicalQueryString}\n{canonicalHeaders}\n{signedHeaders}\n{payloadHash}";
+                var algorithm = "AWS4-HMAC-SHA256";
+                var credentialScope = $"{dateStamp}/{region}/{service}/aws4_request";
+                var stringToSign = $"{algorithm}\n{amzDate}\n{credentialScope}\n{ToHex(HashSHA256(canonicalRequest))}";
+                var signingKey = GetSignatureKey(R2SecretKey, dateStamp, region, service);
+                var signature = ToHex(HmacSHA256(signingKey, stringToSign));
+                var authorizationHeader = $"{algorithm} Credential={R2AccessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
+                var url = $"{R2Endpoint}/{R2Bucket}/{key}";
+                var client = SharedHttpClient.Instance;
+
+                using var req = new HttpRequestMessage(HttpMethod.Delete, url);
+                req.Headers.Add("x-amz-date", amzDate);
+                req.Headers.Add("x-amz-content-sha256", payloadHash);
+                req.Headers.TryAddWithoutValidation("Authorization", authorizationHeader);
+
+                var response = await client.SendAsync(req, cancellationToken);
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"R2 DeleteFileAsync error: {ex.Message}");
+                return false;
+            }
+        }
+
         public class R2FileInfo
         {
             public string Key { get; set; } = string.Empty;

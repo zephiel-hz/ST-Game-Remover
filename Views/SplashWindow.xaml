@@ -1,9 +1,9 @@
 <Window x:Class="SteamPluginManager.Views.SplashWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Splash"
-        Width="540"
-        Height="380"
+        Title="HZ Lua Manager"
+        Width="440"
+        Height="260"
         WindowStyle="None"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
@@ -13,42 +13,38 @@
         Background="Transparent"
         Loaded="Window_Loaded">
     <Window.Resources>
-        <Color x:Key="AccentColor">#FFFF8A00</Color>
-        <Color x:Key="AccentHover">#FFFF9D1A</Color>
-        <Color x:Key="AccentPressed">#FFE66F00</Color>
-
         <Storyboard x:Key="IntroStoryboard">
             <DoubleAnimation Storyboard.TargetName="RootGrid"
                              Storyboard.TargetProperty="Opacity"
                              From="0"
                              To="1"
-                             Duration="0:0:0.45" />
+                             Duration="0:0:0.35" />
             <DoubleAnimation Storyboard.TargetName="RootGrid"
                              Storyboard.TargetProperty="RenderTransform.(ScaleTransform.ScaleX)"
                              From="0.96"
                              To="1"
-                             Duration="0:0:0.45" />
+                             Duration="0:0:0.35">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
             <DoubleAnimation Storyboard.TargetName="RootGrid"
                              Storyboard.TargetProperty="RenderTransform.(ScaleTransform.ScaleY)"
                              From="0.96"
                              To="1"
-                             Duration="0:0:0.45" />
-            <DoubleAnimation Storyboard.TargetName="GlowBorder"
+                             Duration="0:0:0.35">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="LogoGlow"
                              Storyboard.TargetProperty="Opacity"
-                             From="0.18"
-                             To="0.85"
+                             From="0.25"
+                             To="0.65"
                              Duration="0:0:1.2"
                              AutoReverse="True"
                              RepeatBehavior="Forever" />
-            <DoubleAnimation Storyboard.TargetName="LogoGlow"
-                             Storyboard.TargetProperty="Opacity"
-                             From="0.2"
-                             To="0.9"
-                             Duration="0:0:1.3"
-                             AutoReverse="True"
-                             RepeatBehavior="Forever" />
         </Storyboard>
-
     </Window.Resources>
 
     <Grid x:Name="RootGrid" Opacity="0">
@@ -56,83 +52,102 @@
             <ScaleTransform ScaleX="0.96" ScaleY="0.96" />
         </Grid.RenderTransform>
 
-        <Border CornerRadius="18" Background="{DynamicResource BackgroundBrush}">
-            <Border.BorderBrush>
-                <SolidColorBrush Color="#33000000"/>
-            </Border.BorderBrush>
-            <Border.BorderThickness>1.0</Border.BorderThickness>
+        <!-- Ambient Backdrop Shadow & Card Wrapper -->
+        <Border Margin="14"
+                CornerRadius="22"
+                Background="{DynamicResource BackgroundBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="1"
+                ClipToBounds="True">
             <Border.Effect>
-                <DropShadowEffect BlurRadius="30" ShadowDepth="6" Color="#000000" Opacity="0.5" />
+                <DropShadowEffect BlurRadius="36" ShadowDepth="10" Color="#000000" Opacity="0.5" />
             </Border.Effect>
 
             <Grid>
-                <!-- Subtle oversized HZ behind content -->
-                <TextBlock Text="HZ" FontSize="110" FontWeight="Black" Opacity="0.03" Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <!-- Top Accent Highlight Line -->
+                <Border Height="2.5" Background="{DynamicResource AccentBrush}" VerticalAlignment="Top"/>
 
-                <Border x:Name="GlowBorder"
-                        Opacity="0.18"
-                        CornerRadius="18"
-                        Margin="-6"
-                        BorderBrush="{DynamicResource AccentBrush}"
-                        BorderThickness="2"
-                        Background="Transparent" />
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,4,0,0">
+                    <!-- Brand Icon with Ambient Aura -->
+                    <Grid Width="70" Height="70" HorizontalAlignment="Center" Margin="0,0,0,14">
+                        <!-- Breathing Ambient Glow -->
+                        <Ellipse x:Name="LogoGlow"
+                                 Width="68"
+                                 Height="68"
+                                 Fill="{DynamicResource AccentBrush}"
+                                 Opacity="0.25"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center">
+                            <Ellipse.Effect>
+                                <BlurEffect Radius="30"/>
+                            </Ellipse.Effect>
+                        </Ellipse>
 
-                <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Width="480">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-                    <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,16,0,0">
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,6">
-                        <!-- Logo icon only -->
-                        <Grid Width="92" Height="92">
-                            <Image x:Name="LogoImage" Width="56" Height="56" HorizontalAlignment="Center" VerticalAlignment="Center" Stretch="Uniform">
+                        <!-- Sleek Rounded Tile -->
+                        <Border Width="56"
+                                Height="56"
+                                CornerRadius="16"
+                                Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1.5"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                            <Image x:Name="LogoImage"
+                                   Width="32"
+                                   Height="32"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Stretch="Uniform">
                                 <Image.Source>
                                     <BitmapImage UriSource="/Config/SGR.ico" CacheOption="OnLoad" />
                                 </Image.Source>
                             </Image>
-                            <Ellipse x:Name="LogoGlow" Width="84" Height="84" Fill="Transparent" Opacity="0.0" />
-                        </Grid>
+                        </Border>
+                    </Grid>
 
-                        <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" FontSize="20" FontWeight="Bold">
-                            <Run Foreground="{DynamicResource AccentBrush}" Text="HZ"/>
-                            <Run Foreground="{DynamicResource ForegroundBrush}" Text=" Lua Manager"/>
-                        </TextBlock>
+                    <!-- App Title Typography -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,4">
+                        <TextBlock Text="HZ " FontSize="17" FontWeight="Black" Foreground="{DynamicResource AccentBrush}"/>
+                        <TextBlock Text="LUA MANAGER" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource ForegroundBrush}"/>
                     </StackPanel>
 
-                    <TextBlock Text="Starting application..." Margin="0,8,0,0" FontSize="13" Foreground="{DynamicResource MutedForegroundBrush}" HorizontalAlignment="Center" />
+                    <!-- Subtitle / Status Text -->
+                    <TextBlock Text="Starting application..."
+                               FontSize="11.5"
+                               FontWeight="Normal"
+                               Foreground="{DynamicResource MutedForegroundBrush}"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,16"/>
 
-                    <Border Margin="0,12,0,4" CornerRadius="8" Width="420" Height="18" Background="{DynamicResource InputBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                    <!-- Ultra-Sleek Minimalist Hairline Progress Bar -->
+                    <Border Width="280"
+                            Height="3"
+                            CornerRadius="1.5"
+                            Background="{DynamicResource InputBackgroundBrush}"
+                            BorderThickness="0"
+                            ClipToBounds="True"
+                            HorizontalAlignment="Center">
                         <ProgressBar x:Name="SplashProgress"
-                                     Height="10"
-                                     VerticalAlignment="Center"
+                                     Height="3"
                                      Minimum="0"
                                      Maximum="100"
                                      Value="0"
                                      IsIndeterminate="False"
-                                     Background="{DynamicResource ButtonBackgroundBrush}"
+                                     Background="Transparent"
                                      Foreground="{DynamicResource AccentBrush}"
                                      BorderThickness="0"/>
                     </Border>
 
-                    <!-- Feature highlights -->
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,6,0,0">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,18,0">
-                            <Ellipse Width="8" Height="8" Fill="{DynamicResource AccentBrush}" Opacity="0.9" Margin="0,0,8,0"/>
-                            <TextBlock Text="Fast updates" Foreground="{DynamicResource MutedForegroundBrush}" FontSize="12"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,18,0">
-                            <Ellipse Width="8" Height="8" Fill="{DynamicResource MutedForegroundBrush}" Opacity="0.45" Margin="0,0,8,0"/>
-                            <TextBlock Text="Built for gamers" Foreground="{DynamicResource MutedForegroundBrush}" FontSize="12"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Ellipse Width="8" Height="8" Fill="{DynamicResource MutedForegroundBrush}" Opacity="0.45" Margin="0,0,8,0"/>
-                            <TextBlock Text="Lightweight" Foreground="{DynamicResource MutedForegroundBrush}" FontSize="12"/>
-                        </StackPanel>
-                    </StackPanel>
-                    </StackPanel>
-                </Grid>
+                    <!-- Clean Version Footer -->
+                    <TextBlock x:Name="SplashVersionText"
+                               Text="Ready to Launch"
+                               FontSize="10"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource MutedForegroundBrush}"
+                               Opacity="0.6"
+                               HorizontalAlignment="Center"
+                               Margin="0,12,0,0"/>
+                </StackPanel>
             </Grid>
         </Border>
     </Grid>

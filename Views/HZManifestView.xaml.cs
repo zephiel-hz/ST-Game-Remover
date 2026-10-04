@@ -127,16 +127,17 @@ namespace SteamPluginManager.Views
         [JsonPropertyName("created_at")]
         public DateTime? CreatedAt { get; set; }
         
-        private string _thumbnailPath = "";
+        private string? _thumbnailPath = null;
         [JsonPropertyName("thumbnail_path")]
-        public string ThumbnailPath 
+        public string? ThumbnailPath 
         { 
-            get => _thumbnailPath;
+            get => string.IsNullOrWhiteSpace(_thumbnailPath) ? null : _thumbnailPath;
             set
             {
-                if (_thumbnailPath != value)
+                var normalized = string.IsNullOrWhiteSpace(value) ? null : value;
+                if (_thumbnailPath != normalized)
                 {
-                    _thumbnailPath = value;
+                    _thumbnailPath = normalized;
                     PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(ThumbnailPath)));
                 }
             }
@@ -220,6 +221,8 @@ namespace SteamPluginManager.Views
         
         // Debounce timer for SizeChanged to prevent multiple rapid refreshes during window state transitions
         private System.Windows.Threading.DispatcherTimer? _sizeChangeDebounceTimer;
+        // Debounce timer for search text box to eliminate UI stutter while typing
+        private System.Windows.Threading.DispatcherTimer? _searchDebounceTimer;
         private const double MIN_CARD_WIDTH = 220;
         private const int ROWS_PER_PAGE = 10;
         // Runtime reference to the generated WrapPanel from the ItemsControl template
@@ -430,7 +433,10 @@ namespace SteamPluginManager.Views
                 // Setup search box event handler
                 if (FindName("SearchBox") is TextBox searchBox)
                 {
+                    searchBox.TextChanged -= SearchBox_TextChanged;
                     searchBox.TextChanged += SearchBox_TextChanged;
+                    searchBox.KeyDown -= SearchBox_KeyDown;
+                    searchBox.KeyDown += SearchBox_KeyDown;
                     searchBox.Foreground = Application.Current.FindResource("ForegroundBrush") as System.Windows.Media.Brush;
                     if (!string.IsNullOrWhiteSpace(_currentSearchText))
                     {
@@ -461,6 +467,9 @@ namespace SteamPluginManager.Views
                     StopContinuousLoadingAnimation();
                     loadingOverlay.Visibility = Visibility.Collapsed;
                 }
+
+                // Start auto-detection for newly added lua/manifest files
+                SetupAutoRefreshTimer();
             }
             catch (Exception ex)
             {
@@ -481,63 +490,146 @@ namespace SteamPluginManager.Views
             }
         }
 
-        //private void SetupAutoRefreshTimer()
-        //{
-        //    try
-        //    {
-        //        _autoRefreshTimer = new System.Windows.Threading.DispatcherTimer();
-        //        _autoRefreshTimer.Interval = TimeSpan.FromSeconds(30); // Auto-refresh setiap 30 detik
-        //        _autoRefreshTimer.Tick += AutoRefreshTimer_Tick;
-        //        _autoRefreshTimer.Start();
-        //        LogDebug("[AUTO-REFRESH] Timer started - will check for new files every 30 seconds");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        LogDebug($"[AUTO-REFRESH] Error setting up timer: {ex.Message}");
-        //    }
-        //}
+        private bool _isCheckingForNewManifests = false;
 
-        //private void StopAutoRefreshTimer()
-        //{
-        //    try
-        //    {
-        //        if (_autoRefreshTimer != null)
-        //        {
-        //            _autoRefreshTimer.Stop();
-        //            LogDebug("[AUTO-REFRESH] Timer stopped");
-        //        }
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        LogDebug($"[AUTO-REFRESH] Error stopping timer: {ex.Message}");
-        //    }
-        //}
+        private void SetupAutoRefreshTimer()
+        {
+            try
+            {
+                StopAutoRefreshTimer();
+                _autoRefreshTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(25) // Auto-detect every 25 seconds
+                };
+                _autoRefreshTimer.Tick += AutoRefreshTimer_Tick;
+                _autoRefreshTimer.Start();
+                LogDebug("[AUTO-DETECTION] Timer started - will check for new lua/manifest files every 25 seconds");
+            }
+            catch (Exception ex)
+            {
+                LogDebug($"[AUTO-DETECTION] Error setting up timer: {ex.Message}");
+            }
+        }
 
-        //private async void AutoRefreshTimer_Tick(object? sender, EventArgs e)
-        //{
-        //    try
-        //    {
-        //        // Skip if already refreshing
-        //        if (_isRefreshing)
-        //            return;
+        private void StopAutoRefreshTimer()
+        {
+            try
+            {
+                if (_autoRefreshTimer != null)
+                {
+                    _autoRefreshTimer.Stop();
+                    _autoRefreshTimer.Tick -= AutoRefreshTimer_Tick;
+                    _autoRefreshTimer = null;
+                    LogDebug("[AUTO-DETECTION] Timer stopped");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogDebug($"[AUTO-DETECTION] Error stopping timer: {ex.Message}");
+            }
+        }
 
-        //        _isRefreshing = true;
-        //        LogDebug("[AUTO-REFRESH] Checking for new files...");
-        //        
-        //        // Refresh file list with FORCE REFRESH (bypass cache) to detect new files
-        //        await LoadFilesFromSupabase(forceRefresh: true);
-        //        
-        //        LogDebug($"[AUTO-REFRESH] Check completed - Files in collection: {Files.Count}");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        LogDebug($"[AUTO-REFRESH] Error during auto-refresh: {ex.Message}");
-        //    }
-        //    finally
-        //    {
-        //        _isRefreshing = false;
-        //    }
-        //}
+        private async void AutoRefreshTimer_Tick(object? sender, EventArgs e)
+        {
+            if (_isCheckingForNewManifests)
+                return;
+
+            _isCheckingForNewManifests = true;
+            try
+            {
+                await CheckForNewManifestsAsync();
+            }
+            catch (Exception ex)
+            {
+                LogDebug($"[AUTO-DETECTION] Error during auto-detection: {ex.Message}");
+            }
+            finally
+            {
+                _isCheckingForNewManifests = false;
+            }
+        }
+
+        private async Task CheckForNewManifestsAsync()
+        {
+            try
+            {
+                // Lightweight query: check the top 10 newest manifests and total count
+                string url = $"{SupabaseConfig.SupabaseUrl}/rest/v1/hzmanifest_files?select=id,name,app_id,file_name,created_at&order=id.desc&limit=10";
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Add("apikey", SupabaseConfig.SupabaseKey);
+                request.Headers.Add("Authorization", $"Bearer {SupabaseConfig.SupabaseKey}");
+                request.Headers.Add("Prefer", "count=exact");
+                request.Headers.Add("Accept", "application/json");
+
+                using var response = await _httpClient.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                    return;
+
+                int remoteCount = -1;
+                if (response.Headers.TryGetValues("Content-Range", out var rangeValues))
+                {
+                    var rangeHeader = rangeValues.FirstOrDefault();
+                    if (!string.IsNullOrWhiteSpace(rangeHeader))
+                    {
+                        var parts = rangeHeader.Split('/');
+                        if (parts.Length == 2 && int.TryParse(parts[1], out int parsedTotal))
+                        {
+                            remoteCount = parsedTotal;
+                        }
+                    }
+                }
+
+                var content = await response.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(content);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                    return;
+
+                var existingIds = _allFiles.Where(f => f.Id.HasValue).Select(f => f.Id!.Value).ToHashSet();
+                var newDetectedItems = new List<ManifestFile>();
+
+                foreach (var el in doc.RootElement.EnumerateArray())
+                {
+                    int? id = el.TryGetProperty("id", out var idProp) && idProp.TryGetInt32(out int idVal) ? idVal : null;
+                    if (id.HasValue && !existingIds.Contains(id.Value))
+                    {
+                        string name = el.TryGetProperty("name", out var nProp) ? (nProp.GetString() ?? "") : "";
+                        int? appId = el.TryGetProperty("app_id", out var aProp) && aProp.TryGetInt32(out int aVal) ? aVal : null;
+                        string fileName = el.TryGetProperty("file_name", out var fnProp) ? (fnProp.GetString() ?? "") : "";
+                        DateTime? createdAt = el.TryGetProperty("created_at", out var cProp) && cProp.TryGetDateTime(out var dt) ? dt : null;
+
+                        newDetectedItems.Add(new ManifestFile
+                        {
+                            Id = id,
+                            Name = name,
+                            AppId = appId,
+                            FileName = fileName,
+                            CreatedAt = createdAt
+                        });
+                    }
+                }
+
+                bool hasNewItems = newDetectedItems.Count > 0 || (remoteCount > 0 && remoteCount > _allFiles.Count);
+
+                if (hasNewItems)
+                {
+                    LogDebug($"[AUTO-DETECTION] New manifest(s) detected! New items count: {newDetectedItems.Count}, Remote total: {remoteCount}, Local total: {_allFiles.Count}");
+
+                    // Clear cache and silently reload from Supabase
+                    CacheManager.ClearHzmCache();
+                    await LoadFilesFromSupabase(forceRefresh: true);
+
+                    // Show notification banner for newly detected items
+                    if (newDetectedItems.Count > 0)
+                    {
+                        Dispatcher.Invoke(() => UpdateManifestNotificationBanner(newDetectedItems));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogDebug($"[AUTO-DETECTION] CheckForNewManifestsAsync error: {ex.Message}");
+            }
+        }
 
         private void HZManifestView_Unloaded(object sender, RoutedEventArgs e)
         {
@@ -547,6 +639,9 @@ namespace SteamPluginManager.Views
             {
                 LogDebug("[HZManifestView_Unloaded] View unloaded");
                 
+                // Clean up auto-detection timer
+                StopAutoRefreshTimer();
+
                 // Clean up debounce timer
                 if (_sizeChangeDebounceTimer != null)
                 {
@@ -559,8 +654,6 @@ namespace SteamPluginManager.Views
                 
                 // Unsubscribe from 18+ content setting changes to prevent memory leak
                 Allow18PlusContentPreferences.Allow18PlusContentChanged -= Allow18PlusContentPreferences_Changed;
-                
-                // Timer is disabled, no need to stop it
             }
             catch (Exception ex)
             {
@@ -574,22 +667,57 @@ namespace SteamPluginManager.Views
             try
             {
                 _showNewManifestsOnly = false;
-                _currentSearchText = (sender as TextBox)?.Text?.Trim().ToLower() ?? string.Empty;
+                string newSearchText = (sender as TextBox)?.Text?.Trim() ?? string.Empty;
+
+                // Ignore if search string hasn't changed
+                if (string.Equals(newSearchText, _currentSearchText, StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                _currentSearchText = newSearchText;
+
+                // Stop any running timer
+                _searchDebounceTimer?.Stop();
+
+                // If search was cleared, update immediately without debounce delay
                 if (string.IsNullOrWhiteSpace(_currentSearchText))
                 {
                     LogDebug("Search cleared, returning to paginated view");
                     _currentPage = 0;
-                }
-                else
-                {
-                    LogDebug($"Searching for: {_currentSearchText}");
+                    DisplayCurrentPage();
+                    return;
                 }
 
-                DisplayCurrentPage();
+                // Debounce search by 200ms to eliminate typing stutter
+                if (_searchDebounceTimer == null)
+                {
+                    _searchDebounceTimer = new System.Windows.Threading.DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromMilliseconds(200)
+                    };
+                    _searchDebounceTimer.Tick += (s, args) =>
+                    {
+                        _searchDebounceTimer.Stop();
+                        _currentPage = 0;
+                        DisplayCurrentPage();
+                    };
+                }
+
+                _searchDebounceTimer.Start();
             }
             catch (Exception ex)
             {
                 LogDebug($"Error in SearchBox_TextChanged: {ex.Message}");
+            }
+        }
+
+        private void SearchBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == System.Windows.Input.Key.Enter)
+            {
+                _searchDebounceTimer?.Stop();
+                _currentPage = 0;
+                DisplayCurrentPage();
+                e.Handled = true;
             }
         }
 
@@ -696,15 +824,15 @@ namespace SteamPluginManager.Views
                 var allButton = new Button
                 {
                     Content = $"All ({_allFiles.Count})",
-                    Width = 100,
+                    MinWidth = 80,
                     Height = 28,
-                    Background = Application.Current.FindResource("PrimaryButtonBrush") as System.Windows.Media.Brush,
+                    Background = Application.Current.TryFindResource("AccentBrush") as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.DarkOrange,
                     Foreground = System.Windows.Media.Brushes.White,
                     FontWeight = FontWeights.SemiBold,
                     FontSize = 11,
-                    Margin = new Thickness(0, 0, 4, 0),
+                    Margin = new Thickness(0, 0, 6, 0),
                     Cursor = System.Windows.Input.Cursors.Hand,
-                    Style = Application.Current.FindResource("RoundedButtonStyle") as Style,
+                    Style = Application.Current.TryFindResource("RoundedButtonStyle") as Style,
                     ToolTip = $"All categories ({_allFiles.Count} items)"
                 };
                 allButton.Click += CategoryButton_Click;
@@ -712,27 +840,27 @@ namespace SteamPluginManager.Views
                 _categoryButtons["All"] = allButton;
 
                 // Create category buttons for each predefined category
-                foreach (var category in predefinedCategories)
+                foreach (var category in sortedCategories)
                 {
                     var count = _allFiles.Count(f => GenreMatchesCategory(f.Genre, category));
                     
                     if (count > 0) // Only create buttons for categories that have files
                     {
-                        var displayText = category.Length > 12 ? category.Substring(0, 10) + "..." : category;
+                        var displayText = category.Length > 16 ? category.Substring(0, 14) + "..." : category;
                         var buttonText = $"{displayText} ({count})";
 
                         var categoryButton = new Button
                         {
                             Content = buttonText,
-                            Width = 120,
+                            MinWidth = 90,
                             Height = 28,
-                            Background = Application.Current.FindResource("SecondaryButtonBrush") as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.Gray,
-                            Foreground = System.Windows.Media.Brushes.White,
+                            Background = Application.Current.TryFindResource("CardBackgroundBrush") as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.Transparent,
+                            Foreground = Application.Current.TryFindResource("ForegroundBrush") as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.White,
                             FontWeight = FontWeights.Normal,
-                            FontSize = 10,
-                            Margin = new Thickness(0, 0, 4, 0),
+                            FontSize = 10.5,
+                            Margin = new Thickness(0, 0, 6, 0),
                             Cursor = System.Windows.Input.Cursors.Hand,
-                            Style = Application.Current.FindResource("RoundedButtonStyle") as Style,
+                            Style = Application.Current.TryFindResource("RoundedButtonStyle") as Style,
                             ToolTip = $"{category} ({count} items)"
                         };
                         categoryButton.Click += CategoryButton_Click;
@@ -763,18 +891,34 @@ namespace SteamPluginManager.Views
             _currentCategory = selectedCategory;
             _currentFilterCategory = selectedCategory; // Sync with filter category
 
+            var accentBrush = Application.Current.TryFindResource("AccentBrush") as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.DarkOrange;
+            var defaultBg = Application.Current.TryFindResource("CardBackgroundBrush") as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.Transparent;
+            var defaultFg = Application.Current.TryFindResource("ForegroundBrush") as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.White;
+
             foreach (var kvp in _categoryButtons)
             {
                 var button = kvp.Value;
                 if (kvp.Key == selectedCategory)
                 {
-                    button.Background = Application.Current.FindResource("PrimaryButtonBrush") as System.Windows.Media.Brush;
+                    button.Background = accentBrush;
+                    button.Foreground = System.Windows.Media.Brushes.White;
                     button.FontWeight = FontWeights.SemiBold;
                 }
                 else
                 {
-                    button.Background = Application.Current.FindResource("SecondaryButtonBrush") as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.Gray;
+                    button.Background = defaultBg;
+                    button.Foreground = defaultFg;
                     button.FontWeight = FontWeights.Normal;
+                }
+            }
+
+            // Sync with ComboBox dropdown without triggering recursive events
+            if (FindName("CategoryFilterComboBox") is ComboBox comboBox)
+            {
+                var match = _categoryFilterItems.FirstOrDefault(item => item.Category == selectedCategory);
+                if (match != null && !ReferenceEquals(comboBox.SelectedItem, match))
+                {
+                    comboBox.SelectedItem = match;
                 }
             }
 
@@ -842,6 +986,39 @@ namespace SteamPluginManager.Views
                     _currentSortOrder = sortOrder;
                     DisplayCurrentPage();
                 }
+            }
+        }
+
+        public void SetSortOrder(string sortOrder)
+        {
+            _currentSortOrder = sortOrder;
+            _showNewManifestsOnly = false;
+            _currentFilterCategory = "All";
+            _currentSearchText = "";
+            _currentPage = 0;
+
+            if (FindName("SearchBox") is TextBox searchBox)
+            {
+                searchBox.Text = "";
+            }
+
+            if (FindName("SortComboBox") is ComboBox sortComboBox)
+            {
+                foreach (ComboBoxItem item in sortComboBox.Items)
+                {
+                    if (item.Tag as string == sortOrder)
+                    {
+                        sortComboBox.SelectedItem = item;
+                        break;
+                    }
+                }
+            }
+
+            UpdateCategorySelection("All");
+
+            if (_allFiles != null && _allFiles.Count > 0)
+            {
+                DisplayCurrentPage();
             }
         }
 
@@ -968,6 +1145,9 @@ namespace SteamPluginManager.Views
                     
                     // Setup thumbnail loading
                     SetupLazyThumbnailLoading();
+
+                    // Ensure category chips are populated
+                    SetupCategoryTabs();
                     
                     LogDebug($"Final result: {Files.Count} files loaded from cache");
                     
@@ -990,6 +1170,9 @@ namespace SteamPluginManager.Views
                     _cachedPage = _currentPage;
                     _lastFetchTime = DateTime.Now;
                     LogDebug("✓ Data cached for future use");
+
+                    // Setup category chips
+                    SetupCategoryTabs();
                     
                     if (debugInfo != null)
                         debugInfo.Text = $"DEBUG: Loaded {Files.Count} files from Supabase ✓";
@@ -1767,7 +1950,7 @@ namespace SteamPluginManager.Views
                             FileUrl = item.TryGetProperty("url", out var urlElement) ? urlElement.GetString() ?? "" : "",
                             StorageType = storageType,
                             FolderPath = folderPath,
-                            ThumbnailPath = "", // Reset thumbnail path - akan di-fetch ulang
+                            ThumbnailPath = null, // Reset thumbnail path - akan di-fetch ulang
                             DownloadCount = item.TryGetProperty("download_count", out var downloadCountElement) && downloadCountElement.TryGetInt32(out int downloadCount) ? downloadCount : 0
                         };
 
@@ -1867,415 +2050,13 @@ namespace SteamPluginManager.Views
 
         private void RequestButton_Click(object sender, RoutedEventArgs e)
         {
-            ShowRequestPopup();
-        }
-
-        private void CancelRequestButton_Click(object sender, RoutedEventArgs e)
-        {
-            HideRequestPopup();
-        }
-
-        private async void SubmitRequestButton_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var steamUrl = RequestUrlTextBox?.Text?.Trim() ?? string.Empty;
-
-                if (string.IsNullOrWhiteSpace(steamUrl))
+            WindowNavigator.ShowRequestGameModal(
+                isGameAvailableInApp: (appId) => _allFiles != null && _allFiles.Any(f => f.AppId == appId),
+                onGameAddedOrRequested: async () =>
                 {
-                    ShowRequestValidation("URL Steam wajib diisi.");
-                    return;
-                }
-
-                if (!Uri.TryCreate(steamUrl, UriKind.Absolute, out var steamUri) ||
-                    (steamUri.Scheme != Uri.UriSchemeHttp && steamUri.Scheme != Uri.UriSchemeHttps))
-                {
-                    ShowRequestValidation("URL Steam tidak valid. Gunakan format http atau https.");
-                    return;
-                }
-
-                // Check if display name is set
-                var displayName = await DashboardView.GetCurrentDisplayNameAsync();
-                Logger.Log($"[HZManifestView] Display name check: '{displayName}'");
-                if (string.IsNullOrWhiteSpace(displayName))
-                {
-                    ShowRequestValidation("Display name harus diset sebelum request game. Silakan set display name di Dashboard.");
-                    return;
-                }
-
-                // Extract AppID from Steam or SteamDB URL; SteamDB URLs do not require a game name in the path.
-                var appIdMatch = Regex.Match(steamUrl, @"(?:store\.steampowered\.com/app|steamdb\.info/app)/(\d+)", RegexOptions.IgnoreCase);
-                if (!appIdMatch.Success)
-                {
-                    ShowRequestValidation("URL tidak valid. Gunakan format Steam Store atau SteamDB: https://store.steampowered.com/app/{APPID}/{APP_NAME} atau https://steamdb.info/app/{APPID}/charts/");
-                    return;
-                }
-
-                int appId = int.Parse(appIdMatch.Groups[1].Value);
-
-                // Check if game already exists
-                if (_allFiles.Any(f => f.AppId == appId))
-                {
-                    ShowRequestValidation("Game already available in-app.");
-                    return;
-                }
-
-                var alreadyRequested = await GetPendingRequestsFromSupabaseAsync();
-                var duplicateRequest = alreadyRequested.FirstOrDefault(r => r.AppId == appId);
-                if (duplicateRequest != null)
-                {
-                    var requesterLabel = string.IsNullOrWhiteSpace(duplicateRequest.Requester) ? "another user" : duplicateRequest.Requester;
-                    ShowRequestValidation($"This game has already been requested by {requesterLabel}.");
-                    return;
-                }
-
-                var webhookUrl = DiscordWebhookUrl;
-                if (string.IsNullOrWhiteSpace(webhookUrl))
-                {
-                    ShowRequestValidation("Discord webhook tidak tersedia di aplikasi.");
-                    return;
-                }
-
-                SubmitRequestButton.IsEnabled = false;
-                SubmitRequestButton.Content = "Sending...";
-                RequestValidationText.Visibility = Visibility.Collapsed;
-
-                var (success, messageId) = await SendDiscordRequestAsync(steamUrl, appId, webhookUrl);
-                if (success)
-                {
-                    MessageBox.Show("Game request has been successfully sent.", "Request Submitted", MessageBoxButton.OK, MessageBoxImage.Information);
-                    HideRequestPopup();
-                }
-                else
-                {
-                    ShowRequestValidation("Gagal mengirim request. Coba lagi nanti atau periksa webhook URL.");
-                }
-            }
-            catch (Exception ex)
-            {
-                ShowRequestValidation($"Request gagal: {ex.Message}");
-            }
-            finally
-            {
-                SubmitRequestButton.IsEnabled = true;
-                SubmitRequestButton.Content = "Submit";
-            }
-        }
-
-        private class ManifestRequestRecord
-        {
-            [JsonPropertyName("app_id")]
-            public int AppId { get; set; }
-
-            [JsonPropertyName("steam_url")]
-            public string? SteamUrl { get; set; }
-
-            [JsonPropertyName("requester")]
-            public string? Requester { get; set; }
-
-            [JsonPropertyName("discord_message_id")]
-            public string? DiscordMessageId { get; set; }
-
-            [JsonPropertyName("webhook_url")]
-            public string? WebhookUrl { get; set; }
-
-            [JsonPropertyName("requested_at")]
-            public DateTime? RequestedAt { get; set; }
-        }
-
-        private async Task<bool> SavePendingRequestToSupabaseAsync(int appId, string appName, string steamUrl, string requester, string webhookUrl, string? messageId)
-        {
-            try
-            {
-                var payload = new
-                {
-                    app_id = appId,
-                    app_name = appName,
-                    steam_url = steamUrl,
-                    requester = requester,
-                    requester_id = GetRequesterUuid(GetDeviceId()).ToString(),
-                    webhook_url = webhookUrl,
-                    discord_message_id = messageId
-                };
-
-                string url = $"{SupabaseConfig.SupabaseUrl}/rest/v1/hzmanifest_requests";
-                using var request = new HttpRequestMessage(HttpMethod.Post, url)
-                {
-                    Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
-                };
-                request.Headers.Add("apikey", SupabaseConfig.SupabaseKey);
-                request.Headers.Add("Authorization", $"Bearer {SupabaseConfig.SupabaseKey}");
-                request.Headers.Add("Prefer", "return=representation");
-
-                using var response = await _httpClient.SendAsync(request);
-                if (!response.IsSuccessStatusCode)
-                {
-                    var responseBody = await response.Content.ReadAsStringAsync();
-                    LogDebug($"Failed to save pending request to Supabase: {response.StatusCode} - {responseBody}");
-                    return false;
-                }
-
-                LogDebug($"Saved pending request for AppID {appId} to Supabase");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                LogDebug($"Error saving pending request to Supabase: {ex.Message}");
-                return false;
-            }
-        }
-
-        private async Task<List<ManifestRequestRecord>> GetPendingRequestsFromSupabaseAsync()
-        {
-            try
-            {
-                string url = $"{SupabaseConfig.SupabaseUrl}/rest/v1/hzmanifest_requests?select=app_id,steam_url,requester,webhook_url,discord_message_id,requested_at";
-                using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.Add("apikey", SupabaseConfig.SupabaseKey);
-                request.Headers.Add("Authorization", $"Bearer {SupabaseConfig.SupabaseKey}");
-                request.Headers.Add("Accept", "application/json");
-
-                using var response = await _httpClient.SendAsync(request);
-                if (!response.IsSuccessStatusCode)
-                {
-                    LogDebug($"Failed to fetch pending requests from Supabase: {response.StatusCode}");
-                    return new List<ManifestRequestRecord>();
-                }
-
-                var content = await response.Content.ReadAsStringAsync();
-                var result = JsonSerializer.Deserialize<List<ManifestRequestRecord>>(content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                return result ?? new List<ManifestRequestRecord>();
-            }
-            catch (Exception ex)
-            {
-                LogDebug($"Error fetching pending requests from Supabase: {ex.Message}");
-                return new List<ManifestRequestRecord>();
-            }
-        }
-
-        private async Task<bool> RemovePendingRequestFromSupabaseAsync(int appId)
-        {
-            try
-            {
-                string url = $"{SupabaseConfig.SupabaseUrl}/rest/v1/hzmanifest_requests?app_id=eq.{appId}";
-                using var request = new HttpRequestMessage(HttpMethod.Delete, url);
-                request.Headers.Add("apikey", SupabaseConfig.SupabaseKey);
-                request.Headers.Add("Authorization", $"Bearer {SupabaseConfig.SupabaseKey}");
-                request.Headers.Add("Prefer", "return=minimal");
-
-                using var response = await _httpClient.SendAsync(request);
-                return response.IsSuccessStatusCode;
-            }
-            catch (Exception ex)
-            {
-                LogDebug($"Error removing pending request from Supabase: {ex.Message}");
-                return false;
-            }
-        }
-
-        private void ShowRequestPopup()
-        {
-            if (RequestPopupOverlay != null)
-            {
-                RequestValidationText.Visibility = Visibility.Collapsed;
-                RequestUrlTextBox.Text = string.Empty;
-                RequestPopupOverlay.Visibility = Visibility.Visible;
-                RequestUrlTextBox.Focus();
-            }
-        }
-
-        private void HideRequestPopup()
-        {
-            if (RequestPopupOverlay != null)
-                RequestPopupOverlay.Visibility = Visibility.Collapsed;
-        }
-
-        private void ShowRequestValidation(string message)
-        {
-            if (RequestValidationText != null)
-            {
-                RequestValidationText.Text = message;
-                RequestValidationText.Visibility = Visibility.Visible;
-            }
-        }
-
-        private static string DiscordWebhookUrl
-        {
-            get
-            {
-                var configuredUrl = ServiceConfiguration.Current.Discord.GameRequestWebhookUrl;
-                if (!string.IsNullOrWhiteSpace(configuredUrl))
-                    return configuredUrl.Trim();
-
-                var environmentUrl = Environment.GetEnvironmentVariable("DISCORD_GAME_REQUEST_WEBHOOK_URL");
-                return string.IsNullOrWhiteSpace(environmentUrl) ? string.Empty : environmentUrl.Trim();
-            }
-        }
-
-        private async Task<string> GetSteamGameNameAsync(string steamUrl, int appId)
-        {
-            if (TryParseSteamAppNameFromUrl(steamUrl, out var parsedName) && !string.IsNullOrWhiteSpace(parsedName))
-            {
-                return parsedName;
-            }
-
-            try
-            {
-                var storeUrl = $"https://store.steampowered.com/app/{appId}";
-                using var response = await _httpClient.GetAsync(storeUrl);
-                if (!response.IsSuccessStatusCode)
-                    return $"AppID {appId}";
-
-                var html = await response.Content.ReadAsStringAsync();
-
-                var titleMatch = Regex.Match(html, "<meta[^>]*property=['\"]og:title['\"][^>]*content=['\"]([^'\"]+)['\"]", RegexOptions.IgnoreCase);
-                if (titleMatch.Success)
-                {
-                    var title = System.Net.WebUtility.HtmlDecode(titleMatch.Groups[1].Value.Trim());
-                    var cleaned = CleanSteamPageTitle(title);
-                    if (!string.IsNullOrWhiteSpace(cleaned))
-                        return cleaned;
-                }
-
-                titleMatch = Regex.Match(html, "<div[^>]*class=['\"]apphub_AppName['\"][^>]*>([^<]+)</div>", RegexOptions.IgnoreCase);
-                if (titleMatch.Success)
-                {
-                    var title = System.Net.WebUtility.HtmlDecode(titleMatch.Groups[1].Value.Trim());
-                    if (!string.IsNullOrWhiteSpace(title))
-                        return title;
-                }
-
-                titleMatch = Regex.Match(html, @"<title>([^<]+?)</title>", RegexOptions.IgnoreCase);
-                if (titleMatch.Success)
-                {
-                    var cleaned = CleanSteamPageTitle(System.Net.WebUtility.HtmlDecode(titleMatch.Groups[1].Value.Trim()));
-                    if (!string.IsNullOrWhiteSpace(cleaned))
-                        return cleaned;
-                }
-            }
-            catch
-            {
-                // ignore and fallback
-            }
-
-            return $"AppID {appId}";
-        }
-
-        private static string CleanSteamPageTitle(string pageTitle)
-        {
-            if (string.IsNullOrWhiteSpace(pageTitle))
-                return pageTitle;
-
-            var title = pageTitle.Trim();
-
-            if (title.EndsWith(" on Steam", StringComparison.OrdinalIgnoreCase))
-                title = title[..^" on Steam".Length].Trim();
-
-            title = Regex.Replace(title, @"^Save\s+\d+%?\s+on\s+", string.Empty, RegexOptions.IgnoreCase).Trim();
-            title = Regex.Replace(title, @"^(.+?)\s+on\s+Steam$", "$1", RegexOptions.IgnoreCase).Trim();
-
-            return title;
-        }
-
-        private static bool TryParseSteamAppNameFromUrl(string steamUrl, out string appName)
-        {
-            appName = string.Empty;
-            if (!Uri.TryCreate(steamUrl, UriKind.Absolute, out var uri))
-                return false;
-
-            if (!uri.Host.Contains("store.steampowered.com", StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            var segments = uri.AbsolutePath.Trim('/').Split('/');
-            if (segments.Length < 3 || !string.Equals(segments[0], "app", StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            var rawName = segments[2];
-            if (string.IsNullOrWhiteSpace(rawName))
-                return false;
-
-            appName = Uri.UnescapeDataString(rawName).Replace('_', ' ').Trim();
-            return !string.IsNullOrWhiteSpace(appName);
-        }
-
-        private async Task<(bool success, string? messageId)> SendDiscordRequestAsync(string steamUrl, int appId, string webhookUrl)
-        {
-            try
-            {
-                var displayName = await DashboardView.GetCurrentDisplayNameAsync();
-                var gameName = await GetSteamGameNameAsync(steamUrl, appId);
-                var imageUrl = $"https://cdn.cloudflare.steamstatic.com/steam/apps/{appId}/header.jpg";
-                var payload = new
-                {
-                    content = "<@&958992653591117854>",
-                    embeds = new[]
-                    {
-                        new
-                        {
-                            title = "🎮 Request Game",
-                            description = $"**{gameName}**",
-                            color = 0x1ABC9C,
-                            image = new { url = imageUrl },
-                            fields = new[]
-                            {
-                                new { name = "Requester", value = displayName, inline = true },
-                                new { name = "AppID", value = appId.ToString(), inline = true },
-                                new { name = "Steam URL", value = steamUrl, inline = false },
-                                new { name = "Waktu", value = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), inline = true }
-                            },
-                            footer = new { text = "HZ Lua Manager" }
-                        }
-                    }
-                };
-
-                var json = JsonSerializer.Serialize(payload);
-                var webhookEndpoint = webhookUrl.Contains("?") ? $"{webhookUrl}&wait=true" : $"{webhookUrl}?wait=true";
-                using var request = new HttpRequestMessage(HttpMethod.Post, webhookEndpoint)
-                {
-                    Content = new StringContent(json, Encoding.UTF8, "application/json")
-                };
-
-                using var response = await _httpClient.SendAsync(request);
-                
-                if (!response.IsSuccessStatusCode)
-                    return (false, null);
-
-                string responseContent = await response.Content.ReadAsStringAsync();
-                string? messageId = null;
-                if (!string.IsNullOrWhiteSpace(responseContent))
-                {
-                    try
-                    {
-                        var responseJson = JsonDocument.Parse(responseContent);
-                        if (responseJson.RootElement.TryGetProperty("id", out var idProperty))
-                        {
-                            messageId = idProperty.GetString() ?? string.Empty;
-                            LogDebug($"✓ Discord message sent successfully. MessageID: {messageId}");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        LogDebug($"Warning: Could not parse MessageID from response: {ex.Message}");
-                    }
-                }
-                else
-                {
-                    LogDebug("Warning: Discord webhook returned an empty response body; messageId unavailable.");
-                }
-
-                var saveSuccess = await SavePendingRequestToSupabaseAsync(appId, gameName, steamUrl, displayName, webhookUrl, messageId);
-                if (!saveSuccess)
-                {
-                    LogDebug($"Warning: Discord request sent but failed to save pending request for AppID {appId} to Supabase");
-                }
-
-                return (true, messageId);
-            }
-            catch (Exception ex)
-            {
-                LogDebug($"SendDiscordRequestAsync failed: {ex.Message}");
-                return (false, null);
-            }
+                    await RefreshActiveManifestViewAsync(forceRefresh: true);
+                    _ = DashboardView.RefreshNewestManifestsAsync();
+                });
         }
 
         private void DownloadFile_Click(object sender, RoutedEventArgs e)
@@ -2284,7 +2065,7 @@ namespace SteamPluginManager.Views
             {
                 if (sender is Button button && button.DataContext is ManifestFile file)
                 {
-                    MessageBox.Show($"Downloading: {file.FileName}", "Download", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ModernMessageBox.Show($"Downloading: {file.FileName}", "Download", MessageBoxButton.OK, MessageBoxImage.Information);
                     // TODO: Implement real download functionality
                 }
             }
@@ -2299,7 +2080,7 @@ namespace SteamPluginManager.Views
             try
             {
                 // TODO: Open download folder in file explorer
-                MessageBox.Show("Opening download folder...", "Open Folder", MessageBoxButton.OK, MessageBoxImage.Information);
+                ModernMessageBox.Show("Opening download folder...", "Open Folder", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
@@ -2367,6 +2148,12 @@ namespace SteamPluginManager.Views
 
                         // Load image jika sudah ada path
                         LoadThumbnailImage(file, thumbnailImage);
+
+                        // If thumbnail path is not yet populated, fetch or load from cache immediately
+                        if (string.IsNullOrEmpty(file.ThumbnailPath) && file.AppId.HasValue && file.AppId.Value > 0)
+                        {
+                            _ = FetchAndCacheSteamThumbnail(file);
+                        }
                     }
                 }
             }
@@ -2378,17 +2165,17 @@ namespace SteamPluginManager.Views
 
         private void ThumbnailBorder_Loaded(object sender, RoutedEventArgs e)
         {
-            if (sender is Border thumbnailBorder)
+            if (sender is Border thumbnailBorder && thumbnailBorder.ActualWidth > 0 && thumbnailBorder.ActualHeight > 0)
             {
-                thumbnailBorder.Clip = new RectangleGeometry(new Rect(0, 0, thumbnailBorder.ActualWidth, thumbnailBorder.ActualHeight), 20, 20);
+                thumbnailBorder.Clip = new RectangleGeometry(new Rect(0, 0, thumbnailBorder.ActualWidth, thumbnailBorder.ActualHeight), 13, 13);
             }
         }
 
         private void ThumbnailBorder_SizeChanged(object sender, SizeChangedEventArgs e)
         {
-            if (sender is Border thumbnailBorder)
+            if (sender is Border thumbnailBorder && e.NewSize.Width > 0 && e.NewSize.Height > 0)
             {
-                thumbnailBorder.Clip = new RectangleGeometry(new Rect(0, 0, e.NewSize.Width, e.NewSize.Height), 20, 20);
+                thumbnailBorder.Clip = new RectangleGeometry(new Rect(0, 0, e.NewSize.Width, e.NewSize.Height), 13, 13);
             }
         }
 
@@ -2398,6 +2185,12 @@ namespace SteamPluginManager.Views
             {
                 if (thumbnailImage == null || file == null)
                     return;
+
+                if (!thumbnailImage.Dispatcher.CheckAccess())
+                {
+                    thumbnailImage.Dispatcher.BeginInvoke(new Action(() => LoadThumbnailImage(file, thumbnailImage)));
+                    return;
+                }
 
                 // Ensure thumbnail image always fills the rounded border container
                 thumbnailImage.Stretch = System.Windows.Media.Stretch.UniformToFill;
@@ -2422,21 +2215,15 @@ namespace SteamPluginManager.Views
                         bitmap.BeginInit();
                         bitmap.UriSource = new Uri(file.ThumbnailPath, UriKind.Absolute);
                         bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                        bitmap.DecodePixelWidth = 250;
+                        bitmap.DecodePixelWidth = 280;
                         bitmap.EndInit();
                         bitmap.Freeze();
                         thumbnailImage.Source = bitmap;
-                        LogDebug($"✓ Loaded thumbnail for {file.Name}");
                     }
                     catch (Exception imgEx)
                     {
                         LogDebug($"Failed to load image for {file.Name}: {imgEx.Message}");
-                        // Leave default fallback icon visible
                     }
-                }
-                else
-                {
-                    LogDebug($"Thumbnail path empty for {file.Name} - showing fallback icon");
                 }
             }
             catch (Exception ex)
@@ -2476,7 +2263,7 @@ namespace SteamPluginManager.Views
 
         private void ShowError(string message)
         {
-            MessageBox.Show(message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            ModernMessageBox.Show(message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
 
         private void NextPage_Click(object sender, RoutedEventArgs e)
@@ -2608,7 +2395,8 @@ namespace SteamPluginManager.Views
                 LogDebug($"[DisplayCurrentPage] Total files in _allFiles: {_allFiles.Count}");
                 LogDebug($"[DisplayCurrentPage] Current filter category: {_currentFilterCategory}");
                 LogDebug($"[DisplayCurrentPage] Current sort order: {_currentSortOrder}");
-                if (!string.IsNullOrWhiteSpace(searchText))
+                bool hasSearch = !string.IsNullOrWhiteSpace(searchText);
+                if (hasSearch)
                 {
                     LogDebug($"[DisplayCurrentPage] Search text active: {searchText}");
                 }
@@ -2626,11 +2414,13 @@ namespace SteamPluginManager.Views
                     if (_currentFilterCategory != "All" && !GenreMatchesCategory(file.Genre, _currentFilterCategory))
                         continue;
 
-                    if (!string.IsNullOrWhiteSpace(searchText))
+                    if (hasSearch)
                     {
-                        var fileName = file.Name?.ToLower() ?? string.Empty;
-                        var fileUrlName = file.FileName?.ToLower() ?? string.Empty;
-                        if (!fileName.Contains(searchText) && !fileUrlName.Contains(searchText))
+                        bool matchName = file.Name != null && file.Name.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0;
+                        bool matchFile = file.FileName != null && file.FileName.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0;
+                        bool matchAppId = file.AppId.HasValue && file.AppId.Value.ToString().IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0;
+
+                        if (!matchName && !matchFile && !matchAppId)
                             continue;
                     }
 
@@ -2645,43 +2435,31 @@ namespace SteamPluginManager.Views
                 // Store last filtered list for paging
                 _lastFilteredFiles = filesToDisplay;
 
-                bool isSearchActive = !string.IsNullOrWhiteSpace(searchText);
-                bool isFilterActive = _currentFilterCategory != "All";
-
-                // Determine paged mode: only when not searching and there are more items than a page
-                bool isPagedMode = !isSearchActive && filesToDisplay.Count > _pageSize;
+                // CRITICAL PERFORMANCE FIX: Always paginate when count > _pageSize, including during search!
+                // Rendering hundreds of cards at once into a non-virtualized WrapPanel causes severe UI freezing.
+                bool isPagedMode = filesToDisplay.Count > _pageSize;
 
                 // Compute total pages and clamp current page
                 int totalPagesCount = Math.Max(1, (int)Math.Ceiling((double)filesToDisplay.Count / _pageSize));
                 if (_currentPage < 0) _currentPage = 0;
                 if (_currentPage > totalPagesCount - 1) _currentPage = totalPagesCount - 1;
 
-                if (isSearchActive)
+                int startIndex = isPagedMode ? _currentPage * _pageSize : 0;
+                int endIndex = isPagedMode ? Math.Min(startIndex + _pageSize, filesToDisplay.Count) : filesToDisplay.Count;
+
+                var pageItems = new List<ManifestFile>();
+                for (int i = startIndex; i < endIndex; i++)
                 {
-                    // Show all matching results when searching
+                    pageItems.Add(filesToDisplay[i]);
+                }
+
+                // Fast update: only modify Files collection if items changed to avoid redundant layout passes
+                if (!Files.SequenceEqual(pageItems))
+                {
                     Files.Clear();
-                    foreach (var file in filesToDisplay)
+                    foreach (var file in pageItems)
                     {
                         Files.Add(file);
-                    }
-                }
-                else
-                {
-                    if (!isPagedMode)
-                    {
-                        // fewer than a page: show all
-                        Files.Clear();
-                        foreach (var file in filesToDisplay)
-                            Files.Add(file);
-                    }
-                    else
-                    {
-                        // Paged mode: show only the items in the current page (no incremental append)
-                        int startIndex = _currentPage * _pageSize;
-                        int endIndex = Math.Min(startIndex + _pageSize, filesToDisplay.Count);
-                        Files.Clear();
-                        for (int i = startIndex; i < endIndex; i++)
-                            Files.Add(filesToDisplay[i]);
                     }
                 }
 
@@ -2705,9 +2483,11 @@ namespace SteamPluginManager.Views
                 {
                     pageIndicator.Visibility = Visibility.Visible;
                     if (isPagedMode)
-                        pageIndicator.Text = $"Page {_currentPage + 1} / {totalPages} ({filesToDisplay.Count} items)";
+                        pageIndicator.Text = hasSearch
+                            ? $"Page {_currentPage + 1} / {totalPages} ({filesToDisplay.Count} matching)"
+                            : $"Page {_currentPage + 1} / {totalPages} ({filesToDisplay.Count} items)";
                     else
-                        pageIndicator.Text = !string.IsNullOrWhiteSpace(searchText)
+                        pageIndicator.Text = hasSearch
                             ? $"Found {filesToDisplay.Count} matching files"
                             : $"Total: {filesToDisplay.Count} files";
                 }
@@ -2772,16 +2552,21 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                if (e.WidthChanged)
+                {
+                    UpdateCardPanelLayout();
+                }
+
                 // Cancel previous debounce timer
                 if (_sizeChangeDebounceTimer != null)
                 {
                     _sizeChangeDebounceTimer.Stop();
                 }
                 
-                // Create new debounce timer - only update after 250ms of no size changes
+                // Debounce timer for smooth resize
                 _sizeChangeDebounceTimer = new System.Windows.Threading.DispatcherTimer
                 {
-                    Interval = TimeSpan.FromMilliseconds(250)
+                    Interval = TimeSpan.FromMilliseconds(50)
                 };
                 
                 _sizeChangeDebounceTimer.Tick += (s, args) =>
@@ -2789,7 +2574,6 @@ namespace SteamPluginManager.Views
                     try
                     {
                         _sizeChangeDebounceTimer.Stop();
-                        // Only recalculate layout, don't reload data
                         RecalculateLayout();
                     }
                     catch (Exception ex)
@@ -2804,6 +2588,14 @@ namespace SteamPluginManager.Views
             {
                 LogDebug($"SizeChanged handler error: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Public method to force layout recalculation when window state changes (e.g. Maximize/Restore)
+        /// </summary>
+        public void RecalculateActiveLayout()
+        {
+            RecalculateLayout();
         }
 
         /// <summary>
@@ -2839,6 +2631,10 @@ namespace SteamPluginManager.Views
                 if (sender is ScrollViewer scrollViewer)
                 {
                     _cachedScrollOffset = scrollViewer.VerticalOffset;
+                    if (e.ViewportWidthChange != 0)
+                    {
+                        UpdateCardPanelLayout();
+                    }
                 }
             }
             catch { }
@@ -2868,6 +2664,11 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                if (CardPanel == null && FileCards != null)
+                {
+                    CardPanel = FindVisualChild<WrapPanel>(FileCards);
+                }
+
                 if (CardsScrollViewer == null || CardPanel == null)
                     return;
 
@@ -2877,69 +2678,23 @@ namespace SteamPluginManager.Views
                 if (availableWidth <= 0)
                     return;
 
-                if (availableWidth <= 0)
-                    return;
+                const double cardMarginRight = 14;
+                const double targetCardWidth = 220;
+                const double rightClearance = 36; // Accounts for scrollbar, padding, and drop shadow projection
 
-                const double cardGap = 8;
-                const double childHorizontalMargin = 8;
-                const double viewportPadding = 6;
-                double usableWidth = Math.Max(0, availableWidth - viewportPadding);
-                int columns = Math.Max(1, (int)((usableWidth + cardGap) / (MIN_CARD_WIDTH + cardGap)));
-                double computedWidth = Math.Floor((usableWidth - (columns * childHorizontalMargin)) / columns);
-                if (computedWidth < 180)
-                    computedWidth = Math.Max(180, Math.Floor(usableWidth / Math.Max(1, columns)) - childHorizontalMargin);
+                double usableWidth = Math.Max(targetCardWidth + cardMarginRight, availableWidth - rightClearance);
+                int columns = Math.Max(1, (int)(usableWidth / (targetCardWidth + cardMarginRight)));
+                double computedWidth = Math.Floor(usableWidth / columns);
 
                 CardPanel.ItemWidth = computedWidth;
+                CardPanel.ItemHeight = 288; // 276 card height + 12 bottom margin
 
-                // Dynamically adjust page size based on how many cards fit horizontally per row
-                double itemHeight = 0;
-                int visibleColumns = 1;
                 int previousPageSize = _pageSize;
 
                 try
                 {
-                    // Determine a stable item height to assign to the WrapPanel so wrapping calculations are consistent
-                    double configuredItemHeight = CardPanel.ItemHeight > 0 ? CardPanel.ItemHeight : 280; // fallback configured height
-
-                    // Try to measure the actual rendered height of the first card (more accurate)
-                    double actualChildHeight = 0;
-                    double childVerticalMargins = 0;
-                    try
-                    {
-                        if (CardPanel.Children != null && CardPanel.Children.Count > 0)
-                        {
-                            if (CardPanel.Children[0] is FrameworkElement firstChild)
-                            {
-                                actualChildHeight = firstChild.ActualHeight;
-                                var m = firstChild.Margin;
-                                childVerticalMargins = m.Top + m.Bottom;
-                            }
-                        }
-                    }
-                    catch { }
-
-                    // Use actual measured child height when available, otherwise fallback to configuredItemHeight
-                    itemHeight = (actualChildHeight > 1) ? actualChildHeight : configuredItemHeight;
-
-                    // Keep the row gap tighter and let the card margins control the spacing.
-                    double verticalSpacing = 6;
-                    double effectiveItemHeight = Math.Ceiling(itemHeight + verticalSpacing + 2); // small buffer
-
-                    // Ensure the WrapPanel has a reasonable ItemHeight so layout math is predictable
-                    CardPanel.ItemHeight = Math.Max(1, effectiveItemHeight);
-
-                    // Compute visible columns using ItemWidth and available width rather than relying solely on visual children (more stable)
-                    if (CardPanel.ItemWidth > 0)
-                    {
-                        visibleColumns = Math.Max(1, (int)Math.Floor(usableWidth / (CardPanel.ItemWidth + cardGap)));
-                    }
-                    else
-                    {
-                        visibleColumns = Math.Max(1, (int)Math.Floor(availableWidth / (MIN_CARD_WIDTH + cardGap)));
-                    }
-
                     // Fix rows per page to ROWS_PER_PAGE; page size depends on the number of visible columns
-                    _pageSize = visibleColumns * ROWS_PER_PAGE;
+                    _pageSize = columns * ROWS_PER_PAGE;
 
                     // Ensure current page is within range after pageSize change
                     if (_lastFilteredFiles != null)
@@ -3119,7 +2874,7 @@ namespace SteamPluginManager.Views
                     {
                         From = 0,
                         To = 360,
-                        Duration = new System.Windows.Duration(System.TimeSpan.FromSeconds(2)),
+                        Duration = new System.Windows.Duration(System.TimeSpan.FromSeconds(1)),
                         RepeatBehavior = RepeatBehavior.Forever
                     };
                     continuousRotate.BeginAnimation(System.Windows.Media.RotateTransform.AngleProperty, animation);

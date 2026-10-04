@@ -26,6 +26,19 @@ namespace SteamPluginManager.Views
 
             try
             {
+                bool isBlocked = await DashboardView.IsDeviceBlockedAsync();
+                if (isBlocked)
+                {
+                    LoadingOverlay.Visibility = Visibility.Collapsed;
+                    ModernMessageBox.Show(
+                        "⛔ This device has been permanently blocked by administrator.\nYou cannot generate or verify tokens on this machine.",
+                        "Access Denied",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                    WindowNavigator.NavigateToVerifyToken();
+                    return;
+                }
+
                 string userDataFolder = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "SteamPluginManager",
@@ -45,7 +58,7 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 LoadingOverlay.Visibility = Visibility.Collapsed;
-                MessageBox.Show(
+                ModernMessageBox.Show(
                     $"WebView2 Runtime is required to display token generator inside the app.\n\n{ex.Message}",
                     "Token Generator",
                     MessageBoxButton.OK,
@@ -108,7 +121,7 @@ namespace SteamPluginManager.Views
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to return to token entry: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Failed to return to token entry: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

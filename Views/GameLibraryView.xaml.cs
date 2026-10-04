@@ -10,6 +10,8 @@ using Microsoft.Win32;
 using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Threading.Tasks;
+using SteamPluginManager;
 
 namespace SteamPluginManager.Views
 {
@@ -75,8 +77,20 @@ namespace SteamPluginManager.Views
                 _mainWindow.RefreshGameList();
             }
             
-            // Then refresh UI
-            LoadGameLibrary();
+            // Re-check installation status
+            RefreshInstallationStatus();
+
+            // Then refresh view and respect current filter (All / Installed / NotInstalled)
+            if (_collectionView != null)
+            {
+                ApplyCollectionFilters();
+                UpdateInfoPanel();
+                UpdateGridColumns();
+            }
+            else
+            {
+                LoadGameLibrary();
+            }
         }
 
         private void RefreshInstallationStatus()
@@ -115,21 +129,23 @@ namespace SteamPluginManager.Views
                     
                     SetupCollectionView();
                     
-                    // Subscribe to games collection changes for real-time updates
+                    // Subscribe to games collection changes for real-time updates (prevent duplicate subscriptions)
+                    _mainWindow.Games.CollectionChanged -= Games_CollectionChanged;
                     _mainWindow.Games.CollectionChanged += Games_CollectionChanged;
                     Logger.Log("[GameLibraryView] Subscribed to Games.CollectionChanged event");
                     
                     UpdateInfoPanel();
                     UpdateGridColumns();
                     
-                    // Initialize SearchBox placeholder
-                    if (SearchBox != null)
+                    // Initialize SearchBox placeholder only on first initial load
+                    if (SearchBox != null && !_isInitialized)
                     {
                         _isUpdatingSearchBox = true;
-                        SearchBox.Text = "Search games...";
+                        SearchBox.Text = "";
                         _isUpdatingSearchBox = false;
-                        Logger.Log("[GameLibraryView] SearchBox placeholder initialized");
+                        Logger.Log("[GameLibraryView] SearchBox initialized");
                     }
+                    _isInitialized = true;
                     
                     // Register language mappings
                     RegisterGameLibraryElements();
@@ -157,7 +173,7 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"[GameLibraryView] Exception in LoadGameLibrary: {ex.Message}\n{ex.StackTrace}");
-                MessageBox.Show($"Failed to load games: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Failed to load games: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -239,6 +255,9 @@ namespace SteamPluginManager.Views
                 {
                     Logger.Log("[GameLibraryView] WARNING: GameCards is NULL during SetupCollectionView - will retry on next refresh");
                 }
+
+                // Apply active filters immediately (Category and Search)
+                ApplyCollectionFilters();
                 
                 Logger.Log("[GameLibraryView] CollectionView setup complete");
             }
@@ -289,17 +308,7 @@ namespace SteamPluginManager.Views
             {
                 Logger.Log("[GameLibraryView] Starting RegisterGameLibraryElements");
                 
-                // Header section
-                if (GameLibraryTitleText != null)
-                    LanguageHelper.RegisterTextBlock(GameLibraryTitleText, "GameLibrary.Title");
-                else
-                    Logger.Log("[GameLibraryView] WARNING: GameLibraryTitleText is NULL");
-                    
-                if (GameLibrarySubtitleText != null)
-                    LanguageHelper.RegisterTextBlock(GameLibrarySubtitleText, "GameLibrary.Subtitle");
-                else
-                    Logger.Log("[GameLibraryView] WARNING: GameLibrarySubtitleText is NULL");
-                    
+                // Toolbar action buttons
                 if (SelectAllText != null)
                     LanguageHelper.RegisterTextBlock(SelectAllText, "GameLibrary.SelectAll");
                 else
@@ -401,9 +410,9 @@ namespace SteamPluginManager.Views
             {
                 var openFileDialog = new OpenFileDialog
                 {
-                    Title = "Import Lua, Manifest, or Zip files",
+                    Title = "Import Lua, Manifest, Zip, or Backup files",
                     Multiselect = true,
-                    Filter = "Supported Files (*.lua;*.manifest;*.zip)|*.lua;*.manifest;*.zip|Lua Files (*.lua)|*.lua|Manifest Files (*.manifest)|*.manifest|Zip Files (*.zip)|*.zip|All Files (*.*)|*.*"
+                    Filter = "Supported Files (*.lua;*.manifest;*.zip;*.hzbak;*.spmb)|*.lua;*.manifest;*.zip;*.hzbak;*.spmb|HZ Backup (*.hzbak)|*.hzbak|SPM Backup (*.spmb)|*.spmb|Lua Files (*.lua)|*.lua|Manifest Files (*.manifest)|*.manifest|Zip Files (*.zip)|*.zip|All Files (*.*)|*.*"
                 };
 
                 if (openFileDialog.ShowDialog() != true)
@@ -421,14 +430,14 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"[GameLibraryView] Error in ImportButton_Click: {ex.Message}");
-                MessageBox.Show($"Error opening import dialog: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Error opening import dialog: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
         private void CopyLog_Click(object sender, RoutedEventArgs e)
         {
             // Activity log removed — inform user
-            MessageBox.Show("Activity log has been disabled.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+            ModernMessageBox.Show("Activity log has been disabled.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void ClearAll_Click(object sender, RoutedEventArgs e)
@@ -451,7 +460,7 @@ namespace SteamPluginManager.Views
             var selected = _mainWindow.Games.Where(g => g.IsSelected).ToList();
             if (selected.Count == 0)
             {
-                MessageBox.Show("Please select games to backup", "No Selection", MessageBoxButton.OK, MessageBoxImage.Warning);
+                ModernMessageBox.Show("Please select games to backup", "No Selection", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -459,9 +468,9 @@ namespace SteamPluginManager.Views
             {
                 var saveFileDialog = new SaveFileDialog
                 {
-                    Filter = "SPM Backup (*.spmb)|*.spmb",
+                    Filter = "HZ Backup (*.hzbak)|*.hzbak|SPM Backup (*.spmb)|*.spmb|All Files (*.*)|*.*",
                     Title = "Save Backup",
-                    FileName = $"SteamPluginBackup_{DateTime.Now:yyyyMMdd}.spmb"
+                    FileName = $"HZBackup_{DateTime.Now:yyyyMMdd}.hzbak"
                 };
 
                 if (saveFileDialog.ShowDialog() != true) return;
@@ -494,7 +503,7 @@ namespace SteamPluginManager.Views
                     EncryptStream(memoryStream, saveFileDialog.FileName);
                 }
 
-                MessageBox.Show(
+                ModernMessageBox.Show(
                     $"Backup created successfully!\n\nGames: {selected.Count}\nFile: {Path.GetFileName(saveFileDialog.FileName)}", 
                     "Backup Complete", 
                     MessageBoxButton.OK, 
@@ -505,7 +514,7 @@ namespace SteamPluginManager.Views
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Backup failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Backup failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -536,6 +545,81 @@ namespace SteamPluginManager.Views
                 }
             }
             return inStream;
+        }
+
+        private MemoryStream DecryptStream(string inputFile)
+        {
+            var memoryStream = new MemoryStream();
+            using (var inStream = new FileStream(inputFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                byte[] salt = new byte[SaltSize];
+                inStream.Read(salt, 0, salt.Length);
+
+                using (var aes = Aes.Create())
+                {
+                    aes.KeySize = 256;
+                    byte[] iv = new byte[aes.IV.Length];
+                    inStream.Read(iv, 0, iv.Length);
+                    aes.IV = iv;
+
+                    var key = new Rfc2898DeriveBytes(GetBackupPassword(), salt, 10000, HashAlgorithmName.SHA256).GetBytes(aes.KeySize / 8);
+                    aes.Key = key;
+
+                    using (var cryptoStream = new CryptoStream(inStream, aes.CreateDecryptor(), CryptoStreamMode.Read))
+                    {
+                        cryptoStream.CopyTo(memoryStream);
+                    }
+                }
+            }
+            memoryStream.Position = 0;
+            return memoryStream;
+        }
+
+        private bool ProcessBackupFile(string backupFilePath, string pluginPath, string luaPath, string depotCachePath, string depotCachePathOld)
+        {
+            try
+            {
+                using (var memoryStream = DecryptStream(backupFilePath))
+                {
+                    int luaFiles = 0;
+                    int manifestFiles = 0;
+
+                    using (var archive = new ZipArchive(memoryStream, ZipArchiveMode.Read))
+                    {
+                        foreach (var entry in archive.Entries)
+                        {
+                            if (string.IsNullOrEmpty(entry.Name)) continue;
+
+                            if (entry.FullName.EndsWith(".lua", StringComparison.OrdinalIgnoreCase))
+                            {
+                                string targetPlugin = Path.Combine(pluginPath, entry.Name);
+                                string targetLua = Path.Combine(luaPath, entry.Name);
+                                entry.ExtractToFile(targetPlugin, overwrite: true);
+                                entry.ExtractToFile(targetLua, overwrite: true);
+                                luaFiles++;
+                                Logger.Log($"[GameLibraryView] Restored backup lua file: {entry.Name}");
+                            }
+                            else if (entry.FullName.EndsWith(".manifest", StringComparison.OrdinalIgnoreCase))
+                            {
+                                string targetDepot = Path.Combine(depotCachePath, entry.Name);
+                                string targetDepotOld = Path.Combine(depotCachePathOld, entry.Name);
+                                entry.ExtractToFile(targetDepot, overwrite: true);
+                                entry.ExtractToFile(targetDepotOld, overwrite: true);
+                                manifestFiles++;
+                                Logger.Log($"[GameLibraryView] Restored backup manifest file: {entry.Name}");
+                            }
+                        }
+                    }
+
+                    Logger.Log($"[GameLibraryView] Backup restored: {Path.GetFileName(backupFilePath)} ({luaFiles} lua, {manifestFiles} manifests)");
+                    return luaFiles > 0 || manifestFiles > 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[GameLibraryView] Failed to process backup file {backupFilePath}: {ex.Message}");
+                return false;
+            }
         }
 
         private IEnumerable<string> GetManifestsForLuaFile(string luaFilePath)
@@ -590,7 +674,7 @@ namespace SteamPluginManager.Views
             var selected = _mainWindow.Games.Where(g => g.IsSelected).ToList();
             if (selected.Count == 0)
             {
-                MessageBox.Show("Please select games to delete", "No Selection", MessageBoxButton.OK, MessageBoxImage.Warning);
+                ModernMessageBox.Show("Please select games to delete", "No Selection", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -603,24 +687,36 @@ namespace SteamPluginManager.Views
                 }
 
                 // Show progress overlay
+                string titleText = dlg.SelectedAction switch
+                {
+                    DeleteChoiceDialog.DeleteAction.ManifestAndLua => "Deleting Manifest & Lua",
+                    DeleteChoiceDialog.DeleteAction.Uninstall => "Uninstalling Games",
+                    DeleteChoiceDialog.DeleteAction.Both => "Deleting & Uninstalling",
+                    _ => "Processing"
+                };
+
                 string actionText = dlg.SelectedAction switch
                 {
-                    DeleteChoiceDialog.DeleteAction.ManifestAndLua => "Deleting Lua & Manifest...",
-                    DeleteChoiceDialog.DeleteAction.Uninstall => "Uninstalling Games...",
-                    DeleteChoiceDialog.DeleteAction.Both => "Deleting & Uninstalling...",
+                    DeleteChoiceDialog.DeleteAction.ManifestAndLua => $"Deleting Lua & Manifest for {selected.Count} game(s)...",
+                    DeleteChoiceDialog.DeleteAction.Uninstall => $"Triggering uninstall for {selected.Count} game(s)...",
+                    DeleteChoiceDialog.DeleteAction.Both => $"Deleting files and uninstalling {selected.Count} game(s)...",
                     _ => "Processing..."
                 };
                 
-                ShowDeleteProgressOverlay(true, actionText);
+                ShowDeleteProgressOverlay(true, actionText, titleText);
+                UpdateDeleteProgressStatus(actionText, 2);
 
                 // Call actual delete method from MainWindow
                 await _mainWindow.DeleteSelectedGamesAsync(dlg.SelectedAction);
                 
-                UpdateDeleteProgressStatus("Refreshing library...");
+                UpdateDeleteProgressStatus("Refreshing library...", 4);
                 
-                // Refresh GameLibraryView UI after delete completes
+                // Refresh GameLibraryView UI after delete completes while respecting active filter
                 Logger.Log("[GameLibraryView] Auto-refreshing library view after delete");
-                LoadGameLibrary();
+                RefreshInstallationStatus();
+                ApplyCollectionFilters();
+                UpdateInfoPanel();
+                UpdateGridColumns();
                 
                 // Log the deletion
                 UpdateActivityLog($"{selected.Count} game(s) deleted");
@@ -632,7 +728,7 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 ShowDeleteProgressOverlay(false);
-                MessageBox.Show($"Delete failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Delete failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -702,6 +798,7 @@ namespace SteamPluginManager.Views
                         SearchBox_TextChanged(sender, new TextChangedEventArgs(TextBox.TextChangedEvent, UndoAction.None));
                     }
                 }
+                textBox.Foreground = (System.Windows.Media.Brush)Application.Current.Resources["ForegroundBrush"];
             }
         }
 
@@ -724,6 +821,7 @@ namespace SteamPluginManager.Views
                     _isUpdatingSearchBox = false;
                 }
             }
+            // Handled cleanly by modern XAML overlay placeholder
         }
 
         private void CategoryFilterComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -738,6 +836,12 @@ namespace SteamPluginManager.Views
         private void ApplyCollectionFilters()
         {
             if (_collectionView == null) return;
+
+            // Ensure _selectedCategory is always in sync with CategoryFilterComboBox
+            if (CategoryFilterComboBox?.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+            {
+                _selectedCategory = tag;
+            }
 
             try
             {
@@ -818,10 +922,18 @@ namespace SteamPluginManager.Views
 
         private void UpdateActionButtons(int selectedCount)
         {
-            // Show/hide action buttons based on selection count
-            if (BackupBtn != null) BackupBtn.Visibility = selectedCount > 0 ? Visibility.Visible : Visibility.Collapsed;
-            if (DeleteBtn != null) DeleteBtn.Visibility = selectedCount > 0 ? Visibility.Visible : Visibility.Collapsed;
-            if (ClearAllBtn != null) ClearAllBtn.Visibility = selectedCount > 0 ? Visibility.Visible : Visibility.Collapsed;
+            bool hasSelection = selectedCount > 0;
+
+            // Show/hide contextual action buttons based on selection count
+            if (BackupBtn != null) BackupBtn.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
+            if (DeleteBtn != null) DeleteBtn.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
+            if (ClearAllBtn != null) ClearAllBtn.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
+
+            // Temporarily hide global action buttons when selection is active to keep the toolbar clean
+            var defaultActionsVisibility = hasSelection ? Visibility.Collapsed : Visibility.Visible;
+            if (SelectAllBtn != null) SelectAllBtn.Visibility = defaultActionsVisibility;
+            if (RefreshBtn != null) RefreshBtn.Visibility = defaultActionsVisibility;
+            if (ImportBtn != null) ImportBtn.Visibility = defaultActionsVisibility;
         }
 
         private void UpdateInfoPanel()
@@ -850,6 +962,9 @@ namespace SteamPluginManager.Views
                 
                 if (HeaderSelectionCounterText != null)
                     HeaderSelectionCounterText.Text = counterText;
+
+                if (HeaderSelectionBadge != null)
+                    HeaderSelectionBadge.Visibility = selectedCount > 0 ? Visibility.Visible : Visibility.Collapsed;
             }
             catch (Exception ex)
             {
@@ -888,35 +1003,65 @@ namespace SteamPluginManager.Views
             return new ObservableCollection<GameEntry>(sorted);
         }
 
-        private void ShowDeleteProgressOverlay(bool show, string status = "Processing...")
+        private void ShowDeleteProgressOverlay(bool show, string status = "Processing...", string title = "Deleting Games")
         {
             try
             {
-                Logger.Log($"[GameLibraryView] ShowDeleteProgressOverlay called with show={show}, status='{status}'");
-                
-                var overlay = FindName("DeleteProgressOverlay");
-                Logger.Log($"[GameLibraryView] FindName('DeleteProgressOverlay') returned: {overlay?.GetType().Name ?? "NULL"}");
-                
-                if (overlay is Grid overlayGrid)
+                Logger.Log($"[GameLibraryView] ShowDeleteProgressOverlay called with show={show}, status='{status}', title='{title}'");
+
+                // 1. Unified Modern Global Modal System (OperationProgressModalView)
+                var modal = WindowNavigator.GetProgressModal();
+                if (modal != null)
+                {
+                    if (show)
+                    {
+                        string step1 = "Analyze Games";
+                        string step2 = "Delete Manifest";
+                        string step3 = "Remove Lua";
+                        string step4 = "Update Library";
+                        string glyph = "\uE74D";
+
+                        if (status.Contains("Uninstall", StringComparison.OrdinalIgnoreCase))
+                        {
+                            title = "Uninstalling Games";
+                            step1 = "Verify Install";
+                            step2 = "Trigger Steam";
+                            step3 = "Clean Directory";
+                            step4 = "Update Library";
+                        }
+                        else if (status.Contains("Both", StringComparison.OrdinalIgnoreCase) || status.Contains("&", StringComparison.OrdinalIgnoreCase))
+                        {
+                            title = "Uninstall & Delete";
+                            step1 = "Trigger Steam";
+                            step2 = "Delete Manifest";
+                            step3 = "Remove Lua";
+                            step4 = "Update Library";
+                        }
+
+                        modal.Configure(title, step1, step2, step3, step4, glyph);
+                        modal.ShowModal(status, "Please wait while the operation completes...");
+                        modal.UpdateProgressStep(1);
+                    }
+                    else
+                    {
+                        modal.HideModal();
+                    }
+                }
+
+                // 2. In-view fallback overlay
+                if (DeleteProgressOverlay != null)
+                {
+                    DeleteProgressOverlay.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+                }
+                else if (FindName("DeleteProgressOverlay") is Grid overlayGrid)
                 {
                     overlayGrid.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-                    Logger.Log($"[GameLibraryView] ✓ Delete progress overlay visibility set to: {overlayGrid.Visibility}");
-                }
-                else
-                {
-                    Logger.Log($"[GameLibraryView] ✗ ERROR: DeleteProgressOverlay not found or not a Grid");
                 }
 
                 if (show)
                 {
-                    var statusText = FindName("DeleteProgressStatus");
-                    Logger.Log($"[GameLibraryView] FindName('DeleteProgressStatus') returned: {statusText?.GetType().Name ?? "NULL"}");
-                    
-                    if (statusText is TextBlock statusTextBlock)
-                    {
-                        statusTextBlock.Text = status;
-                        Logger.Log($"[GameLibraryView] ✓ Status text updated to: '{status}'");
-                    }
+                    if (DeleteProgressStatus != null) DeleteProgressStatus.Text = status;
+                    if (DeleteProgressTitle != null && !string.IsNullOrWhiteSpace(title)) DeleteProgressTitle.Text = title;
                 }
             }
             catch (Exception ex)
@@ -929,10 +1074,13 @@ namespace SteamPluginManager.Views
         {
             try
             {
-                if (FindName("DeleteProgressTitle") is TextBlock titleText)
+                if (DeleteProgressTitle != null)
+                {
+                    DeleteProgressTitle.Text = title;
+                }
+                else if (FindName("DeleteProgressTitle") is TextBlock titleText)
                 {
                     titleText.Text = title;
-                    Logger.Log($"[GameLibraryView] ✓ Progress overlay title updated to: '{title}'");
                 }
             }
             catch (Exception ex)
@@ -941,11 +1089,23 @@ namespace SteamPluginManager.Views
             }
         }
 
-        private void UpdateDeleteProgressStatus(string message)
+        private void UpdateDeleteProgressStatus(string message, int step = 0)
         {
             try
             {
-                if (FindName("DeleteProgressStatus") is TextBlock statusText)
+                var modal = WindowNavigator.GetProgressModal();
+                if (modal != null && modal.IsOpen)
+                {
+                    if (step > 0) modal.UpdateProgressStep(step);
+                    modal.UpdateStatus(message, message);
+                    modal.SetProgress(step > 0 ? (step * 25) : 50, 100, step == 0);
+                }
+
+                if (DeleteProgressStatus != null)
+                {
+                    DeleteProgressStatus.Text = message;
+                }
+                else if (FindName("DeleteProgressStatus") is TextBlock statusText)
                 {
                     statusText.Text = message;
                 }
@@ -955,37 +1115,42 @@ namespace SteamPluginManager.Views
                 Logger.Log($"[GameLibraryView] Error updating delete progress status: {ex.Message}");
             }
         }
+
         private void ShowImportProgressOverlay(bool show, string status = "Processing...")
         {
             try
             {
                 Logger.Log($"[GameLibraryView] ShowImportProgressOverlay called with show={show}, status='{status}'");
 
+                // 1. Unified Modern Global Modal System (OperationProgressModalView)
+                var modal = WindowNavigator.GetProgressModal();
+                if (modal != null)
+                {
+                    if (show)
+                    {
+                        modal.Configure("Importing Files", "Validate Files", "Extract Archives", "Deploy Lua & Manifest", "Update Library", "\uE896");
+                        modal.ShowModal(status, "Please wait while files are processed and deployed...");
+                        modal.UpdateProgressStep(1);
+                    }
+                    else
+                    {
+                        modal.HideModal();
+                    }
+                }
 
-                
-                var overlay = FindName("ImportProgressOverlay");
-                Logger.Log($"[GameLibraryView] FindName('ImportProgressOverlay') returned: {overlay?.GetType().Name ?? "NULL"}");
-                
-                if (overlay is Grid overlayGrid)
+                // 2. In-view fallback overlay
+                if (ImportProgressOverlay != null)
+                {
+                    ImportProgressOverlay.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+                }
+                else if (FindName("ImportProgressOverlay") is Grid overlayGrid)
                 {
                     overlayGrid.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-                    Logger.Log($"[GameLibraryView] ✓ Import progress overlay visibility set to: {overlayGrid.Visibility}");
-                }
-                else
-                {
-                    Logger.Log($"[GameLibraryView] ✗ ERROR: ImportProgressOverlay not found or not a Grid");
                 }
 
                 if (show)
                 {
-                    var statusText = FindName("ImportProgressStatus");
-                    Logger.Log($"[GameLibraryView] FindName('ImportProgressStatus') returned: {statusText?.GetType().Name ?? "NULL"}");
-                    
-                    if (statusText is TextBlock statusTextBlock)
-                    {
-                        statusTextBlock.Text = status;
-                        Logger.Log($"[GameLibraryView] ✓ Import status text updated to: '{status}'");
-                    }
+                    if (ImportProgressStatus != null) ImportProgressStatus.Text = status;
                 }
             }
             catch (Exception ex)
@@ -994,11 +1159,23 @@ namespace SteamPluginManager.Views
             }
         }
 
-        private void UpdateImportProgressStatus(string message)
+        private void UpdateImportProgressStatus(string message, int step = 0)
         {
             try
             {
-                if (FindName("ImportProgressStatus") is TextBlock statusText)
+                var modal = WindowNavigator.GetProgressModal();
+                if (modal != null && modal.IsOpen)
+                {
+                    if (step > 0) modal.UpdateProgressStep(step);
+                    modal.UpdateStatus(message, message);
+                    modal.SetProgress(step > 0 ? (step * 25) : 50, 100, step == 0);
+                }
+
+                if (ImportProgressStatus != null)
+                {
+                    ImportProgressStatus.Text = message;
+                }
+                else if (FindName("ImportProgressStatus") is TextBlock statusText)
                 {
                     statusText.Text = message;
                 }
@@ -1016,11 +1193,13 @@ namespace SteamPluginManager.Views
             {
                 string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
                 
-                // Check if files are valid (.lua, .manifest, or .zip)
+                // Check if files are valid (.lua, .manifest, .zip, .hzbak, or .spmb)
                 bool hasValidFiles = files.Any(f => 
                     f.EndsWith(".lua", StringComparison.OrdinalIgnoreCase) ||
                     f.EndsWith(".manifest", StringComparison.OrdinalIgnoreCase) ||
-                    f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+                    f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+                    f.EndsWith(".hzbak", StringComparison.OrdinalIgnoreCase) ||
+                    f.EndsWith(".spmb", StringComparison.OrdinalIgnoreCase));
                 
                 if (hasValidFiles)
                 {
@@ -1049,7 +1228,7 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"[GameLibraryView] Error in Drop handler: {ex.Message}");
-                MessageBox.Show($"Error processing dropped files: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Error processing dropped files: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -1057,13 +1236,14 @@ namespace SteamPluginManager.Views
         {
             try
             {
-                ShowImportProgressOverlay(true, "Processing dropped files...");
+                ShowImportProgressOverlay(true, "Validating dropped files...");
+                UpdateImportProgressStatus("Validating dropped files...", 1);
                 
                 string steamPath = SteamHelper.GetSteamPath();
                 if (string.IsNullOrEmpty(steamPath))
                 {
                     UpdateActivityLog("Error: Steam path not found");
-                    MessageBox.Show("Steam path not found", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ModernMessageBox.Show("Steam path not found", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     ShowImportProgressOverlay(false);
                     return;
                 }
@@ -1087,32 +1267,22 @@ namespace SteamPluginManager.Views
                 {
                     try
                     {
-                        UpdateImportProgressStatus($"Processing: {Path.GetFileName(file)}...");
-                        
-                        if (file.EndsWith(".lua", StringComparison.OrdinalIgnoreCase))
+                        if (file.EndsWith(".hzbak", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".spmb", StringComparison.OrdinalIgnoreCase))
                         {
-                            // Copy .lua file to both stplug-in and lua folders
-                            string destPath = Path.Combine(pluginPath, Path.GetFileName(file));
-                            string destLuaPath = Path.Combine(luaPath, Path.GetFileName(file));
-                            File.Copy(file, destPath, true);
-                            File.Copy(file, destLuaPath, true);
-                            processedFiles.Add(Path.GetFileName(file));
-                            successCount++;
-                            Logger.Log($"[GameLibraryView] Copied .lua file: {Path.GetFileName(file)} → {pluginPath} and {luaPath}");
-                        }
-                        else if (file.EndsWith(".manifest", StringComparison.OrdinalIgnoreCase))
-                        {
-                            // Copy .manifest file to both depotcache paths
-                            string destPath = Path.Combine(depotCachePath, Path.GetFileName(file));
-                            string destPathOld = Path.Combine(depotCachePathOld, Path.GetFileName(file));
-                            File.Copy(file, destPath, true);
-                            File.Copy(file, destPathOld, true);
-                            processedFiles.Add(Path.GetFileName(file));
-                            successCount++;
-                            Logger.Log($"[GameLibraryView] Copied .manifest file: {Path.GetFileName(file)} → {destPath} and {destPathOld}");
+                            UpdateImportProgressStatus($"Restoring backup: {Path.GetFileName(file)}...", 2);
+                            if (ProcessBackupFile(file, pluginPath, luaPath, depotCachePath, depotCachePathOld))
+                            {
+                                processedFiles.Add(Path.GetFileName(file));
+                                successCount++;
+                            }
+                            else
+                            {
+                                failureCount++;
+                            }
                         }
                         else if (file.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
                         {
+                            UpdateImportProgressStatus($"Extracting archive: {Path.GetFileName(file)}...", 2);
                             // Extract zip and process contents
                             if (ProcessZipFile(file, pluginPath, luaPath, depotCachePath, depotCachePathOld))
                             {
@@ -1124,6 +1294,30 @@ namespace SteamPluginManager.Views
                                 failureCount++;
                             }
                         }
+                        else if (file.EndsWith(".lua", StringComparison.OrdinalIgnoreCase))
+                        {
+                            UpdateImportProgressStatus($"Deploying: {Path.GetFileName(file)}...", 3);
+                            // Copy .lua file to both stplug-in and lua folders
+                            string destPath = Path.Combine(pluginPath, Path.GetFileName(file));
+                            string destLuaPath = Path.Combine(luaPath, Path.GetFileName(file));
+                            File.Copy(file, destPath, true);
+                            File.Copy(file, destLuaPath, true);
+                            processedFiles.Add(Path.GetFileName(file));
+                            successCount++;
+                            Logger.Log($"[GameLibraryView] Copied .lua file: {Path.GetFileName(file)} → {pluginPath} and {luaPath}");
+                        }
+                        else if (file.EndsWith(".manifest", StringComparison.OrdinalIgnoreCase))
+                        {
+                            UpdateImportProgressStatus($"Deploying: {Path.GetFileName(file)}...", 3);
+                            // Copy .manifest file to both depotcache paths
+                            string destPath = Path.Combine(depotCachePath, Path.GetFileName(file));
+                            string destPathOld = Path.Combine(depotCachePathOld, Path.GetFileName(file));
+                            File.Copy(file, destPath, true);
+                            File.Copy(file, destPathOld, true);
+                            processedFiles.Add(Path.GetFileName(file));
+                            successCount++;
+                            Logger.Log($"[GameLibraryView] Copied .manifest file: {Path.GetFileName(file)} → {destPath} and {destPathOld}");
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -1133,20 +1327,12 @@ namespace SteamPluginManager.Views
                 }
 
                 // Refresh the game library
-                UpdateImportProgressStatus("Refreshing library...");
+                UpdateImportProgressStatus("Refreshing library...", 4);
                 await Task.Delay(500);
                 
-                // Reload games from file system
+                // Reload games from file system and refresh view respecting filters
                 Logger.Log("[GameLibraryView] Triggering UI refresh after file drop import");
-                if (_mainWindow != null)
-                {
-                    // Force reload from file system
-                    _mainWindow.RefreshGameList();
-                }
-                
-                // Refresh collection view to update UI
-                await Task.Delay(300);
-                RefreshCollectionView();
+                Refresh();
                 await Task.Delay(200);
 
                 // Show results
@@ -1157,17 +1343,18 @@ namespace SteamPluginManager.Views
                     string message = $"✓ Successfully processed {successCount} file(s):\n" + 
                                    string.Join("\n", processedFiles.Select(f => $"  • {f}"));
                     UpdateActivityLog($"Imported {successCount} file(s)");
-                    MessageBox.Show(message, "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ModernMessageBox.Show(message, "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 else if (failureCount > 0)
                 {
                     UpdateActivityLog($"Import failed: {failureCount} file(s) could not be processed");
-                    MessageBox.Show(
+                    ModernMessageBox.Show(
                         $"Operation failed: {failureCount} file(s) could not be processed.\n\n" +
                         $"Valid files must be:\n" +
                         $"  • .lua files\n" +
                         $"  • .manifest files\n" +
-                        $"  • .zip files (containing only .lua and/or .manifest files)",
+                        $"  • .zip files (containing only .lua and/or .manifest files)\n" +
+                        $"  • .hzbak / .spmb backup files",
                         "Operation Failed",
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);
@@ -1177,7 +1364,7 @@ namespace SteamPluginManager.Views
             {
                 Logger.Log($"[GameLibraryView] Exception in ProcessDroppedFiles: {ex.Message}\n{ex.StackTrace}");
                 ShowImportProgressOverlay(false);
-                MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

@@ -29,6 +29,7 @@ namespace SteamPluginManager.Views
                 // Log error
             }
             Loaded += OnlineFixDetailView_Loaded;
+            SizeChanged += OnlineFixDetailView_SizeChanged;
         }
         private void OnlineFixDetailView_Loaded(object sender, RoutedEventArgs e)
         {
@@ -36,10 +37,40 @@ namespace SteamPluginManager.Views
             {
                 RegisterTextElements();
                 DisplayFileDetails();
+                UpdateLayoutMode(ActualWidth < 680);
             }
             catch
             {
                 // Log error
+            }
+        }
+
+        private void OnlineFixDetailView_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            bool isCompact = e.NewSize.Width < 680;
+            UpdateLayoutMode(isCompact);
+        }
+
+        private void UpdateLayoutMode(bool isCompact)
+        {
+            try
+            {
+                if (FindName("BackButton") is Button backBtn)
+                {
+                    backBtn.Visibility = isCompact ? Visibility.Collapsed : Visibility.Visible;
+                }
+                if (FindName("DetailContentPanel") is StackPanel contentPanel)
+                {
+                    contentPanel.Margin = isCompact ? new Thickness(14, 12, 14, 16) : new Thickness(24, 20, 24, 24);
+                }
+                if (FindName("ThumbnailBorder") is Border thumbBorder)
+                {
+                    thumbBorder.MaxHeight = isCompact ? 170 : 320;
+                }
+            }
+            catch
+            {
+                // Ignore layout errors
             }
         }
         public void SetFile(OnlineFixFile file)
@@ -54,14 +85,8 @@ namespace SteamPluginManager.Views
         {
             try
             {
-                if (FindName("DetailTitle") is TextBlock detailTitle)
-                    detailTitle.Text = "Online Fix Details";
-                if (FindName("DetailSubtitle") is TextBlock detailSubtitle)
-                    detailSubtitle.Text = "Multiplayer/Online Fix Information";
                 if (FindName("AddToLibraryButton") is Button addToLibraryButton)
                     addToLibraryButton.Content = "Apply Online Fix";
-                if (FindName("BackButtonText") is TextBlock backButtonText)
-                    backButtonText.Text = "← Back";
             }
             catch
             {
@@ -74,7 +99,7 @@ namespace SteamPluginManager.Views
             {
                 if (_currentFile == null)
                 {
-                    MessageBox.Show("No file selected", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ModernMessageBox.Show("No file selected", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
                 _ = LoadBannerAsync();
@@ -88,7 +113,7 @@ namespace SteamPluginManager.Views
             }
             catch
             {
-                MessageBox.Show($"Error displaying details.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ModernMessageBox.Show($"Error displaying details.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -119,6 +144,29 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                var modal = WindowNavigator.GetProgressModal();
+                if (modal != null)
+                {
+                    if (show)
+                    {
+                        modal.Configure(
+                            "Applying Online Fix",
+                            "Verify File",
+                            "Download Fix",
+                            "Extract Files",
+                            "Apply to Game",
+                            "\uE774",
+                            gameTitle: _currentFile?.Name,
+                            appId: _currentFile?.AppId?.ToString());
+                        modal.ShowModal(status, detail);
+                    }
+                    else
+                    {
+                        modal.HideModal();
+                    }
+                    return;
+                }
+
                 if (FindName("ProgressOverlay") is Grid overlay)
                     overlay.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
 
@@ -166,6 +214,13 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                var modal = WindowNavigator.GetProgressModal();
+                if (modal != null)
+                {
+                    modal.ShowResultNotification(isSuccess, message);
+                    return;
+                }
+
                 if (FindName("ResultNotification") is Border resultBorder)
                 {
                     resultBorder.Visibility = Visibility.Visible;
@@ -199,6 +254,13 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                var modal = WindowNavigator.GetProgressModal();
+                if (modal != null)
+                {
+                    modal.UpdateProgressStep(stepNumber, completed);
+                    return;
+                }
+
                 string[] stepIcons = new[] { "Step1Icon", "Step2Icon", "Step3Icon", "Step4Icon" };
 
                 for (int i = 1; i <= 4; i++)
@@ -232,7 +294,7 @@ namespace SteamPluginManager.Views
             {
                 if (_currentFile == null)
                 {
-                    MessageBox.Show("No file selected", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ModernMessageBox.Show("No file selected", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
                 if (FindName("AddToLibraryButton") is Button addBtn)
@@ -262,35 +324,44 @@ namespace SteamPluginManager.Views
                     return;
                 }
 
-                // Download file dari R2
+                // Download file dari Backblaze B2
                 string r2Key = _currentFile.FileName;
                 string tempZip = Path.Combine(Path.GetTempPath(), $"onlinefix_{Guid.NewGuid()}.zip");
-                ShowLoadingState(true, "Downloading online fix from Cloudflare R2...", GetCurrentFileSizeDetail());
-                UpdateProgressStep(1);
+                ShowLoadingState(true, "Downloading Online-Fix archive...", GetCurrentFileSizeDetail());
+                UpdateProgressStep(2);
                 try
                 {
                     var progress = new Progress<int>(p =>
                     {
                         Dispatcher.Invoke(() =>
                         {
+                            string sizeInfo = !string.IsNullOrWhiteSpace(_currentFile?.FileSize)
+                                ? $"{_currentFile.FileSize} • {p}% complete"
+                                : $"{p}% complete";
+
+                            var modal = WindowNavigator.GetProgressModal();
+                            if (modal != null)
+                            {
+                                modal.SetProgress(p, 100, false);
+                                modal.UpdateStatus("Downloading Online-Fix archive...", sizeInfo);
+                            }
+
                             if (FindName("ProgressBar") is ProgressBar pb)
                             {
                                 pb.IsIndeterminate = false;
                                 pb.Value = p;
                             }
                             if (FindName("ProgressStatus") is TextBlock statusText)
-                                statusText.Text = !string.IsNullOrWhiteSpace(_currentFile?.FileSize)
-                                    ? $"Downloading online fix ({_currentFile.FileSize})... {p}%"
-                                    : $"Downloading online fix... {p}%";
+                                statusText.Text = $"Downloading ({p}%)...";
                         });
                     });
 
-                    byte[] zipBytes = await SteamPluginManager.R2Config.DownloadFileAsync(r2Key, progress);
+                    byte[] zipBytes = await SteamPluginManager.B2Config.DownloadFileAsync(r2Key, progress);
                     await File.WriteAllBytesAsync(tempZip, zipBytes);
                 }
                 catch
                 {
-                    ShowResultNotification(false, "✗ Download failed.");
+                    ShowResultNotification(false, "✗ Download failed. Please check internet connection.");
                     await Task.Delay(1500);
                     ShowLoadingState(false);
                     if (FindName("AddToLibraryButton") is Button btnError)
@@ -299,19 +370,21 @@ namespace SteamPluginManager.Views
                 }
 
                 // Ekstrak file ZIP
-                ShowLoadingState(true, "Extracting files...");
-                UpdateProgressStep(2);
+                ShowLoadingState(true, "Extracting files...", "Unpacking archive to temporary folder...");
+                UpdateProgressStep(3);
                 string extractDir = Path.Combine(Path.GetTempPath(), $"onlinefix_extract_{Guid.NewGuid()}");
                 Directory.CreateDirectory(extractDir);
                 System.IO.Compression.ZipFile.ExtractToDirectory(tempZip, extractDir);
 
+                // Resolve effective content directory (in case archive has a single root wrapper directory)
+                string effectiveExtractDir = SteamPluginManager.Services.ResourcePipeline.OnlineFixResourceService.ResolveEffectiveContentDirectory(extractDir, _currentFile?.FileName, _currentFile?.Name);
+
                 // Cari target folder yang tepat berdasarkan hasil ekstrak
-                ShowLoadingState(true, "Checking target folder...");
-                UpdateProgressStep(3);
-                string? targetFolder = FindBestTargetFolder(gameFolder!, extractDir);
+                ShowLoadingState(true, "Detecting target directory...", "Matching extracted files with game folder structure...");
+                string? targetFolder = FindBestTargetFolder(gameFolder!, effectiveExtractDir);
                 if (string.IsNullOrEmpty(targetFolder))
                 {
-                    ShowResultNotification(false, "✗ Cannot determine target folder!");
+                    ShowResultNotification(false, "✗ Cannot determine target game directory.");
                     await Task.Delay(1500);
                     ShowLoadingState(false);
                     if (FindName("AddToLibraryButton") is Button btnExeError)
@@ -320,17 +393,27 @@ namespace SteamPluginManager.Views
                 }
 
                 // Copy file hasil ekstrak ke target folder
-                ShowLoadingState(true, "Moving files to game folder...");
-                UpdateProgressStep(3);
-                foreach (var file in Directory.GetFiles(extractDir, "*", SearchOption.AllDirectories))
+                UpdateProgressStep(4);
+                var allExtractedFiles = Directory.GetFiles(effectiveExtractDir, "*", SearchOption.AllDirectories);
+                int fileIndex = 0;
+                foreach (var file in allExtractedFiles)
                 {
-                    string relPath = Path.GetRelativePath(extractDir, file);
+                    fileIndex++;
+                    string relPath = Path.GetRelativePath(effectiveExtractDir, file);
                     string targetPath = Path.Combine(targetFolder, relPath);
                     Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
-                    
+
+                    double copyPct = (double)fileIndex / allExtractedFiles.Length * 100;
+                    var modal = WindowNavigator.GetProgressModal();
+                    if (modal != null)
+                    {
+                        modal.SetProgress(copyPct, 100, false);
+                        modal.UpdateStatus($"Applying files to game directory ({fileIndex}/{allExtractedFiles.Length})...", relPath);
+                    }
+
                     bool fileExists = File.Exists(targetPath);
                     File.Copy(file, targetPath, true);
-                    
+
                     if (fileExists)
                     {
                         Logger.Log($"[OnlineFixDetailView] Replaced existing file: {relPath}");
@@ -341,8 +424,8 @@ namespace SteamPluginManager.Views
                     }
                 }
                 UpdateProgressStep(4, true);
-                Dispatcher.Invoke(() => ShowResultNotification(true, $"✓ Successfully applied online fix to '{_currentFile.Name}'!"));
-                await Task.Delay(1500);
+                Dispatcher.Invoke(() => ShowResultNotification(true, $"✓ Successfully applied Online-Fix to '{_currentFile.Name}'!"));
+                await Task.Delay(1600);
                 ShowLoadingState(false);
                 if (FindName("AddToLibraryButton") is Button btnSuccess)
                     btnSuccess.IsEnabled = true;

@@ -4,7 +4,7 @@
         xmlns:wc="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:views="clr-namespace:SteamPluginManager.Views"
         Title="HZ Lua Manager"
-        Height="760" Width="1320"
+        Height="820" Width="1400"
         WindowStyle="None"
         ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen"
@@ -13,12 +13,13 @@
         Background="Transparent"
         Foreground="{DynamicResource ForegroundBrush}"
         MouseLeftButtonDown="Window_MouseLeftButtonDown"
+        PreviewKeyDown="Window_PreviewKeyDown"
         Loaded="Window_Loaded">
 
     <WindowChrome.WindowChrome>
         <wc:WindowChrome CaptionHeight="0"
-                          ResizeBorderThickness="7"
-                          CornerRadius="24"
+                          ResizeBorderThickness="6"
+                          CornerRadius="18"
                           GlassFrameThickness="0"
                           UseAeroCaptionButtons="False"/>
     </WindowChrome.WindowChrome>
@@ -27,25 +28,26 @@
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
         <Style x:Key="WindowButton" TargetType="Button">
-            <Setter Property="Width" Value="38"/>
+            <Setter Property="Width" Value="34"/>
             <Setter Property="Height" Value="28"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="2,0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="8">
+                        <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="7">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="root" Property="Background" Value="{DynamicResource HoverBrush}"/>
-                                <Setter TargetName="root" Property="Opacity" Value="0.96"/>
+                                <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="root" Property="Opacity" Value="0.82"/>
+                                <Setter TargetName="root" Property="Opacity" Value="0.75"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -54,21 +56,55 @@
         </Style>
 
         <Style x:Key="CloseWindowButton" BasedOn="{StaticResource WindowButton}" TargetType="Button">
-            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="8">
+                        <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="7">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="root" Property="Background" Value="{DynamicResource DangerButtonBrush}"/>
                                 <Setter Property="Foreground" Value="White"/>
-                                <Setter TargetName="root" Property="Opacity" Value="0.96"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="root" Property="Opacity" Value="0.84"/>
+                                <Setter TargetName="root" Property="Opacity" Value="0.8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="HeaderToggleSwitchStyle" TargetType="CheckBox">
+            <Setter Property="Width" Value="34"/>
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid VerticalAlignment="Center">
+                            <Border x:Name="Track"
+                                    CornerRadius="10"
+                                    Background="{DynamicResource ButtonBackgroundBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"/>
+                            <Border x:Name="Thumb"
+                                    Width="14"
+                                    Height="14"
+                                    CornerRadius="7"
+                                    Background="{DynamicResource MutedForegroundBrush}"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center"
+                                    Margin="2,0,0,0"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="Thumb" Property="Background" Value="White"/>
+                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right"/>
+                                <Setter TargetName="Thumb" Property="Margin" Value="0,0,2,0"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -77,76 +113,276 @@
         </Style>
     </Window.Resources>
 
-    <Border x:Name="MainShellBorder" Margin="8" Background="{DynamicResource BackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="24" ClipToBounds="True" SizeChanged="MainShellBorder_SizeChanged">
+    <Border x:Name="MainShellBorder" Margin="8" Background="{DynamicResource BackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="18" ClipToBounds="True" SizeChanged="MainShellBorder_SizeChanged">
         <Border.Effect>
-            <DropShadowEffect Color="#000000" BlurRadius="28" ShadowDepth="14" Opacity="0.25"/>
+            <DropShadowEffect Color="#000000" BlurRadius="32" ShadowDepth="12" Opacity="0.45"/>
         </Border.Effect>
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="60"/>
+                <RowDefinition Height="58"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
+            <!-- Ultra-Modern Command Deck & Omnibar Header -->
             <Border x:Name="TitleBar"
                     Grid.Row="0"
                     Background="{DynamicResource HeaderBackgroundBrush}"
-                    CornerRadius="24,24,0,0"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="0,0,0,1"
+                    CornerRadius="18,18,0,0"
                     wc:WindowChrome.IsHitTestVisibleInChrome="True"
                     MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
-                <Grid>
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="22,0,0,0">
-                        <Border Width="30" Height="30" CornerRadius="15" Background="Transparent" ClipToBounds="True">
-                            <Image x:Name="MainShellLogoImage" Source="/Config/SGR.ico" Width="30" Height="30" Stretch="UniformToFill" />
+                <Grid Margin="16,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/> <!-- App Brand -->
+                        <ColumnDefinition Width="*"/>    <!-- Omnibar Universal Search -->
+                        <ColumnDefinition Width="Auto"/> <!-- System Health & Window Controls -->
+                    </Grid.ColumnDefinitions>
+
+                    <!-- App Brand Section -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Width="28" Height="28" CornerRadius="8" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" ClipToBounds="True">
+                            <Image x:Name="MainShellLogoImage" Source="/Config/SGR.ico" Width="20" Height="20" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
-                        <StackPanel Margin="12,0,0,0">
-                            <TextBlock x:Name="TitleText"
-                                       Text="HZ Lua Manager"
-                                       FontSize="15"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource ForegroundBrush}"/>
-                            <TextBlock Text="Premium Steam Unlocker"
-                                       FontSize="11"
-                                       Foreground="{DynamicResource MutedForegroundBrush}"/>
+                        <StackPanel Margin="10,0,0,0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock x:Name="TitleText" Text="HZ Lua Manager" FontSize="13.5" FontWeight="Bold" Foreground="{DynamicResource ForegroundBrush}"/>
+                            <Border Background="{DynamicResource ButtonBackgroundBrush}" 
+                                    BorderBrush="{DynamicResource BorderBrush}" 
+                                    BorderThickness="1" 
+                                    CornerRadius="6" 
+                                    Padding="5,1" 
+                                    Margin="8,0,0,0" 
+                                    VerticalAlignment="Center">
+                                <TextBlock x:Name="VersionBadgeText" Text="v3.0.0" FontSize="9.5" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
+                            </Border>
                         </StackPanel>
                     </StackPanel>
 
-                    <StackPanel Orientation="Horizontal"
-                                HorizontalAlignment="Right"
+                    <!-- Center: Clean Drag Region (Search removed) -->
+                    <Grid Grid.Column="1" Background="Transparent"/>
+
+                    <!-- Right: Quick Status Deck & Controls -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- Steam Engine Status Pill -->
+                        <Border x:Name="SteamStatusPod"
+                                Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="8,4"
+                                Margin="0,0,8,0"
+                                Cursor="Hand"
+                                ToolTip="Click to Restart / Launch Steam"
+                                MouseLeftButtonDown="SteamStatusPod_Click">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Ellipse x:Name="SteamStatusDot" Width="6" Height="6" Fill="#9CA3AF" Margin="0,0,5,0"/>
+                                <TextBlock x:Name="SteamStatusText" Text="Steam Inactive" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}"/>
+                                <TextBlock Text=" ↺" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource MutedForegroundBrush}" Margin="2,0,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- User Profile Pill (Visible only if device has an active token) -->
+                        <Border x:Name="HeaderProfilePill"
+                                Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="5,3"
                                 Margin="0,0,10,0"
-                                VerticalAlignment="Center">
-                        <Button x:Name="MinimizeBtn"
-                                Style="{StaticResource WindowButton}"
-                                Click="MinimizeButton_Click"
-                                Content="—"
-                                ToolTip="Minimize"/>
-                        <Button x:Name="MaximizeBtn"
-                                Style="{StaticResource WindowButton}"
-                                Click="MaximizeButton_Click"
-                                Content="▢"
-                                ToolTip="Maximize"/>
-                        <Button x:Name="CloseBtn"
-                                Style="{StaticResource CloseWindowButton}"
-                                Click="CloseButton_Click"
-                                Content="✕"
-                                ToolTip="Close"/>
+                                Cursor="Hand"
+                                ToolTip="Click to edit profile"
+                                Visibility="Collapsed"
+                                MouseLeftButtonDown="HeaderProfilePill_Click">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Border Width="20" Height="20" CornerRadius="10" Background="{DynamicResource AccentBrush}" Margin="0,0,6,0" ClipToBounds="True">
+                                    <Grid>
+                                        <TextBlock x:Name="HeaderAvatarText" Text="H" FontSize="10" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <Image x:Name="HeaderAvatarImage" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" Visibility="Collapsed">
+                                            <Image.Clip>
+                                                <EllipseGeometry Center="10,10" RadiusX="10" RadiusY="10"/>
+                                            </Image.Clip>
+                                        </Image>
+                                    </Grid>
+                                </Border>
+                                <TextBlock x:Name="HeaderProfileName" Text="User" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Preserved Controls for Code-behind (Hidden from Topbar to keep clean) -->
+                        <StackPanel Visibility="Collapsed">
+                            <CheckBox x:Name="HeaderUnlockerToggle"
+                                      Style="{StaticResource HeaderToggleSwitchStyle}"
+                                      Checked="HeaderUnlockerToggle_Checked"
+                                      Unchecked="HeaderUnlockerToggle_Unchecked"/>
+                            <Button x:Name="HeaderThemeBtn" Click="HeaderThemeBtn_Click"/>
+                        </StackPanel>
+
+                        <!-- Divider -->
+                        <Rectangle Width="1" Height="16" Fill="{DynamicResource BorderBrush}" Margin="0,0,6,0"/>
+
+                        <!-- Window Controls -->
+                        <Button x:Name="MinimizeBtn" Style="{StaticResource WindowButton}" Click="MinimizeButton_Click" Content="—" ToolTip="Minimize"/>
+                        <Button x:Name="MaximizeBtn" Style="{StaticResource WindowButton}" Click="MaximizeButton_Click" Content="▢" ToolTip="Maximize"/>
+                        <Button x:Name="CloseBtn" Style="{StaticResource CloseWindowButton}" Click="CloseButton_Click" Content="✕" ToolTip="Close"/>
                     </StackPanel>
                 </Grid>
             </Border>
 
+            <!-- Main Content Area with Navigation Rail & Master-Detail Inspector Drawer -->
             <Grid Grid.Row="1" x:Name="MainContentGrid">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="260" />
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="74" x:Name="NavRailColumn"/>
+                    <ColumnDefinition Width="*" x:Name="MainViewColumn"/>
+                    <ColumnDefinition Width="Auto" x:Name="InspectorColumn"/>
                 </Grid.ColumnDefinitions>
+                
+                <!-- Left Navigation Activity Rail -->
                 <views:Sidebar x:Name="GlobalSidebar" Grid.Column="0" />
 
-                <Border x:Name="ContentBorder" Grid.Column="1" Background="Transparent" Padding="8,8,8,8">
+                <!-- Main View Canvas -->
+                <Border x:Name="ContentBorder" Grid.Column="1" Background="Transparent" Padding="6">
                     <ContentControl x:Name="ContentArea">
                         <ContentControl.RenderTransform>
                             <TranslateTransform/>
                         </ContentControl.RenderTransform>
                     </ContentControl>
                 </Border>
+
+                <!-- Master-Detail Inspector Drawer (Sliding side sheet) -->
+                <Border x:Name="InspectorDrawer"
+                        Grid.Column="2"
+                        Width="420"
+                        Background="{DynamicResource CardBackgroundBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1,0,0,0"
+                        Visibility="Collapsed">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="46"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Inspector Header Bar -->
+                        <Border Grid.Row="0"
+                                Background="{DynamicResource HeaderBackgroundBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="0,0,0,1"
+                                Padding="16,0">
+                            <Grid VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="&#xE7FC;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{DynamicResource AccentBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="InspectorTitleText" Text="Game Details" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center"/>
+                                    <Border x:Name="InspectorBadgeBorder" Background="{DynamicResource ButtonBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="5" Padding="6,2" Margin="10,0,0,0" VerticalAlignment="Center" Visibility="Collapsed">
+                                        <TextBlock x:Name="InspectorBadgeText" Text="" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource MutedForegroundBrush}" VerticalAlignment="Center"/>
+                                    </Border>
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Button x:Name="InspectorMaximizeBtn"
+                                            Style="{StaticResource WindowButton}"
+                                            Width="30" Height="26"
+                                            Content="⛶"
+                                            FontSize="11"
+                                            ToolTip="Toggle Full Screen View"
+                                            Click="InspectorMaximizeBtn_Click"/>
+                                    <Button x:Name="InspectorCloseBtn"
+                                            Style="{StaticResource WindowButton}"
+                                            Width="30" Height="26"
+                                            Content="✕"
+                                            FontSize="11"
+                                            ToolTip="Close Inspector (Esc)"
+                                            Click="InspectorCloseBtn_Click"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Inspector Content Container -->
+                        <ContentControl x:Name="InspectorContent" Grid.Row="1"/>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Community Chat Widget (Floating at bottom-right of MainShell, elevated above pagination bar) -->
+            <views:CommunityChatWidget x:Name="GlobalChatWidget"
+                                       Grid.Row="1"
+                                       HorizontalAlignment="Right"
+                                       VerticalAlignment="Bottom"
+                                       Margin="0,0,24,72"
+                                       Panel.ZIndex="100"
+                                       Visibility="Collapsed"/>
+
+            <!-- In-App Notification Toast for Community Chat Mentions & Replies -->
+            <Border x:Name="InAppNotificationToast"
+                    Grid.Row="1"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Margin="0,16,24,0"
+                    MaxWidth="360"
+                    Background="{DynamicResource CardBackgroundBrush}"
+                    BorderBrush="{DynamicResource AccentBrush}"
+                    BorderThickness="1.5"
+                    CornerRadius="12"
+                    Padding="12,10"
+                    Panel.ZIndex="150"
+                    Visibility="Collapsed"
+                    Cursor="Hand"
+                    MouseLeftButtonDown="InAppNotificationToast_MouseLeftButtonDown">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" BlurRadius="24" ShadowDepth="6" Opacity="0.45"/>
+                </Border.Effect>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="32"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Avatar Badge -->
+                    <Border Grid.Column="0" Width="30" Height="30" CornerRadius="15"
+                            Background="{DynamicResource ButtonBackgroundBrush}"
+                            BorderBrush="{DynamicResource AccentBrush}"
+                            BorderThickness="1.5"
+                            ClipToBounds="True"
+                            VerticalAlignment="Center">
+                        <Grid>
+                            <TextBlock x:Name="ToastAvatarInitial" Text="?" FontSize="11.5" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Image x:Name="ToastAvatarImage" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" Visibility="Collapsed">
+                                <Image.Clip>
+                                    <EllipseGeometry Center="13.5,13.5" RadiusX="13.5" RadiusY="13.5"/>
+                                </Image.Clip>
+                            </Image>
+                        </Grid>
+                    </Border>
+
+                    <!-- Text Info -->
+                    <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center">
+                        <TextBlock x:Name="ToastTitleText" Text="New notification" FontSize="11.5" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="ToastBodyText" Text="Message snippet..." FontSize="11" Foreground="{DynamicResource ForegroundBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                    </StackPanel>
+
+                    <!-- Close Button -->
+                    <Button Grid.Column="2"
+                            Width="20" Height="20"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Foreground="{DynamicResource MutedForegroundBrush}"
+                            Cursor="Hand"
+                            VerticalAlignment="Top"
+                            Click="CloseToastBtn_Click">
+                        <TextBlock Text="✕" FontSize="9.5" FontWeight="Bold"/>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- Standalone Centered Global Modal Host (Dead center in MainShell, covers entire window including split mode) -->
+            <Grid x:Name="GlobalModalHost"
+                  Grid.Row="0" Grid.RowSpan="2"
+                  Background="#99000000"
+                  Visibility="Collapsed"
+                  Panel.ZIndex="999">
+                <ContentControl x:Name="GlobalModalContent"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"/>
             </Grid>
         </Grid>
     </Border>
