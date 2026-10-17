@@ -13,6 +13,8 @@ namespace SteamPluginManager.Views
     {
         private bool _isKeyFound = false;
         private bool _isSilent = true;
+        private bool _forceRegenerate = false;
+        private string? _expiredKeyToAvoid = null;
         private bool _isJoiningDiscordServer = false;
         private bool _hasAttemptedAutoJoin = false;
         private int _joinAttemptTicks = 0;
@@ -37,10 +39,12 @@ namespace SteamPluginManager.Views
         public string? ExtractedApiKey { get; private set; }
         public bool UserCanceled { get; private set; } = true;
 
-        public HubcapLoginDialog(bool silentMode = true)
+        public HubcapLoginDialog(bool silentMode = true, bool forceRegenerate = false, string? expiredKeyToAvoid = null)
         {
             InitializeComponent();
             _isSilent = silentMode;
+            _forceRegenerate = forceRegenerate;
+            _expiredKeyToAvoid = expiredKeyToAvoid;
 
             if (_isSilent)
             {
@@ -339,9 +343,13 @@ namespace SteamPluginManager.Views
                                     var match = System.Text.RegularExpressions.Regex.Match(body, @"\b(smm_[a-zA-Z0-9_\-]{24,128})\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                                     if (match.Success)
                                     {
-                                        Logger.Log("[HubcapLoginDialog] Captured API key from HTTP response.");
-                                        Dispatcher.InvokeAsync(async () => await OnApiKeyFoundAsync(match.Groups[1].Value));
-                                        return;
+                                        string foundKey = match.Groups[1].Value;
+                                        if (!_forceRegenerate || string.IsNullOrWhiteSpace(_expiredKeyToAvoid) || !string.Equals(foundKey, _expiredKeyToAvoid, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            Logger.Log("[HubcapLoginDialog] Captured API key from HTTP response.");
+                                            Dispatcher.InvokeAsync(async () => await OnApiKeyFoundAsync(foundKey));
+                                            return;
+                                        }
                                     }
 
                                     // 3. Fallback json parsing
@@ -442,112 +450,151 @@ namespace SteamPluginManager.Views
                     }
 
                     // On hubcapmanifest.com/api-keys and authenticated -> extract or auto-generate key
-                    string script = @"
-                        (async () => {
-                            function triggerClick(el) {
-                                if (!el) return;
-                                try { el.focus(); } catch(e) {}
-                                try {
-                                    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-                                    el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-                                    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-                                } catch(e) {}
-                                try { el.click(); } catch(e) {}
-                            }
+                    string escapedExpiredKey = (_expiredKeyToAvoid ?? string.Empty).Replace("'", "\\'").Replace("\"", "\\\"");
+                    bool forceRegen = _forceRegenerate;
 
-                            // 1. Scan steam://hubcaptools/setapikey/ links in DOM
+                    string script = $@"
+                        (async () => {{
+                            let forceRegen = {forceRegen.ToString().ToLowerInvariant()};
+                            let expiredKey = '{escapedExpiredKey}'.trim().toLowerCase();
+
+                            function isValidKey(k) {{
+                                if (!k || k.length < 20) return false;
+                                if (forceRegen && expiredKey && k.trim().toLowerCase() === expiredKey) {{
+                                    return false;
+                                }}
+                                return true;
+                            }}
+
+                            function triggerClick(el) {{
+                                if (!el) return;
+                                try {{ el.focus(); }} catch(e) {{}}
+                                try {{
+                                    el.dispatchEvent(new MouseEvent('mousedown', {{ bubbles: true, cancelable: true, view: window }}));
+                                    el.dispatchEvent(new MouseEvent('mouseup', {{ bubbles: true, cancelable: true, view: window }}));
+                                    el.dispatchEvent(new MouseEvent('click', {{ bubbles: true, cancelable: true, view: window }}));
+                                }} catch(e) {{}}
+                                try {{ el.click(); }} catch(e) {{}}
+                            }}
+
+                            let allButtons = Array.from(document.querySelectorAll('button, a[role=""button""]'));
+
+                            // If forceRegen is true, prioritize clicking Regenerate / Generate buttons BEFORE scanning static text
+                            if (forceRegen) {{
+                                // 1. Check if Modal Confirm Button is present (exact text 'Generate', 'Confirm', 'Regenerate' inside modal dialog)
+                                let modalGenerateBtn = allButtons.find(b => {{
+                                    let t = (b.innerText || b.textContent || '').trim().toLowerCase();
+                                    if (t === 'generate' || t === 'confirm' || t === 'regenerate' || t === 'konfirmasi') {{
+                                        let parent = b.parentElement;
+                                        if (parent && (parent.innerText || '').toLowerCase().includes('cancel')) {{
+                                            return true;
+                                        }}
+                                        let modal = b.closest('.fixed, [role=""dialog""], .modal, div[style*=""z-index""]');
+                                        if (modal) return true;
+                                        return true;
+                                    }}
+                                    return false;
+                                }});
+
+                                if (modalGenerateBtn) {{
+                                    triggerClick(modalGenerateBtn);
+                                    return {{ action: 'clicked_modal_confirm', key: null }};
+                                }}
+
+                                // 2. Auto-click 'Regenerate Key', 'Generate Key', or 'Create Key' button on the main page
+                                let mainGenBtn = allButtons.find(b => {{
+                                    let t = (b.innerText || b.textContent || '').trim().toLowerCase();
+                                    return t === 'regenerate key' || t === 'generate key' || t === 'create key' || t === 'regenerate';
+                                }});
+                                if (mainGenBtn) {{
+                                    triggerClick(mainGenBtn);
+                                    return {{ action: 'clicked_generate_button', key: null }};
+                                }}
+
+                                // 3. Direct fetch API call to generate key immediately
+                                try {{
+                                    let genRes = await fetch('/api-keys/generate-key', {{
+                                        method: 'POST',
+                                        headers: {{ 'Content-Type': 'application/json' }},
+                                        credentials: 'include',
+                                        body: '{{}}'
+                                    }});
+                                    if (genRes.ok) {{
+                                        let genData = await genRes.json();
+                                        let genKey = genData.api_key || genData.key;
+                                        if (isValidKey(genKey)) {{
+                                            return {{ action: 'found', key: genKey }};
+                                        }}
+                                    }}
+                                }} catch(e) {{}}
+                            }}
+
+                            // 4. Scan steam://hubcaptools/setapikey/ links in DOM
                             let links = Array.from(document.querySelectorAll('a[href*=""setapikey""]'));
-                            for (let l of links) {
+                            for (let l of links) {{
                                 let h = l.getAttribute('href') || '';
                                 let m = h.match(/setapikey\/([a-zA-Z0-9_\-]{20,128})/i);
-                                if (m) return { action: 'found', key: m[1] };
-                            }
+                                if (m && isValidKey(m[1])) return {{ action: 'found', key: m[1] }};
+                            }}
 
-                            // 2. Direct Regex scan for smm_ key across entire page text
+                            // 5. Direct Regex scan for smm_ key across entire page text
                             let bodyText = document.body ? (document.body.innerText || document.body.textContent || '') : '';
                             let keyMatch = bodyText.match(/\b(smm_[a-zA-Z0-9_\-]{24,128})\b/i);
-                            if (keyMatch) {
-                                return { action: 'found', key: keyMatch[1] };
-                            }
+                            if (keyMatch && isValidKey(keyMatch[1])) {{
+                                return {{ action: 'found', key: keyMatch[1] }};
+                            }}
 
-                            // 3. Scan entire HTML source for smm_ key
+                            // 6. Scan entire HTML source for smm_ key
                             let html = document.documentElement ? document.documentElement.innerHTML : '';
                             let htmlMatch = html.match(/\b(smm_[a-zA-Z0-9_\-]{24,128})\b/i);
-                            if (htmlMatch) {
-                                return { action: 'found', key: htmlMatch[1] };
-                            }
+                            if (htmlMatch && isValidKey(htmlMatch[1])) {{
+                                return {{ action: 'found', key: htmlMatch[1] }};
+                            }}
 
-                            // 4. Scan all input elements, textareas, code blocks, spans, divs, pre elements
+                            // 7. Scan all input elements, textareas, code blocks, spans, divs, pre elements
                             let elements = Array.from(document.querySelectorAll('input, textarea, code, pre, div, span, p'));
-                            for (let el of elements) {
+                            for (let el of elements) {{
                                 let val = (el.value || el.innerText || el.textContent || '').trim();
                                 let m = val.match(/\b(smm_[a-zA-Z0-9_\-]{24,128})\b/i);
-                                if (m) {
-                                    return { action: 'found', key: m[1] };
-                                }
-                            }
+                                if (m && isValidKey(m[1])) {{
+                                    return {{ action: 'found', key: m[1] }};
+                                }}
+                            }}
 
-                            // 5. Check if Copy button has clipboard data or onclick attribute with key
+                            // 8. Check if Copy button has clipboard data or onclick attribute with key
                             let copyBtns = Array.from(document.querySelectorAll('button, a'));
-                            for (let cb of copyBtns) {
+                            for (let cb of copyBtns) {{
                                 let cText = (cb.innerText || cb.textContent || '').trim().toLowerCase();
-                                if (cText.includes('copy') || cText.includes('salin')) {
+                                if (cText.includes('copy') || cText.includes('salin')) {{
                                     let attr = cb.getAttribute('data-clipboard-text') || cb.getAttribute('data-copy') || cb.getAttribute('value') || '';
                                     let cm = attr.match(/\b(smm_[a-zA-Z0-9_\-]{24,128})\b/i);
-                                    if (cm) return { action: 'found', key: cm[1] };
-                                }
-                            }
+                                    if (cm && isValidKey(cm[1])) return {{ action: 'found', key: cm[1] }};
+                                }}
+                            }}
 
-                            // 6. Check if Modal Confirm Button is present (exact text 'Generate' or 'Confirm' inside modal dialog)
-                            let allButtons = Array.from(document.querySelectorAll('button, a[role=""button""]'));
-                            let modalGenerateBtn = allButtons.find(b => {
-                                let t = (b.innerText || b.textContent || '').trim().toLowerCase();
-                                if (t === 'generate' || t === 'confirm' || t === 'konfirmasi') {
-                                    let parent = b.parentElement;
-                                    if (parent && (parent.innerText || '').toLowerCase().includes('cancel')) {
-                                        return true;
-                                    }
-                                    let modal = b.closest('.fixed, [role=""dialog""], .modal, div[style*=""z-index""]');
-                                    if (modal) return true;
-                                    return true;
-                                }
-                                return false;
-                            });
+                            // 9. If not forceRegen or not clicked yet, try clicking generate button as fallback
+                            if (!forceRegen) {{
+                                let modalGenBtn = allButtons.find(b => {{
+                                    let t = (b.innerText || b.textContent || '').trim().toLowerCase();
+                                    return (t === 'generate' || t === 'confirm' || t === 'konfirmasi');
+                                }});
+                                if (modalGenBtn) {{
+                                    triggerClick(modalGenBtn);
+                                    return {{ action: 'clicked_modal_confirm', key: null }};
+                                }}
 
-                            if (modalGenerateBtn) {
-                                triggerClick(modalGenerateBtn);
-                                return { action: 'clicked_modal_confirm', key: null };
-                            }
+                                let mainGenBtn = allButtons.find(b => {{
+                                    let t = (b.innerText || b.textContent || '').trim().toLowerCase();
+                                    return (t === 'generate key' || t === 'create key' || t === 'regenerate key');
+                                }});
+                                if (mainGenBtn) {{
+                                    triggerClick(mainGenBtn);
+                                    return {{ action: 'clicked_generate_button', key: null }};
+                                }}
+                            }}
 
-                            // 7. Auto-click 'Generate Key' or 'Regenerate Key' button on the main page
-                            let mainGenBtn = allButtons.find(b => {
-                                let t = (b.innerText || b.textContent || '').trim().toLowerCase();
-                                return t === 'generate key' || t === 'regenerate key' || t === 'create key';
-                            });
-                            if (mainGenBtn) {
-                                triggerClick(mainGenBtn);
-                                return { action: 'clicked_generate_button', key: null };
-                            }
-
-                            // 8. Direct fetch API call to generate key immediately
-                            try {
-                                let genRes = await fetch('/api-keys/generate-key', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    credentials: 'include',
-                                    body: '{}'
-                                });
-                                if (genRes.ok) {
-                                    let genData = await genRes.json();
-                                    let genKey = genData.api_key || genData.key;
-                                    if (genKey && genKey.length >= 20) {
-                                        return { action: 'found', key: genKey };
-                                    }
-                                }
-                            } catch(e) {}
-
-                            return { action: 'waiting', key: null };
-                        })();
+                            return {{ action: 'waiting', key: null }};
+                        }})();
                     ";
 
                     string jsonResult = await Browser.ExecuteScriptAsync(script);
@@ -592,8 +639,12 @@ namespace SteamPluginManager.Views
                 var match = System.Text.RegularExpressions.Regex.Match(json, @"\b(smm_[a-zA-Z0-9_\-]{24,128})\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                 if (match.Success)
                 {
-                    Dispatcher.InvokeAsync(async () => await OnApiKeyFoundAsync(match.Groups[1].Value));
-                    return;
+                    string k = match.Groups[1].Value;
+                    if (!_forceRegenerate || string.IsNullOrWhiteSpace(_expiredKeyToAvoid) || !string.Equals(k, _expiredKeyToAvoid, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Dispatcher.InvokeAsync(async () => await OnApiKeyFoundAsync(k));
+                        return;
+                    }
                 }
 
                 using var doc = JsonDocument.Parse(json);
@@ -609,7 +660,10 @@ namespace SteamPluginManager.Views
 
                 if (!string.IsNullOrWhiteSpace(key) && key.Length >= 20)
                 {
-                    Dispatcher.InvokeAsync(async () => await OnApiKeyFoundAsync(key));
+                    if (!_forceRegenerate || string.IsNullOrWhiteSpace(_expiredKeyToAvoid) || !string.Equals(key, _expiredKeyToAvoid, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Dispatcher.InvokeAsync(async () => await OnApiKeyFoundAsync(key));
+                    }
                 }
             }
             catch {}
@@ -618,6 +672,13 @@ namespace SteamPluginManager.Views
         private async Task OnApiKeyFoundAsync(string key)
         {
             if (_isKeyFound) return;
+
+            if (_forceRegenerate && !string.IsNullOrWhiteSpace(_expiredKeyToAvoid) && string.Equals(key, _expiredKeyToAvoid, StringComparison.OrdinalIgnoreCase))
+            {
+                Logger.Log("[HubcapLoginDialog] Ignored expired Hubcap key. Waiting for newly regenerated key...");
+                return;
+            }
+
             _isKeyFound = true;
             UserCanceled = false;
             _pollTimer?.Stop();

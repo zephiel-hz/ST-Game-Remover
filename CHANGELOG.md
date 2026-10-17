@@ -1,8 +1,27 @@
 # Changelog
 
-All notable changes to **HZ Lua Manager** (formerly Steam Plugin Manager) will be documented in this file.
+---
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [3.0.5] - 2026-10-10
+
+### Added
+* **Auto Defender Exclusion:** The app now automatically requests Administrator privileges on startup to add required folders (such as the app Temp folder, Steam installation folder, and all detected SteamLibrary folders) to Windows Defender exclusions. This helps prevent false-positive antivirus detections and ensures game patches apply smoothly.
+
+---
+
+## [3.0.4] - 2026-10-08 [HOTFIX]
+
+### Fixed
+* **Add to Library Fix:** Fixed an issue where adding certain games (such as ELDEN RING and others) from HZ Manifest resulted in a "File not available in storage" error.
+* **Storage Availability & Download Fallback:** Enhanced cloud storage item detection and introduced smart multi-tier fallback checks to ensure manifest and Lua files download reliably across all game titles.
+
+---
+
+## [3.0.3] - 2026-10-08
+
+### Fixed
+* **Hubcap API Key Auto-Regeneration:** Fixed an issue where expired or invalid Hubcap API keys caused Game Requests or Denuvo checks to fail; the app now automatically verifies and regenerates active keys directly from hubcapmanifest.
+* **Game Request Reliability:** Added seamless background session handling and automatic retries when searching and downloading game manifests and Lua scripts.
 
 ---
 
@@ -40,7 +59,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-## [3.0.0] - 2026-09-29
+## [3.0.0] - 2026-09-29 [MAJOR UPDATE]
 
 ### Added
 * **Community Chat:** Chat in real time with other users, reply to messages, mention friends with `@username`, and check user profiles.

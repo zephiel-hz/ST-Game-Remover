@@ -4,6 +4,7 @@ namespace SteamPluginManager
     using System.Collections.Generic;
     using System.Linq;
     using System.Net.Http;
+    using System.Text;
     using System.Text.Json;
     using System.Text.Json.Serialization;
     using System.Threading.Tasks;
@@ -320,37 +321,135 @@ namespace SteamPluginManager
                 client.DefaultRequestHeaders.Add("Authorization", $"Bearer {SupabaseKey}");
                 client.DefaultRequestHeaders.Add("apikey", SupabaseKey);
 
-                string url = $"{SupabaseUrl}/rest/v1/rpc/list_bucket_files?bucket_name={StorageBucketName}";
-                var response = await client.GetAsync(url);
-                if (!response.IsSuccessStatusCode)
-                {
-                    Console.WriteLine($"[SupabaseConfig] ListBucketFilesAsync failed: {response.StatusCode}");
-                    return new List<string>();
-                }
-
-                var content = await response.Content.ReadAsStringAsync();
-                using var document = JsonDocument.Parse(content);
-                var root = document.RootElement;
+                string cleanPrefix = (prefix ?? string.Empty).Trim().Trim('/', '\\');
                 var result = new List<string>();
 
-                if (root.ValueKind == JsonValueKind.Array)
+                // Method 1: Use Supabase Storage native object list API: POST /storage/v1/object/list/{bucket}
+                try
                 {
-                    foreach (var item in root.EnumerateArray())
-                    {
-                        if (item.TryGetProperty("name", out var nameElement))
-                        {
-                            var fileName = nameElement.GetString();
-                            if (string.IsNullOrWhiteSpace(fileName))
-                                continue;
+                    string storageListUrl = $"{SupabaseUrl}/storage/v1/object/list/{StorageBucketName}";
+                    string searchPrefix = string.IsNullOrEmpty(cleanPrefix) ? "" : cleanPrefix + "/";
 
-                            if (!string.IsNullOrEmpty(prefix))
+                    var payload = new
+                    {
+                        prefix = searchPrefix,
+                        limit = 1000,
+                        offset = 0,
+                        sortBy = new { column = "name", order = "asc" }
+                    };
+
+                    var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+                    var response = await client.PostAsync(storageListUrl, content);
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var json = await response.Content.ReadAsStringAsync();
+                        using var doc = JsonDocument.Parse(json);
+                        if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var item in doc.RootElement.EnumerateArray())
                             {
-                                if (fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                                    result.Add(fileName);
+                                if (item.TryGetProperty("id", out var idProp) && idProp.ValueKind != JsonValueKind.Null &&
+                                    item.TryGetProperty("name", out var nameProp))
+                                {
+                                    var name = nameProp.GetString();
+                                    if (!string.IsNullOrWhiteSpace(name) && !name.EndsWith("/"))
+                                    {
+                                        string prefixSlash = string.IsNullOrEmpty(cleanPrefix) ? "" : cleanPrefix + "/";
+                                        string fullPath = string.IsNullOrEmpty(cleanPrefix)
+                                            ? name
+                                            : (name.StartsWith(prefixSlash, StringComparison.OrdinalIgnoreCase)
+                                                ? name
+                                                : $"{cleanPrefix}/{name}");
+                                        result.Add(fullPath);
+                                    }
+                                }
                             }
-                            else if (!fileName.EndsWith("/"))
+                        }
+                    }
+
+                    // If searching for a folder returned no files, and cleanPrefix was non-empty, try exact prefix without trailing slash
+                    if (result.Count == 0 && !string.IsNullOrEmpty(cleanPrefix))
+                    {
+                        var fallbackPayload = new
+                        {
+                            prefix = cleanPrefix,
+                            limit = 1000,
+                            offset = 0,
+                            sortBy = new { column = "name", order = "asc" }
+                        };
+
+                        var fbContent = new StringContent(JsonSerializer.Serialize(fallbackPayload), Encoding.UTF8, "application/json");
+                        var fbResponse = await client.PostAsync(storageListUrl, fbContent);
+                        if (fbResponse.IsSuccessStatusCode)
+                        {
+                            var json = await fbResponse.Content.ReadAsStringAsync();
+                            using var doc = JsonDocument.Parse(json);
+                            if (doc.RootElement.ValueKind == JsonValueKind.Array)
                             {
-                                result.Add(fileName);
+                                foreach (var item in doc.RootElement.EnumerateArray())
+                                {
+                                    if (item.TryGetProperty("id", out var idProp) && idProp.ValueKind != JsonValueKind.Null &&
+                                        item.TryGetProperty("name", out var nameProp))
+                                    {
+                                        var name = nameProp.GetString();
+                                        if (!string.IsNullOrWhiteSpace(name) && !name.EndsWith("/"))
+                                        {
+                                            string prefixSlash = string.IsNullOrEmpty(cleanPrefix) ? "" : cleanPrefix + "/";
+                                            string fullPath = string.IsNullOrEmpty(cleanPrefix)
+                                                ? name
+                                                : (name.StartsWith(prefixSlash, StringComparison.OrdinalIgnoreCase)
+                                                    ? name
+                                                    : $"{cleanPrefix}/{name}");
+                                            result.Add(fullPath);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (result.Count > 0)
+                    {
+                        return result;
+                    }
+                }
+                catch (Exception storageEx)
+                {
+                    Console.WriteLine($"[SupabaseConfig] Storage API list failed: {storageEx.Message}, trying RPC fallback...");
+                }
+
+                // Method 2 (Fallback): RPC list_bucket_files
+                string rpcUrl = $"{SupabaseUrl}/rest/v1/rpc/list_bucket_files?bucket_name={StorageBucketName}";
+                var rpcResponse = await client.GetAsync(rpcUrl);
+                if (rpcResponse.IsSuccessStatusCode)
+                {
+                    var rpcContent = await rpcResponse.Content.ReadAsStringAsync();
+                    using var document = JsonDocument.Parse(rpcContent);
+                    var root = document.RootElement;
+
+                    if (root.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var item in root.EnumerateArray())
+                        {
+                            if (item.TryGetProperty("name", out var nameElement))
+                            {
+                                var fileName = nameElement.GetString();
+                                if (string.IsNullOrWhiteSpace(fileName))
+                                    continue;
+
+                                if (!string.IsNullOrEmpty(prefix))
+                                {
+                                    if (fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
+                                        (!string.IsNullOrEmpty(cleanPrefix) && fileName.StartsWith(cleanPrefix, StringComparison.OrdinalIgnoreCase)))
+                                    {
+                                        result.Add(fileName);
+                                    }
+                                }
+                                else if (!fileName.EndsWith("/"))
+                                {
+                                    result.Add(fileName);
+                                }
                             }
                         }
                     }

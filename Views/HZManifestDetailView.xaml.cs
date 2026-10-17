@@ -549,7 +549,18 @@ namespace SteamPluginManager.Views
                 if (!httpClient.DefaultRequestHeaders.Contains("User-Agent"))
                     httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
 
-                bool directLibrarySave = files.All(file =>
+                // Filter out auxiliary/metadata files (like .hzmanifest.json) when determining payload
+                var payloadFiles = files.Where(file =>
+                {
+                    var name = Path.GetFileName(file);
+                    return !name.StartsWith(".", StringComparison.OrdinalIgnoreCase) &&
+                           !name.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+                }).ToList();
+
+                if (payloadFiles.Count == 0)
+                    payloadFiles = files;
+
+                bool directLibrarySave = payloadFiles.All(file =>
                     file.EndsWith(".lua", StringComparison.OrdinalIgnoreCase) ||
                     file.EndsWith(".manifest", StringComparison.OrdinalIgnoreCase));
 
@@ -572,9 +583,9 @@ namespace SteamPluginManager.Views
                     Directory.CreateDirectory(depotCachePath);
                     Directory.CreateDirectory(depotCachePathOld);
 
-                    int totalFiles = files.Count;
+                    int totalFiles = payloadFiles.Count;
                     int downloadedCount = 0;
-                    foreach (var objectName in files)
+                    foreach (var objectName in payloadFiles)
                     {
                         downloadedCount++;
                         int pct = totalFiles > 0 ? (int)((downloadedCount / (double)totalFiles) * 100) : 100;
@@ -610,34 +621,27 @@ namespace SteamPluginManager.Views
                         }
                         else
                         {
-                            throw new Exception($"Unsupported direct download file type: {relativePath}");
+                            // Skip non-lua/manifest files in direct save mode
+                            continue;
                         }
 
-                        foreach (var destinationPath in targetPaths)
-                        {
-                            string destinationDir = Path.GetDirectoryName(destinationPath) ?? Path.GetDirectoryName(destinationPath) ?? pluginPath;
-                            if (!Directory.Exists(destinationDir))
-                                Directory.CreateDirectory(destinationDir);
-
-                            Logger.Log($"[HZManifestDetailView] Downloading folder file: {fileUrl} -> {destinationPath}");
+                        Logger.Log($"[HZManifestDetailView] Downloading folder file: {fileUrl}");
                         var response = await httpClient.GetAsync(fileUrl);
                         if (!response.IsSuccessStatusCode)
                             throw new Exception($"Failed to download {fileUrl}: HTTP {(int)response.StatusCode}");
 
-                        long? contentLength = response.Content.Headers.ContentLength;
-                        Logger.Log($"[HZManifestDetailView] Response content length: {contentLength?.ToString() ?? "unknown"}");
-
                         var contentBytes = await response.Content.ReadAsByteArrayAsync();
-                        Logger.Log($"[HZManifestDetailView] Actual bytes received: {contentBytes.Length}");
                         if (contentBytes.Length == 0)
-                            throw new Exception($"Downloaded file is empty before writing: {destinationPath}");
+                            throw new Exception($"Downloaded file is empty: {fileUrl}");
 
-                        await File.WriteAllBytesAsync(destinationPath, contentBytes);
-                        var fileInfo = new FileInfo(destinationPath);
-                        if (fileInfo.Length == 0)
-                            throw new Exception($"Downloaded file is empty after writing: {destinationPath}");
+                        foreach (var destinationPath in targetPaths)
+                        {
+                            string destinationDir = Path.GetDirectoryName(destinationPath) ?? pluginPath;
+                            if (!Directory.Exists(destinationDir))
+                                Directory.CreateDirectory(destinationDir);
 
-                        downloadedFiles.Add(destinationPath);
+                            await File.WriteAllBytesAsync(destinationPath, contentBytes);
+                            downloadedFiles.Add(destinationPath);
                         }
                     }
 
@@ -676,19 +680,11 @@ namespace SteamPluginManager.Views
                     if (!response.IsSuccessStatusCode)
                         throw new Exception($"Failed to download {fileUrl}: HTTP {(int)response.StatusCode}");
 
-                    long? contentLength = response.Content.Headers.ContentLength;
-                    Logger.Log($"[HZManifestDetailView] Response content length: {contentLength?.ToString() ?? "unknown"}");
-
                     var contentBytes = await response.Content.ReadAsByteArrayAsync();
-                    Logger.Log($"[HZManifestDetailView] Actual bytes received: {contentBytes.Length}");
                     if (contentBytes.Length == 0)
                         throw new Exception($"Downloaded file is empty before writing: {destinationPath}");
 
                     await File.WriteAllBytesAsync(destinationPath, contentBytes);
-                    var fileInfo = new FileInfo(destinationPath);
-                    if (fileInfo.Length == 0)
-                        throw new Exception($"Downloaded file is empty after writing: {destinationPath}");
-
                     downloadedFiles.Add(destinationPath);
                 }
 
@@ -1408,7 +1404,7 @@ namespace SteamPluginManager.Views
                     return;
                 }
 
-                if (_currentFile.IsFolderStorage && string.IsNullOrWhiteSpace(_currentFile.FolderPath) && string.IsNullOrWhiteSpace(_currentFile.FileName))
+                if (_currentFile.IsFolderStorage && string.IsNullOrWhiteSpace(_currentFile.FolderPath) && string.IsNullOrWhiteSpace(_currentFile.FileName) && !_currentFile.AppId.HasValue)
                 {
                     ShowLoadingState(false);
                     Logger.Log($"[HZManifestDetailView] Folder storage manifest is missing folder path and filename: {_currentFile.Name}");
@@ -1437,16 +1433,88 @@ namespace SteamPluginManager.Views
                 
                 // Pre-check: Verify file or folder storage is accessible before starting download
                 Logger.Log($"[HZManifestDetailView] Pre-check: Verifying file availability...");
-                bool storageAccessible;
+                bool storageAccessible = false;
+                string folderPath = ResolveFolderPath();
+
                 if (_currentFile.IsFolderStorage)
                 {
-                    string folderPath = ResolveFolderPath();
-                    Logger.Log($"[HZManifestDetailView] Folder storage detected. Path: {folderPath}");
+                    Logger.Log($"[HZManifestDetailView] Checking folder storage: '{folderPath}'");
                     storageAccessible = await VerifyFolderAvailabilityAsync(folderPath);
+
+                    // Fallback 1: If folder check failed, try checking FileUrl if provided
+                    if (!storageAccessible && !string.IsNullOrWhiteSpace(_currentFile.FileUrl))
+                    {
+                        Logger.Log($"[HZManifestDetailView] Folder check returned false, trying FileUrl fallback: {_currentFile.FileUrl}");
+                        if (await VerifyUrlAsync(_currentFile.FileUrl))
+                        {
+                            storageAccessible = true;
+                            _currentFile.StorageType = "zip";
+                        }
+                    }
+
+                    // Fallback 2: Check candidate single file URL (e.g. {appId}.zip)
+                    if (!storageAccessible && _currentFile.AppId.HasValue)
+                    {
+                        string candidateZipUrl = $"{SupabaseConfig.SupabaseUrl}/storage/v1/object/public/{SupabaseConfig.StorageBucketName}/{_currentFile.AppId.Value}.zip";
+                        Logger.Log($"[HZManifestDetailView] Trying candidate zip URL: {candidateZipUrl}");
+                        if (await VerifyUrlAsync(candidateZipUrl))
+                        {
+                            storageAccessible = true;
+                            _currentFile.StorageType = "zip";
+                            _currentFile.FileUrl = candidateZipUrl;
+                            _currentFile.FileName = $"{_currentFile.AppId.Value}.zip";
+                        }
+                    }
                 }
                 else
                 {
-                    storageAccessible = await VerifyUrlAsync(_currentFile.FileUrl);
+                    // Check URL first if available
+                    if (!string.IsNullOrWhiteSpace(_currentFile.FileUrl))
+                    {
+                        storageAccessible = await VerifyUrlAsync(_currentFile.FileUrl);
+                    }
+
+                    // Fallback 1: If URL check failed or FileUrl was empty, check folder storage
+                    if (!storageAccessible && !string.IsNullOrWhiteSpace(folderPath))
+                    {
+                        Logger.Log($"[HZManifestDetailView] URL check failed/empty, trying folder fallback: {folderPath}");
+                        if (await VerifyFolderAvailabilityAsync(folderPath))
+                        {
+                            storageAccessible = true;
+                            _currentFile.StorageType = "folder";
+                            _currentFile.FolderPath = folderPath;
+                        }
+                    }
+
+                    // Fallback 2: Check standard public storage archive URL (e.g. {appId}.zip)
+                    if (!storageAccessible && _currentFile.AppId.HasValue)
+                    {
+                        string candidateZipUrl = $"{SupabaseConfig.SupabaseUrl}/storage/v1/object/public/{SupabaseConfig.StorageBucketName}/{_currentFile.AppId.Value}.zip";
+                        Logger.Log($"[HZManifestDetailView] Trying candidate zip URL: {candidateZipUrl}");
+                        if (await VerifyUrlAsync(candidateZipUrl))
+                        {
+                            storageAccessible = true;
+                            _currentFile.FileUrl = candidateZipUrl;
+                            _currentFile.FileName = $"{_currentFile.AppId.Value}.zip";
+                        }
+                    }
+                }
+
+                // Fallback 3: If still not accessible and appId exists, do check on folder "{appId}/"
+                if (!storageAccessible && _currentFile.AppId.HasValue)
+                {
+                    string appIdFolderPath = $"{_currentFile.AppId.Value}/";
+                    if (!string.Equals(appIdFolderPath, folderPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Logger.Log($"[HZManifestDetailView] Trying AppId folder fallback: {appIdFolderPath}");
+                        if (await VerifyFolderAvailabilityAsync(appIdFolderPath))
+                        {
+                            storageAccessible = true;
+                            _currentFile.StorageType = "folder";
+                            _currentFile.FolderPath = appIdFolderPath;
+                            folderPath = appIdFolderPath;
+                        }
+                    }
                 }
                 
                 if (!storageAccessible)
@@ -1465,7 +1533,7 @@ namespace SteamPluginManager.Views
                     return;
                 }
 
-                Logger.Log($"[HZManifestDetailView] ✓ URL is accessible, proceeding with download");
+                Logger.Log($"[HZManifestDetailView] ✓ Storage is accessible, proceeding with download");
                 UpdateProgressStep(2);
                 if (modal != null)
                 {
@@ -1479,10 +1547,13 @@ namespace SteamPluginManager.Views
 
                 if (_currentFile.IsFolderStorage)
                 {
-                    string folderPath = ResolveFolderPath();
-                    Logger.Log($"[HZManifestDetailView] Step 2: Downloading folder contents from {folderPath}");
+                    string activeFolderPath = ResolveFolderPath();
+                    if (string.IsNullOrWhiteSpace(activeFolderPath) && _currentFile.AppId.HasValue)
+                        activeFolderPath = $"{_currentFile.AppId.Value}/";
+
+                    Logger.Log($"[HZManifestDetailView] Step 2: Downloading folder contents from {activeFolderPath}");
                     ShowLoadingState(true, $"Downloading files for AppID {_currentFile.AppId}...", "Retrieving folder items from Supabase...");
-                    var downloadResult = await DownloadFolderStorageAsync(folderPath, _currentFile.AppId.Value);
+                    var downloadResult = await DownloadFolderStorageAsync(activeFolderPath, _currentFile.AppId.Value);
                     downloadedFilePath = downloadResult.Path;
                     downloadedFiles = downloadResult.DownloadedFiles;
                     directLibrarySave = downloadResult.DirectToLibrary;

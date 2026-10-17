@@ -23,6 +23,133 @@ namespace SteamPluginManager
         }
 
         /// <summary>
+        /// Validates whether a given Hubcap API key is active and authorized.
+        /// Returns true if the key is valid, false if 401 Unauthorized or 403 Forbidden.
+        /// </summary>
+        public static async Task<bool> IsApiKeyValidAsync(string? apiKey)
+        {
+            if (string.IsNullOrWhiteSpace(apiKey)) return false;
+
+            try
+            {
+                // Query a lightweight DRM endpoint (e.g. AppID 730 / CS2) to verify authorization
+                string url = "https://hubcapmanifest.com/manifest-history/api/apps/730/drm";
+                var client = SharedHttpClient.Instance;
+                using var req = CreateAuthenticatedRequest(HttpMethod.Get, url, apiKey);
+                using var res = await client.SendAsync(req);
+
+                if (res.StatusCode == HttpStatusCode.Unauthorized || res.StatusCode == HttpStatusCode.Forbidden)
+                {
+                    Logger.Log($"[HubcapManifestService] API key validation failed with status {res.StatusCode}. Key is expired or invalid.");
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[HubcapManifestService] Transient error while checking API key validity: {ex.Message}");
+                // If there is a transient network error, do not immediately invalidate to prevent offline breakage
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Ensures a valid Hubcap API key is available. If missing, invalid, or expired, automatically
+        /// regenerates a fresh API key via hubcapmanifest.com (first silently, then visibly if interaction is needed).
+        /// </summary>
+        public static async Task<string?> EnsureValidApiKeyAsync(
+            System.Windows.Window? owner = null,
+            bool forceRegenerate = false,
+            string? expiredKey = null,
+            Action<string>? statusCallback = null)
+        {
+            try
+            {
+                if (!forceRegenerate)
+                {
+                    statusCallback?.Invoke("Verifying Hubcap API key...");
+                    string existingKey = await RemoteConfigService.GetHubcapApiKeyAsync();
+
+                    if (!string.IsNullOrWhiteSpace(existingKey))
+                    {
+                        bool isValid = await IsApiKeyValidAsync(existingKey);
+                        if (isValid)
+                        {
+                            return existingKey;
+                        }
+                        expiredKey = existingKey;
+                    }
+                }
+
+                Logger.Log($"[HubcapManifestService] Hubcap API key needs regeneration (forceRegenerate={forceRegenerate}). Generating new key from hubcapmanifest.com...");
+                statusCallback?.Invoke("Generating new Hubcap API key...");
+
+                // Invalidate local and memory caches for the old key
+                RemoteConfigService.InvalidateCache("hubcap_api_key");
+
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher == null)
+                {
+                    Logger.Log("[HubcapManifestService] Dispatcher is null. Cannot open HubcapLoginDialog.");
+                    return null;
+                }
+
+                // Attempt 1: Background silent mode generation using existing Discord session
+                string? newKey = await dispatcher.InvokeAsync(() =>
+                {
+                    var dialog = new Views.HubcapLoginDialog(silentMode: true, forceRegenerate: true, expiredKeyToAvoid: expiredKey)
+                    {
+                        Owner = owner
+                    };
+                    bool? res = dialog.ShowDialog();
+                    if (res == true && !string.IsNullOrWhiteSpace(dialog.ExtractedApiKey))
+                    {
+                        return dialog.ExtractedApiKey;
+                    }
+                    return null;
+                }).Task;
+
+                if (!string.IsNullOrWhiteSpace(newKey))
+                {
+                    Logger.Log("[HubcapManifestService] Successfully generated new Hubcap API key via background automation.");
+                    await RemoteConfigService.SaveHubcapApiKeyAsync(newKey);
+                    return newKey;
+                }
+
+                // Attempt 2: If silent mode did not succeed (e.g. Discord login required), open visible dialog for user
+                statusCallback?.Invoke("Hubcap authorization required. Opening login dialog...");
+                newKey = await dispatcher.InvokeAsync(() =>
+                {
+                    var dialog = new Views.HubcapLoginDialog(silentMode: false, forceRegenerate: true, expiredKeyToAvoid: expiredKey)
+                    {
+                        Owner = owner
+                    };
+                    bool? res = dialog.ShowDialog();
+                    if (res == true && !string.IsNullOrWhiteSpace(dialog.ExtractedApiKey))
+                    {
+                        return dialog.ExtractedApiKey;
+                    }
+                    return null;
+                }).Task;
+
+                if (!string.IsNullOrWhiteSpace(newKey))
+                {
+                    Logger.Log("[HubcapManifestService] Successfully obtained new Hubcap API key from visible dialog.");
+                    await RemoteConfigService.SaveHubcapApiKeyAsync(newKey);
+                    return newKey;
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[HubcapManifestService] EnsureValidApiKeyAsync error: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
         /// Queries Hubcap's DRM status endpoint (/manifest-history/api/apps/{appId}/drm)
         /// which combines Steam Store DRM notices and the Denuvo Watch curator.
         /// Returns true if Denuvo is detected, false if not Denuvo, or null if the request failed/unauthorized.
@@ -33,7 +160,7 @@ namespace SteamPluginManager
             {
                 if (string.IsNullOrWhiteSpace(apiKey))
                 {
-                    apiKey = await RemoteConfigService.GetHubcapApiKeyAsync();
+                    apiKey = await EnsureValidApiKeyAsync();
                 }
 
                 string url = $"https://hubcapmanifest.com/manifest-history/api/apps/{appId}/drm";
@@ -41,27 +168,24 @@ namespace SteamPluginManager
                 using var req = CreateAuthenticatedRequest(HttpMethod.Get, url, apiKey);
                 using var res = await client.SendAsync(req);
 
-                if (res.IsSuccessStatusCode)
+                // If unauthorized (401/403), regenerate key and retry
+                if (res.StatusCode == HttpStatusCode.Unauthorized || res.StatusCode == HttpStatusCode.Forbidden)
                 {
-                    var json = await res.Content.ReadAsStringAsync();
-                    using var doc = JsonDocument.Parse(json);
-                    if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                    Logger.Log($"[HubcapManifestService] Hubcap DRM status returned HTTP {res.StatusCode}. Regenerating API key...");
+                    string? newKey = await EnsureValidApiKeyAsync(forceRegenerate: true, expiredKey: apiKey);
+                    if (!string.IsNullOrWhiteSpace(newKey))
                     {
-                        if (doc.RootElement.TryGetProperty("denuvo", out var denuvoEl))
+                        using var retryReq = CreateAuthenticatedRequest(HttpMethod.Get, url, newKey);
+                        using var retryRes = await client.SendAsync(retryReq);
+                        if (retryRes.IsSuccessStatusCode)
                         {
-                            if (denuvoEl.ValueKind == JsonValueKind.True) return true;
-                            if (denuvoEl.ValueKind == JsonValueKind.False) return false;
+                            return await ParseDenuvoResponseAsync(retryRes);
                         }
-
-                        if (doc.RootElement.TryGetProperty("drm_notice", out var noticeEl) && noticeEl.ValueKind == JsonValueKind.String)
-                        {
-                            string notice = noticeEl.GetString() ?? "";
-                            if (notice.IndexOf("denuvo", StringComparison.OrdinalIgnoreCase) >= 0)
-                                return true;
-                        }
-
-                        return false;
                     }
+                }
+                else if (res.IsSuccessStatusCode)
+                {
+                    return await ParseDenuvoResponseAsync(res);
                 }
                 else
                 {
@@ -76,9 +200,33 @@ namespace SteamPluginManager
             return null;
         }
 
+        private static async Task<bool?> ParseDenuvoResponseAsync(HttpResponseMessage res)
+        {
+            var json = await res.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                if (doc.RootElement.TryGetProperty("denuvo", out var denuvoEl))
+                {
+                    if (denuvoEl.ValueKind == JsonValueKind.True) return true;
+                    if (denuvoEl.ValueKind == JsonValueKind.False) return false;
+                }
+
+                if (doc.RootElement.TryGetProperty("drm_notice", out var noticeEl) && noticeEl.ValueKind == JsonValueKind.String)
+                {
+                    string notice = noticeEl.GetString() ?? "";
+                    if (notice.IndexOf("denuvo", StringComparison.OrdinalIgnoreCase) >= 0)
+                        return true;
+                }
+
+                return false;
+            }
+            return null;
+        }
+
         /// <summary>
         /// Attempts to search and download game files (.lua and/or .manifest) from Hubcap Manifest (hubcapmanifest.com).
-        /// If the key is rejected with 401 Unauthorized, automatically refreshes the key from Supabase Remote Config and retries once.
+        /// If the key is rejected with 401/403, automatically regenerates a new key from hubcapmanifest.com and retries.
         /// </summary>
         public static async Task<List<DownloadedGameFile>?> FindAndDownloadFilesAsync(
             int appId,
@@ -89,15 +237,12 @@ namespace SteamPluginManager
             try
             {
                 statusCallback?.Invoke("Retrieving Hubcap Manifest credentials...");
-                string apiKey = await RemoteConfigService.GetHubcapApiKeyAsync();
+                string? apiKey = await EnsureValidApiKeyAsync(statusCallback: statusCallback);
 
-                if (string.IsNullOrWhiteSpace(apiKey))
+                if (string.IsNullOrWhiteSpace(apiKey) && loginPromptCallback != null)
                 {
-                    if (loginPromptCallback != null)
-                    {
-                        statusCallback?.Invoke("Hubcap authentication required. Opening login...");
-                        apiKey = (await loginPromptCallback()) ?? string.Empty;
-                    }
+                    statusCallback?.Invoke("Hubcap authentication required. Opening login...");
+                    apiKey = await loginPromptCallback();
                 }
 
                 if (string.IsNullOrWhiteSpace(apiKey))
@@ -109,33 +254,23 @@ namespace SteamPluginManager
                 statusCallback?.Invoke("Searching Hubcap Manifest...");
                 var (files, isUnauthorized) = await QueryHubcapAsync(appId, apiKey, isDenuvo, statusCallback);
 
-                // If unauthorized (401), key is invalid or expired
+                // If unauthorized (401/403), key is invalid or expired -> regenerate key and retry!
                 if (isUnauthorized)
                 {
-                    Logger.Log("[HubcapManifestService] Received 401 Unauthorized from Hubcap. Invalidating cache...");
-                    RemoteConfigService.InvalidateCache("hubcap_api_key");
+                    Logger.Log("[HubcapManifestService] Received 401/403 Unauthorized from Hubcap. Regenerating API key...");
+                    statusCallback?.Invoke("Hubcap key expired. Generating new API key from hubcapmanifest.com...");
 
-                    // 1. Check if Supabase has a newer key
-                    string refreshedKey = await RemoteConfigService.GetHubcapApiKeyAsync(forceRefresh: true);
-                    if (!string.IsNullOrWhiteSpace(refreshedKey) && !string.Equals(refreshedKey, apiKey, StringComparison.Ordinal))
+                    string? newKey = await EnsureValidApiKeyAsync(forceRegenerate: true, expiredKey: apiKey, statusCallback: statusCallback);
+                    if (string.IsNullOrWhiteSpace(newKey) && loginPromptCallback != null)
                     {
-                        Logger.Log("[HubcapManifestService] Refreshed Hubcap API key obtained from Supabase. Retrying...");
-                        var retryResult = await QueryHubcapAsync(appId, refreshedKey, isDenuvo, statusCallback);
-                        files = retryResult.files;
-                        isUnauthorized = retryResult.isUnauthorized;
+                        newKey = await loginPromptCallback();
                     }
 
-                    // 2. If still unauthorized, prompt user to log in via Discord
-                    if (isUnauthorized && loginPromptCallback != null)
+                    if (!string.IsNullOrWhiteSpace(newKey) && !string.Equals(newKey, apiKey, StringComparison.Ordinal))
                     {
-                        statusCallback?.Invoke("Hubcap key expired. Opening Discord login to refresh...");
-                        string? newKey = await loginPromptCallback();
-                        if (!string.IsNullOrWhiteSpace(newKey))
-                        {
-                            Logger.Log("[HubcapManifestService] New key acquired from login dialog. Retrying request...");
-                            var retryResult = await QueryHubcapAsync(appId, newKey, isDenuvo, statusCallback);
-                            files = retryResult.files;
-                        }
+                        Logger.Log("[HubcapManifestService] Retrying Hubcap search with newly generated key...");
+                        var retryResult = await QueryHubcapAsync(appId, newKey, isDenuvo, statusCallback);
+                        files = retryResult.files;
                     }
                 }
 

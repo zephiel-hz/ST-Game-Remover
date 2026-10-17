@@ -81,11 +81,12 @@ namespace SteamPluginManager
                             if (isLicenseVerified)
                             {
                                 await UnlockerRegistryHelper.EnsureOpenSteamToolInstalledAsync();
+                                await WindowsDefenderExclusionService.RunExclusionCheckAsync();
                             }
                         }
                         catch (Exception ex)
                         {
-                            try { Logger.Log($"App startup failed to ensure unlocker install: {ex.Message}"); } catch { }
+                            try { Logger.Log($"App startup failed background tasks: {ex.Message}"); } catch { }
                         }
                     });
 

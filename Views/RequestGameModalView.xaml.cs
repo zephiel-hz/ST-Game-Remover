@@ -218,37 +218,17 @@ namespace SteamPluginManager.Views
 
                 // Stage 2: Early Hubcap Authentication & Session Preparation (Mandatory before DRM check)
                 SetRequestStage(2, "Verifying Hubcap session...");
-                string apiKey = await RemoteConfigService.GetHubcapApiKeyAsync();
-                bool isUserCanceled = false;
+                string? apiKey = await HubcapManifestService.EnsureValidApiKeyAsync(
+                    owner: Window.GetWindow(this),
+                    statusCallback: status => Dispatcher.Invoke(() => SetRequestStage(2, status)));
 
                 if (string.IsNullOrWhiteSpace(apiKey))
                 {
-                    apiKey = await Dispatcher.InvokeAsync(() =>
-                    {
-                        var loginDialog = new HubcapLoginDialog(silentMode: false)
-                        {
-                            Owner = Window.GetWindow(this)
-                        };
-                        bool? dialogResult = loginDialog.ShowDialog();
-                        if (loginDialog.UserCanceled || dialogResult != true)
-                        {
-                            isUserCanceled = true;
-                        }
-                        if (dialogResult == true && !string.IsNullOrWhiteSpace(loginDialog.ExtractedApiKey))
-                        {
-                            return loginDialog.ExtractedApiKey;
-                        }
-                        return null;
-                    }).Task ?? string.Empty;
-                }
-
-                if (isUserCanceled || string.IsNullOrWhiteSpace(apiKey))
-                {
-                    Logger.Log($"[RequestGameModalView] User canceled Hubcap login/verification for AppID {appId}. Aborting request.");
+                    Logger.Log($"[RequestGameModalView] Hubcap authorization not completed for AppID {appId}. Aborting request.");
                     HideRequestProgress();
                     SubmitRequestButton.IsEnabled = true;
                     CancelRequestButton.IsEnabled = true;
-                    ShowRequestValidation("Hubcap Discord authorization is required to verify DRM status and process game requests.");
+                    ShowRequestValidation("Hubcap authorization is required to verify DRM status and process game requests.");
                     return;
                 }
 
