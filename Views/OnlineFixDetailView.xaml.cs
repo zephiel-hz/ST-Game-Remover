@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -6,6 +7,9 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Animation;
+using SteamPluginManager.Models;
+using SteamPluginManager.Services.Steam;
+using SteamPluginManager.UI.Dialogs;
 
 namespace SteamPluginManager.Views
 {
@@ -16,6 +20,10 @@ namespace SteamPluginManager.Views
             "SteamPluginManager", "ThumbnailCache");
 
         private OnlineFixFile? _currentFile;
+        private CustomLaunchTutorial? _currentTutorial;
+        private System.Windows.Threading.DispatcherTimer? _validationMonitorTimer;
+        private bool _isValidatingFiles = false;
+        private bool _isActionInProgress = false;
         
         public OnlineFixDetailView()
         {
@@ -29,8 +37,10 @@ namespace SteamPluginManager.Views
                 // Log error
             }
             Loaded += OnlineFixDetailView_Loaded;
+            Unloaded += OnlineFixDetailView_Unloaded;
             SizeChanged += OnlineFixDetailView_SizeChanged;
         }
+
         private void OnlineFixDetailView_Loaded(object sender, RoutedEventArgs e)
         {
             try
@@ -38,11 +48,43 @@ namespace SteamPluginManager.Views
                 RegisterTextElements();
                 DisplayFileDetails();
                 UpdateLayoutMode(ActualWidth < 680);
+                StartValidationMonitor();
+                CheckSteamValidationState();
             }
             catch
             {
                 // Log error
             }
+        }
+
+        private void OnlineFixDetailView_Unloaded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                StopValidationMonitor();
+            }
+            catch { }
+        }
+
+        private void StartValidationMonitor()
+        {
+            if (_validationMonitorTimer == null)
+            {
+                _validationMonitorTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(1500)
+                };
+                _validationMonitorTimer.Tick += (s, e) =>
+                {
+                    CheckSteamValidationState();
+                };
+            }
+            _validationMonitorTimer.Start();
+        }
+
+        private void StopValidationMonitor()
+        {
+            _validationMonitorTimer?.Stop();
         }
 
         private void OnlineFixDetailView_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -79,13 +121,17 @@ namespace SteamPluginManager.Views
             if (IsLoaded)
             {
                 DisplayFileDetails();
+                CheckSteamValidationState();
             }
         }
+
         private void RegisterTextElements()
         {
             try
             {
-                if (FindName("AddToLibraryButton") is Button addToLibraryButton)
+                if (FindName("AddToLibraryButtonText") is TextBlock addText)
+                    addText.Text = "Apply Online Fix";
+                else if (FindName("AddToLibraryButton") is Button addToLibraryButton)
                     addToLibraryButton.Content = "Apply Online Fix";
             }
             catch
@@ -93,6 +139,7 @@ namespace SteamPluginManager.Views
                 // Log error
             }
         }
+
         private void DisplayFileDetails()
         {
             try
@@ -103,6 +150,7 @@ namespace SteamPluginManager.Views
                     return;
                 }
                 _ = LoadBannerAsync();
+                _ = LoadTutorialAsync();
                 if (FindName("GameNameDetail") is TextBlock gameNameDetail)
                     gameNameDetail.Text = _currentFile.Name ?? "Unknown Fix";
                 if (FindName("GenreDetail") is TextBlock genreDetail)
@@ -123,13 +171,115 @@ namespace SteamPluginManager.Views
             {
                 if (_currentFile == null)
                     return;
-                if (FindName("AddToLibraryButton") is Button addBtn)
+
+                if (FindName("AddToLibraryButtonText") is TextBlock addText)
+                {
+                    addText.Text = "Apply Online Fix";
+                }
+                else if (FindName("AddToLibraryButton") is Button addBtn)
                 {
                     addBtn.Content = "Apply Online Fix";
-                    addBtn.IsEnabled = true;
                 }
+
+                if (FindName("AddToLibraryButton") is Button btn)
+                {
+                    btn.IsEnabled = true;
+                    btn.ToolTip = null;
+                }
+
+                if (FindName("RestoreGameButtonText") is TextBlock restoreText)
+                {
+                    restoreText.Text = "Restore Original Game";
+                }
+                else if (FindName("RestoreGameButton") is Button restoreBtn)
+                {
+                    restoreBtn.Content = "Restore Original Game";
+                }
+
+                if (FindName("RestoreGameButton") is Button rBtn)
+                {
+                    rBtn.IsEnabled = true;
+                    rBtn.ToolTip = null;
+                }
+
+                CheckSteamValidationState();
             }
             catch { }
+        }
+
+        private void CheckSteamValidationState()
+        {
+            try
+            {
+                if (_isActionInProgress || _currentFile == null || !_currentFile.AppId.HasValue || _currentFile.AppId.Value <= 0)
+                    return;
+
+                int appId = _currentFile.AppId.Value;
+                bool isCurrentlyValidating = SteamHelper.IsGameValidating(appId);
+
+                if (isCurrentlyValidating)
+                {
+                    _isValidatingFiles = true;
+
+                    if (FindName("AddToLibraryButton") is Button addBtn)
+                    {
+                        addBtn.IsEnabled = false;
+                        addBtn.ToolTip = "Steam is currently validating / verifying files for this game. Please wait until verification completes.";
+                    }
+                    if (FindName("AddToLibraryButtonText") is TextBlock addText)
+                    {
+                        addText.Text = "Validating Files...";
+                    }
+                    else if (FindName("AddToLibraryButton") is Button addBtnFallback && addBtnFallback.Content is string)
+                    {
+                        addBtnFallback.Content = "Validating Files...";
+                    }
+
+                    if (FindName("RestoreGameButton") is Button restoreBtn)
+                    {
+                        restoreBtn.IsEnabled = false;
+                        restoreBtn.ToolTip = "Steam file verification is currently in progress.";
+                    }
+
+                    if (FindName("ValidationStatusBadge") is Border badge)
+                    {
+                        badge.Visibility = Visibility.Visible;
+                    }
+                }
+                else if (_isValidatingFiles)
+                {
+                    _isValidatingFiles = false;
+
+                    if (FindName("AddToLibraryButton") is Button addBtn)
+                    {
+                        addBtn.IsEnabled = true;
+                        addBtn.ToolTip = null;
+                    }
+                    if (FindName("AddToLibraryButtonText") is TextBlock addText)
+                    {
+                        addText.Text = "Apply Online Fix";
+                    }
+                    else if (FindName("AddToLibraryButton") is Button addBtnFallback && addBtnFallback.Content is string)
+                    {
+                        addBtnFallback.Content = "Apply Online Fix";
+                    }
+
+                    if (FindName("RestoreGameButton") is Button restoreBtn)
+                    {
+                        restoreBtn.IsEnabled = true;
+                        restoreBtn.ToolTip = null;
+                    }
+
+                    if (FindName("ValidationStatusBadge") is Border badge)
+                    {
+                        badge.Visibility = Visibility.Collapsed;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[OnlineFixDetailView] Error checking validation state: {ex.Message}");
+            }
         }
 
         private string GetCurrentFileSizeDetail()
@@ -297,21 +447,56 @@ namespace SteamPluginManager.Views
                     ModernMessageBox.Show("No file selected", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
+
+                if (_currentFile.AppId.HasValue && SteamHelper.IsGameValidating(_currentFile.AppId.Value))
+                {
+                    ModernMessageBox.Show(
+                        $"Steam is currently verifying and validating files for '{_currentFile.Name}'.\n\n" +
+                        "Please wait until Steam finishes validating game files before applying the Online Fix.",
+                        "Steam Validation In Progress",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    CheckSteamValidationState();
+                    return;
+                }
+
+                _isActionInProgress = true;
                 if (FindName("AddToLibraryButton") is Button addBtn)
                     addBtn.IsEnabled = false;
+                if (FindName("RestoreGameButton") is Button restoreBtn)
+                    restoreBtn.IsEnabled = false;
 
-                // Cek apakah game sudah terinstal
+                // Cek apakah game sudah terinstal via SteamHelper (direct ACF + common + manifest check)
                 string? gameFolder = null;
-                bool isInstalled = false;
-                if (_currentFile.AppId != null)
+                if (_currentFile.AppId.HasValue && _currentFile.AppId.Value > 0)
                 {
-                    var mainWindow = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w is SteamPluginManager.MainWindow) as SteamPluginManager.MainWindow;
-                    if (mainWindow != null)
+                    gameFolder = SteamHelper.GetGameInstallationPath(_currentFile.AppId.Value, _currentFile.Name);
+                }
+
+                // Fallback: If not found automatically, prompt user to select folder manually
+                if (string.IsNullOrEmpty(gameFolder) || !Directory.Exists(gameFolder))
+                {
+                    var browsePrompt = ModernMessageBox.Show(
+                        $"The game installation folder for '{_currentFile.Name}' was not detected automatically in your Steam libraries.\n\n" +
+                        "Would you like to manually locate and select your game directory?",
+                        "Game Folder Not Found",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+
+                    if (browsePrompt == MessageBoxResult.Yes)
                     {
-                        gameFolder = mainWindow.GetGameInstallationPath(_currentFile.AppId.Value);
-                        isInstalled = !string.IsNullOrEmpty(gameFolder) && Directory.Exists(gameFolder);
+                        var folderDialog = new Microsoft.Win32.OpenFolderDialog
+                        {
+                            Title = $"Select Game Installation Directory for '{_currentFile.Name}'"
+                        };
+                        if (folderDialog.ShowDialog() == true && Directory.Exists(folderDialog.FolderName))
+                        {
+                            gameFolder = folderDialog.FolderName;
+                        }
                     }
                 }
+
+                bool isInstalled = !string.IsNullOrEmpty(gameFolder) && Directory.Exists(gameFolder);
 
                 if (!isInstalled)
                 {
@@ -321,6 +506,8 @@ namespace SteamPluginManager.Views
                     ShowLoadingState(false);
                     if (FindName("AddToLibraryButton") is Button btnError)
                         btnError.IsEnabled = true;
+                    if (FindName("RestoreGameButton") is Button btnRestore)
+                        btnRestore.IsEnabled = true;
                     return;
                 }
 
@@ -366,6 +553,8 @@ namespace SteamPluginManager.Views
                     ShowLoadingState(false);
                     if (FindName("AddToLibraryButton") is Button btnError)
                         btnError.IsEnabled = true;
+                    if (FindName("RestoreGameButton") is Button btnRestore)
+                        btnRestore.IsEnabled = true;
                     return;
                 }
 
@@ -389,17 +578,21 @@ namespace SteamPluginManager.Views
                     ShowLoadingState(false);
                     if (FindName("AddToLibraryButton") is Button btnExeError)
                         btnExeError.IsEnabled = true;
+                    if (FindName("RestoreGameButton") is Button btnRestore)
+                        btnRestore.IsEnabled = true;
                     return;
                 }
 
                 // Copy file hasil ekstrak ke target folder
                 UpdateProgressStep(4);
                 var allExtractedFiles = Directory.GetFiles(effectiveExtractDir, "*", SearchOption.AllDirectories);
+                var installedRelPaths = new List<string>();
                 int fileIndex = 0;
                 foreach (var file in allExtractedFiles)
                 {
                     fileIndex++;
                     string relPath = Path.GetRelativePath(effectiveExtractDir, file);
+                    installedRelPaths.Add(relPath);
                     string targetPath = Path.Combine(targetFolder, relPath);
                     Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
 
@@ -423,20 +616,353 @@ namespace SteamPluginManager.Views
                         Logger.Log($"[OnlineFixDetailView] Added new file: {relPath}");
                     }
                 }
+
+                // Save installation tracking manifest for 100% accurate restore
+                if (_currentFile != null && _currentFile.AppId.HasValue && !string.IsNullOrEmpty(targetFolder))
+                {
+                    OnlineFixTrackerService.SaveInstallRecord(_currentFile.AppId.Value, _currentFile.Name ?? "Steam Game", targetFolder, installedRelPaths);
+                }
+
+                try { File.Delete(tempZip); } catch { }
+                try { Directory.Delete(extractDir, true); } catch { }
+
                 UpdateProgressStep(4, true);
-                Dispatcher.Invoke(() => ShowResultNotification(true, $"✓ Successfully applied Online-Fix to '{_currentFile.Name}'!"));
+                Dispatcher.Invoke(() => ShowResultNotification(true, $"✓ Successfully applied Online-Fix to '{_currentFile?.Name ?? "Steam Game"}'!"));
                 await Task.Delay(1600);
                 ShowLoadingState(false);
-                if (FindName("AddToLibraryButton") is Button btnSuccess)
-                    btnSuccess.IsEnabled = true;
             }
             catch
             {
                 ShowResultNotification(false, $"✗ Error applying online fix.");
                 await Task.Delay(1500);
                 ShowLoadingState(false);
-                if (FindName("AddToLibraryButton") is Button btnError)
-                    btnError.IsEnabled = true;
+            }
+            finally
+            {
+                _isActionInProgress = false;
+                CheckSteamValidationState();
+            }
+        }
+
+        private async void RestoreGame_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_currentFile == null || !_currentFile.AppId.HasValue || _currentFile.AppId.Value <= 0)
+                {
+                    ModernMessageBox.Show("No valid game selected for restoration.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                int appId = _currentFile.AppId.Value;
+                string gameTitle = _currentFile.Name ?? "Steam Game";
+
+                if (SteamHelper.IsGameValidating(appId))
+                {
+                    ModernMessageBox.Show(
+                        $"Steam is already verifying and validating files for '{gameTitle}'.\n\n" +
+                        "Please wait for the current verification process to finish.",
+                        "Steam Validation In Progress",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    CheckSteamValidationState();
+                    return;
+                }
+
+                _isActionInProgress = true;
+
+                // Check if game is installed via SteamHelper
+                string? gameFolder = SteamHelper.GetGameInstallationPath(appId, gameTitle);
+                if (string.IsNullOrEmpty(gameFolder) || !Directory.Exists(gameFolder))
+                {
+                    var cachedRecord = OnlineFixTrackerService.GetInstallRecord(appId);
+                    if (cachedRecord != null && !string.IsNullOrEmpty(cachedRecord.TargetFolder) && Directory.Exists(cachedRecord.TargetFolder))
+                    {
+                        gameFolder = cachedRecord.TargetFolder;
+                    }
+                }
+
+                if (string.IsNullOrEmpty(gameFolder) || !Directory.Exists(gameFolder))
+                {
+                    var browsePrompt = ModernMessageBox.Show(
+                        $"The game installation folder for '{gameTitle}' was not detected automatically in your Steam libraries.\n\n" +
+                        "Would you like to manually locate and select your game directory to restore?",
+                        "Game Folder Not Found",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+
+                    if (browsePrompt == MessageBoxResult.Yes)
+                    {
+                        var folderDialog = new Microsoft.Win32.OpenFolderDialog
+                        {
+                            Title = $"Select Game Installation Directory for '{gameTitle}'"
+                        };
+                        if (folderDialog.ShowDialog() == true && Directory.Exists(folderDialog.FolderName))
+                        {
+                            gameFolder = folderDialog.FolderName;
+                        }
+                    }
+                }
+
+                bool isInstalled = !string.IsNullOrEmpty(gameFolder) && Directory.Exists(gameFolder);
+
+                if (!isInstalled)
+                {
+                    ModernMessageBox.Show(
+                        "This game is not currently installed or located.\n\nCannot restore files for a game that is not installed.",
+                        "Game Not Installed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
+                // Check if game is running
+                if (CustomLaunchService.IsGameRunning(appId, null, gameFolder))
+                {
+                    ModernMessageBox.Show(
+                        "The game is currently running.\n\nPlease close the game first before restoring original game files.",
+                        "Game Is Running",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
+                // Confirmation dialog
+                var confirmResult = ModernMessageBox.Show(
+                    $"Restore original game files for '{gameTitle}'?\n\n" +
+                    "This operation will:\n" +
+                    "• Remove all Online-Fix files and modifications from your game folder\n" +
+                    "• Reset any Custom Launch configurations\n" +
+                    "• Open Steam to verify file integrity and re-acquire official clean files\n\n" +
+                    "Do you want to proceed?",
+                    "Restore Original Game",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (confirmResult != MessageBoxResult.Yes)
+                {
+                    return;
+                }
+
+                if (FindName("AddToLibraryButton") is Button addBtn) addBtn.IsEnabled = false;
+                if (FindName("RestoreGameButton") is Button restoreBtn) restoreBtn.IsEnabled = false;
+
+                // Configure Progress Modal
+                var modal = WindowNavigator.GetProgressModal();
+                if (modal != null)
+                {
+                    modal.Configure(
+                        "Restoring Original Game",
+                        "Locate Files",
+                        "Scan Fix Files",
+                        "Remove Fix Files",
+                        "Verify Integrity",
+                        "\uE72C",
+                        gameTitle: gameTitle,
+                        appId: appId.ToString());
+                    modal.ShowModal("Initializing restore process...", "Locating game installation directory...");
+                }
+
+                // Step 1: Locate Game Files
+                UpdateProgressStep(1);
+                await Task.Delay(300);
+                UpdateProgressStep(1, true);
+
+                // Step 2: Scan Fix Files
+                UpdateProgressStep(2);
+                if (modal != null)
+                {
+                    modal.UpdateStatus("Identifying Online-Fix files...", "Checking installation manifest...");
+                }
+
+                var filesToDelete = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var dirsToDelete = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                string? targetFolder = null;
+
+                var installRecord = OnlineFixTrackerService.GetInstallRecord(appId, gameFolder);
+                if (installRecord != null && installRecord.InstalledRelativePaths.Count > 0)
+                {
+                    targetFolder = (!string.IsNullOrEmpty(installRecord.TargetFolder) && Directory.Exists(installRecord.TargetFolder))
+                        ? installRecord.TargetFolder
+                        : gameFolder!;
+                    foreach (var relPath in installRecord.InstalledRelativePaths)
+                    {
+                        string fullPath = Path.Combine(targetFolder!, relPath);
+                        if (File.Exists(fullPath))
+                        {
+                            filesToDelete.Add(fullPath);
+                        }
+                    }
+                    Logger.Log($"[OnlineFixDetailView] Found {filesToDelete.Count} files to delete from manifest.");
+                }
+                else
+                {
+                    // Fallback: If no manifest exists, try to inspect the archive from B2
+                    if (!string.IsNullOrWhiteSpace(_currentFile.FileName))
+                    {
+                        try
+                        {
+                            if (modal != null)
+                            {
+                                modal.UpdateStatus("Downloading fix archive...", "Inspecting archive contents to identify installed files...");
+                            }
+
+                            string tempZip = Path.Combine(Path.GetTempPath(), $"onlinefix_inspect_{Guid.NewGuid()}.zip");
+                            var progress = new Progress<int>(p =>
+                            {
+                                Dispatcher.Invoke(() =>
+                                {
+                                    if (modal != null)
+                                    {
+                                        modal.SetProgress(p, 100, false);
+                                        modal.UpdateStatus("Downloading fix archive to inspect files...", $"{p}% complete");
+                                    }
+                                });
+                            });
+
+                            byte[] zipBytes = await SteamPluginManager.B2Config.DownloadFileAsync(_currentFile.FileName, progress);
+                            await File.WriteAllBytesAsync(tempZip, zipBytes);
+
+                            string inspectExtractDir = Path.Combine(Path.GetTempPath(), $"onlinefix_inspect_ext_{Guid.NewGuid()}");
+                            Directory.CreateDirectory(inspectExtractDir);
+                            System.IO.Compression.ZipFile.ExtractToDirectory(tempZip, inspectExtractDir);
+
+                            string effectiveInspectDir = SteamPluginManager.Services.ResourcePipeline.OnlineFixResourceService.ResolveEffectiveContentDirectory(inspectExtractDir, _currentFile?.FileName, _currentFile?.Name);
+                            targetFolder = FindBestTargetFolder(gameFolder!, effectiveInspectDir) ?? gameFolder!;
+
+                            var extractedFiles = Directory.GetFiles(effectiveInspectDir, "*", SearchOption.AllDirectories);
+                            foreach (var f in extractedFiles)
+                            {
+                                string relPath = Path.GetRelativePath(effectiveInspectDir, f);
+                                string fullPath = Path.Combine(targetFolder!, relPath);
+                                if (File.Exists(fullPath))
+                                {
+                                    filesToDelete.Add(fullPath);
+                                }
+                            }
+
+                            try { File.Delete(tempZip); } catch { }
+                            try { Directory.Delete(inspectExtractDir, true); } catch { }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Log($"[OnlineFixDetailView] Failed to download archive for inspection: {ex.Message}");
+                        }
+                    }
+                }
+
+                // Also run signature scan to catch any known Online-Fix files (OnlineFix.ini, OnlineFix64.dll, steam_settings, etc.)
+                var (sigFiles, sigDirs) = OnlineFixTrackerService.ScanKnownOnlineFixSignatures(gameFolder!);
+                foreach (var sf in sigFiles)
+                {
+                    filesToDelete.Add(sf);
+                }
+                foreach (var sd in sigDirs)
+                {
+                    dirsToDelete.Add(sd);
+                }
+
+                UpdateProgressStep(2, true);
+
+                // Step 3: Remove Fix Files
+                UpdateProgressStep(3);
+                if (modal != null)
+                {
+                    modal.UpdateStatus("Removing Online-Fix files...", $"Deleting {filesToDelete.Count} files and modifications...");
+                }
+
+                int deletedCount = 0;
+                int totalFiles = filesToDelete.Count;
+                foreach (var filePath in filesToDelete)
+                {
+                    try
+                    {
+                        if (File.Exists(filePath))
+                        {
+                            var attr = File.GetAttributes(filePath);
+                            if ((attr & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
+                            {
+                                File.SetAttributes(filePath, attr & ~FileAttributes.ReadOnly);
+                            }
+                            File.Delete(filePath);
+                            deletedCount++;
+                            Logger.Log($"[OnlineFixDetailView] Restored: Deleted {filePath}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log($"[OnlineFixDetailView] Failed to delete file {filePath}: {ex.Message}");
+                    }
+
+                    if (modal != null && totalFiles > 0)
+                    {
+                        double pct = (double)deletedCount / totalFiles * 100.0;
+                        modal.SetProgress(pct, 100, false);
+                    }
+                }
+
+                // Delete known Online-Fix directories
+                foreach (var dir in dirsToDelete)
+                {
+                    try
+                    {
+                        if (Directory.Exists(dir))
+                        {
+                            Directory.Delete(dir, true);
+                            Logger.Log($"[OnlineFixDetailView] Restored: Deleted directory {dir}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log($"[OnlineFixDetailView] Failed to delete directory {dir}: {ex.Message}");
+                    }
+                }
+
+                // Clean empty directories in gameFolder
+                OnlineFixTrackerService.CleanEmptySubdirectories(gameFolder!);
+
+                // Reset Custom Launch if configured
+                if (CustomLaunchService.IsCustomLaunchConfigured(appId, gameFolder!))
+                {
+                    CustomLaunchService.RemoveConfig(appId);
+                    Logger.Log($"[OnlineFixDetailView] Reset Custom Launch configuration for AppID {appId}");
+                }
+
+                // Clean tracking record
+                OnlineFixTrackerService.DeleteInstallRecord(appId, gameFolder);
+
+                UpdateProgressStep(3, true);
+
+                // Step 4: Trigger Steam Verify Integrity
+                UpdateProgressStep(4);
+                if (modal != null)
+                {
+                    modal.UpdateStatus("Triggering Steam file integrity verification...", "Opening Steam validate service...");
+                }
+
+                await Task.Delay(500);
+                SteamHelper.VerifyGame(appId);
+                Logger.Log($"[OnlineFixDetailView] Triggered Steam integrity validation for AppID {appId}");
+
+                _isValidatingFiles = true;
+
+                UpdateProgressStep(4, true);
+
+                ShowResultNotification(true, $"✓ Online-Fix files removed! Steam is now verifying game file integrity.");
+                await Task.Delay(2500);
+                ShowLoadingState(false);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[OnlineFixDetailView] Error in RestoreGame_Click: {ex.Message}");
+                ShowResultNotification(false, $"✗ Failed to restore game files: {ex.Message}");
+                await Task.Delay(2000);
+                ShowLoadingState(false);
+            }
+            finally
+            {
+                _isActionInProgress = false;
+                CheckSteamValidationState();
             }
         }
 
@@ -855,5 +1381,172 @@ namespace SteamPluginManager.Views
 
             return false;
         }
+
+        #region Custom Launch Tutorial Integration
+
+        private async Task LoadTutorialAsync()
+        {
+            try
+            {
+                if (_currentFile == null || !_currentFile.AppId.HasValue || _currentFile.AppId.Value <= 0)
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        if (FindName("TutorialCard") is Border card) card.Visibility = Visibility.Collapsed;
+                    });
+                    return;
+                }
+
+                int appId = _currentFile.AppId.Value;
+                var tutorial = await CustomLaunchTutorialService.GetTutorialForAppAsync(appId, "ONLINEFIX");
+                _currentTutorial = tutorial;
+
+                Dispatcher.Invoke(() =>
+                {
+                    if (FindName("TutorialCard") is not Border card) return;
+
+                    if (tutorial != null)
+                    {
+                        if (FindName("TutorialSummaryText") is TextBlock summaryText)
+                            summaryText.Text = string.IsNullOrWhiteSpace(tutorial.Summary)
+                                ? "This game has recommended custom launch configurations to ensure optimal gameplay."
+                                : tutorial.Summary;
+
+                        if (FindName("TutorialExeText") is TextBlock exeText)
+                            exeText.Text = string.IsNullOrWhiteSpace(tutorial.RecommendedExecutable)
+                                ? "(Default Executable)"
+                                : tutorial.RecommendedExecutable;
+
+                        if (FindName("TutorialArgsText") is TextBlock argsText)
+                            argsText.Text = string.IsNullOrWhiteSpace(tutorial.RecommendedArguments)
+                                ? "(None)"
+                                : tutorial.RecommendedArguments;
+
+                        if (FindName("TutorialStepsList") is ItemsControl stepsList)
+                            stepsList.ItemsSource = tutorial.Steps;
+
+                        if (FindName("TutorialNotesBorder") is Border notesBorder && FindName("TutorialNotesText") is TextBlock notesText)
+                        {
+                            if (!string.IsNullOrWhiteSpace(tutorial.Notes))
+                            {
+                                notesText.Text = tutorial.Notes;
+                                notesBorder.Visibility = Visibility.Visible;
+                            }
+                            else
+                            {
+                                notesBorder.Visibility = Visibility.Collapsed;
+                            }
+                        }
+
+                        card.Visibility = Visibility.Visible;
+                    }
+                    else
+                    {
+                        card.Visibility = Visibility.Collapsed;
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[OnlineFixDetailView] Error loading tutorial: {ex.Message}");
+                Dispatcher.Invoke(() =>
+                {
+                    if (FindName("TutorialCard") is Border card) card.Visibility = Visibility.Collapsed;
+                });
+            }
+        }
+
+        private void CopyExe_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_currentTutorial != null && !string.IsNullOrWhiteSpace(_currentTutorial.RecommendedExecutable))
+                {
+                    Clipboard.SetText(_currentTutorial.RecommendedExecutable);
+                    ModernMessageBox.Show($"Executable path copied to clipboard:\n{_currentTutorial.RecommendedExecutable}", "Copied to Clipboard", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch { }
+        }
+
+        private void CopyArgs_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_currentTutorial != null && !string.IsNullOrWhiteSpace(_currentTutorial.RecommendedArguments))
+                {
+                    Clipboard.SetText(_currentTutorial.RecommendedArguments);
+                    ModernMessageBox.Show($"Launch arguments copied to clipboard:\n{_currentTutorial.RecommendedArguments}", "Copied to Clipboard", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch { }
+        }
+
+        private void ApplyTutorialButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_currentFile == null || !_currentFile.AppId.HasValue || _currentTutorial == null)
+                {
+                    ModernMessageBox.Show("Tutorial configuration data is not available.", "Notice", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                int appId = _currentFile.AppId.Value;
+                string? gamePath = SteamHelper.GetGameInstallationPath(appId, _currentFile.Name);
+
+                if (string.IsNullOrEmpty(gamePath) || !Directory.Exists(gamePath))
+                {
+                    ModernMessageBox.Show("This game is not currently installed in your local Steam library.\n\nPlease install the game first before applying automatic Custom Launch settings.", "Game Not Installed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                bool success = CustomLaunchTutorialService.ApplyTutorialToLocalGame(appId, _currentTutorial, gamePath);
+                if (success)
+                {
+                    ModernMessageBox.Show($"Custom Launch configuration for '{_currentFile.Name}' has been applied successfully!\n\n• Target: {_currentTutorial.RecommendedExecutable}\n• Arguments: {_currentTutorial.RecommendedArguments}\n\nYou can now launch the game directly via PLAY in your Game Library.", "Applied Successfully", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    ModernMessageBox.Show("Failed to apply Custom Launch configuration. Please verify that the game directory exists.", "Application Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                ModernMessageBox.Show($"An unexpected error occurred: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void OpenGameInLibrary_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_currentFile == null || !_currentFile.AppId.HasValue)
+                {
+                    WindowNavigator.NavigateToGameLibrary();
+                    return;
+                }
+
+                int appId = _currentFile.AppId.Value;
+                string? gamePath = SteamHelper.GetGameInstallationPath(appId, _currentFile.Name);
+
+                var gameEntry = new GameEntry
+                {
+                    AppId = appId,
+                    Name = _currentFile.Name ?? "Game",
+                    InstallationPath = gamePath ?? string.Empty,
+                    IsInstalled = !string.IsNullOrEmpty(gamePath) && Directory.Exists(gamePath)
+                };
+
+                WindowNavigator.NavigateToGameLibraryDetail(gameEntry);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[OnlineFixDetailView] Error navigating to game library: {ex.Message}");
+                WindowNavigator.NavigateToGameLibrary();
+            }
+        }
+
+        #endregion
     }
 }

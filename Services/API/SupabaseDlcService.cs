@@ -38,7 +38,12 @@ namespace SteamPluginManager.Services.API
                 }
 
                 var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                return JsonSerializer.Deserialize<List<DLCItem>>(content, options) ?? new List<DLCItem>();
+                var items = JsonSerializer.Deserialize<List<DLCItem>>(content, options) ?? new List<DLCItem>();
+                if (items.Count > 0)
+                {
+                    CacheManager.SaveCachedDlcItems(gameAppId, items);
+                }
+                return items;
             }
             catch
             {
@@ -75,6 +80,10 @@ namespace SteamPluginManager.Services.API
                 };
 
                 var response = await client.SendAsync(request);
+                if (response.IsSuccessStatusCode)
+                {
+                    CacheManager.SaveCachedDlcItems(gameAppId, new List<DLCItem>(dlcItems));
+                }
                 return response.IsSuccessStatusCode;
             }
             catch

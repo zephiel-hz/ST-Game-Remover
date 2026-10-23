@@ -53,16 +53,22 @@ namespace SteamPluginManager.Services.ResourcePipeline
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var dirUrl = $"{baseUrl}/uploads/{Uri.EscapeDataString(candidate)}/Fix Repair/";
+                var dirUrl = $"{baseUrl}/uploads/{Uri.EscapeDataString(candidate)}/Fix%20Repair/";
                 var result = await TryInspectDirectoryAsync(dirUrl, candidate, cancellationToken);
                 if (result != null)
+                {
+                    Logger.Log($"[OnlineFixResourceService] ✓ Match found in Fix Repair: {dirUrl}");
                     return result;
+                }
 
                 // Also try without "Fix Repair/" in case the archive is directly in the game folder
                 var directUrl = $"{baseUrl}/uploads/{Uri.EscapeDataString(candidate)}/";
                 result = await TryInspectDirectoryAsync(directUrl, candidate, cancellationToken);
                 if (result != null)
+                {
+                    Logger.Log($"[OnlineFixResourceService] ✓ Match found directly in folder: {directUrl}");
                     return result;
+                }
             }
 
             return null;
@@ -133,28 +139,141 @@ namespace SteamPluginManager.Services.ResourcePipeline
         private static List<string> GenerateDirectoryCandidates(string gameName)
         {
             var list = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(gameName))
+                return list.ToList();
 
             var raw = gameName.Trim();
             list.Add(raw);
 
-            // Without colon or special punctuation
-            var noPunctuation = Regex.Replace(raw, @"[:;?!]", "");
-            if (!string.Equals(noPunctuation, raw, StringComparison.OrdinalIgnoreCase))
-                list.Add(noPunctuation.Trim());
-
-            // Replace special dashes / hyphens with space
-            var dashToSpace = Regex.Replace(noPunctuation, @"[-–—]", " ");
-            dashToSpace = Regex.Replace(dashToSpace, @"\s+", " ").Trim();
-            if (!string.Equals(dashToSpace, raw, StringComparison.OrdinalIgnoreCase))
-                list.Add(dashToSpace);
-
-            // If contains trademark symbols ™, ®, etc.
+            // Strip trademarks & copyrights (™ ® ©)
             var cleanTrade = Regex.Replace(raw, @"[™®©]", "").Trim();
             cleanTrade = Regex.Replace(cleanTrade, @"\s+", " ").Trim();
-            if (!string.Equals(cleanTrade, raw, StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrEmpty(cleanTrade))
                 list.Add(cleanTrade);
 
-            return list.ToList();
+            // 1. Apostrophe removal (e.g. Dragon's Dogma 2 -> Dragons Dogma 2, Baldur's Gate 3 -> Baldurs Gate 3)
+            // Handles ASCII ', right single quote ’, left single quote ‘, acute ´, backtick `
+            var noApos = Regex.Replace(cleanTrade, @"['’‘`´]", "");
+            noApos = Regex.Replace(noApos, @"\s+", " ").Trim();
+            if (!string.IsNullOrEmpty(noApos))
+                list.Add(noApos);
+
+            // Apostrophe replaced with space (e.g. Dragon's -> Dragon s)
+            var aposToSpace = Regex.Replace(cleanTrade, @"['’‘`´]", " ");
+            aposToSpace = Regex.Replace(aposToSpace, @"\s+", " ").Trim();
+            if (!string.IsNullOrEmpty(aposToSpace))
+                list.Add(aposToSpace);
+
+            // 2. Remove common punctuation [:;?!,""“”«»] and commas in numbers
+            var noPunctuation = Regex.Replace(cleanTrade, @"[:;?!,""“”«»]", "");
+            noPunctuation = Regex.Replace(noPunctuation, @"\s+", " ").Trim();
+            if (!string.IsNullOrEmpty(noPunctuation))
+                list.Add(noPunctuation);
+
+            var noAposNoPunct = Regex.Replace(noApos, @"[:;?!,""“”«»]", "");
+            noAposNoPunct = Regex.Replace(noAposNoPunct, @"\s+", " ").Trim();
+            if (!string.IsNullOrEmpty(noAposNoPunct))
+                list.Add(noAposNoPunct);
+
+            // 3. Replace special dashes / hyphens with space
+            var dashToSpace = Regex.Replace(noAposNoPunct, @"[-–—_]", " ");
+            dashToSpace = Regex.Replace(dashToSpace, @"\s+", " ").Trim();
+            if (!string.IsNullOrEmpty(dashToSpace))
+                list.Add(dashToSpace);
+
+            // 4. Ampersand variants (& -> and, & -> space)
+            if (cleanTrade.Contains("&"))
+            {
+                var andWord = Regex.Replace(noAposNoPunct.Replace("&", "and"), @"\s+", " ").Trim();
+                if (!string.IsNullOrEmpty(andWord))
+                    list.Add(andWord);
+
+                var andSpace = Regex.Replace(noAposNoPunct.Replace("&", " "), @"\s+", " ").Trim();
+                if (!string.IsNullOrEmpty(andSpace))
+                    list.Add(andSpace);
+            }
+
+            // 5. Clean alphanumeric + spaces only
+            var alphaNumOnly = Regex.Replace(cleanTrade, @"[^a-zA-Z0-9\s]", "");
+            alphaNumOnly = Regex.Replace(alphaNumOnly, @"\s+", " ").Trim();
+            if (!string.IsNullOrEmpty(alphaNumOnly))
+                list.Add(alphaNumOnly);
+
+            // 6. Subtitle separation (try only the main title before ':' or ' - ')
+            if (cleanTrade.Contains(":") || cleanTrade.Contains(" - "))
+            {
+                var parts = cleanTrade.Split(new[] { ':', '-' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length > 0)
+                {
+                    var mainTitle = parts[0].Trim();
+                    if (!string.IsNullOrWhiteSpace(mainTitle) && mainTitle.Length >= 3)
+                    {
+                        list.Add(mainTitle);
+                        var mainNoApos = Regex.Replace(mainTitle, @"['’‘`´]", "").Trim();
+                        list.Add(mainNoApos);
+                    }
+                }
+            }
+
+            // 7. Roman numerals <-> Arabic digits (e.g. "Dragon's Dogma 2" <-> "Dragons Dogma II", "Remnant II" <-> "Remnant 2")
+            var currentCandidates = list.ToList();
+            foreach (var item in currentCandidates)
+            {
+                var rToA = ConvertRomanToArabic(item);
+                if (!string.Equals(rToA, item, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(rToA))
+                    list.Add(rToA);
+
+                var aToR = ConvertArabicToRoman(item);
+                if (!string.Equals(aToR, item, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(aToR))
+                    list.Add(aToR);
+            }
+
+            // 8. Dot-separated names (common in scene releases, e.g. Dragons.Dogma.2)
+            if (!string.IsNullOrEmpty(noApos))
+            {
+                var dotSeparated = noApos.Replace(" ", ".");
+                list.Add(dotSeparated);
+            }
+
+            return list.Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+        }
+
+        private static string ConvertRomanToArabic(string text)
+        {
+            return Regex.Replace(text, @"\b(VIII|VII|VI|IV|V|III|II|I)\b", m =>
+            {
+                return m.Value.ToUpperInvariant() switch
+                {
+                    "VIII" => "8",
+                    "VII" => "7",
+                    "VI" => "6",
+                    "V" => "5",
+                    "IV" => "4",
+                    "III" => "3",
+                    "II" => "2",
+                    "I" => "1",
+                    _ => m.Value
+                };
+            });
+        }
+
+        private static string ConvertArabicToRoman(string text)
+        {
+            return Regex.Replace(text, @"\b([1-8])\b", m =>
+            {
+                return m.Value switch
+                {
+                    "1" => "I",
+                    "2" => "II",
+                    "3" => "III",
+                    "4" => "IV",
+                    "5" => "V",
+                    "6" => "VI",
+                    "7" => "VII",
+                    "8" => "VIII",
+                    _ => m.Value
+                };
+            });
         }
 
         public async Task<string> DownloadResourceAsync(

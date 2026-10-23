@@ -86,6 +86,52 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Category Pill Navigation RadioButton Style -->
+        <Style x:Key="CategoryPillRadioButtonStyle" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+            <Setter Property="Background" Value="#131926"/>
+            <Setter Property="BorderBrush" Value="#222A3B"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="#94A3B8"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="PillBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="17"
+                                Padding="15,0"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                    <Condition Property="IsChecked" Value="False"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="PillBorder" Property="Background" Value="#1F283B"/>
+                                <Setter TargetName="PillBorder" Property="BorderBrush" Value="#3B4B6C"/>
+                                <Setter Property="Foreground" Value="#F8FAFC"/>
+                            </MultiTrigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="PillBorder" Property="Background" Value="#2563EB"/>
+                                <Setter TargetName="PillBorder" Property="BorderBrush" Value="#3B82F6"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -160,6 +206,7 @@
         <Grid Grid.Row="1" Margin="14,12,14,14">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
@@ -174,6 +221,7 @@
                     <!-- SearchBox with Placeholder -->
                     <Grid Grid.Column="0">
                         <TextBox x:Name="SearchBox" Style="{StaticResource PremiumSearchBoxStyle}"
+                                 TextChanged="SearchBox_TextChanged"
                                  VerticalAlignment="Center" Margin="0,0,10,0"/>
                         <StackPanel Orientation="Horizontal" Margin="14,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
                             <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
@@ -211,8 +259,92 @@
                 </Grid>
             </Border>
 
+            <!-- Category Navigation Pills -->
+            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,12" Focusable="False">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- ALL -->
+                    <RadioButton x:Name="CategoryAll" Style="{StaticResource CategoryPillRadioButtonStyle}"
+                                 GroupName="BypassCategory" Tag="ALL" IsChecked="True" Checked="CategoryFilter_Checked">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Path Width="13" Height="13" Margin="0,0,8,0" Stretch="Uniform"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"
+                                  Data="M0,0 H5 V5 H0 Z M7,0 H12 V5 H7 Z M0,7 H5 V12 H0 Z M7,7 H12 V12 H7 Z"/>
+                            <TextBlock Text="ALL" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </RadioButton>
+
+                    <!-- DENUVO -->
+                    <RadioButton x:Name="CategoryDenuvo" Style="{StaticResource CategoryPillRadioButtonStyle}"
+                                 GroupName="BypassCategory" Tag="DENUVO" Checked="CategoryFilter_Checked">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Path Width="13" Height="14" Margin="0,0,8,0" Stretch="Uniform"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"
+                                  Data="M12,1 L3,5 V11 C3,16.55 6.84,21.74 12,23 C17.16,21.74 21,16.55 21,11 V5 Z M12,3.18 L19,6.3 V11 C19,15.52 16.02,19.69 12,20.93 C7.98,19.69 5,15.52 5,11 V6.3 Z"/>
+                            <TextBlock Text="DENUVO" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </RadioButton>
+
+                    <!-- UBISOFT -->
+                    <RadioButton x:Name="CategoryUbisoft" Style="{StaticResource CategoryPillRadioButtonStyle}"
+                                 GroupName="BypassCategory" Tag="UBISOFT" Checked="CategoryFilter_Checked">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Path Width="14" Height="14" Margin="0,0,8,0" Stretch="Uniform"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"
+                                  Data="M12,2 A10,10 0 1,0 22,12 A10,10 0 0,0 12,2 Z M12,4 A8,8 0 0,1 20,12 C20,15.2 18,17.9 15.2,19.2 C13.7,19.9 11.9,19.8 10.5,19 C8.6,17.9 7.4,16 7.1,13.8 C6.8,11.5 7.6,9.3 9.2,7.7 C10.8,6.1 13.1,5.4 15.3,5.8 C14.5,7 13.1,7.8 11.6,7.8 C9.8,7.8 8.4,9.2 8.4,11 C8.4,12.8 9.8,14.2 11.6,14.2 C13,14.2 14.2,13.3 14.6,12 C14.8,11.4 14.7,10.7 14.3,10.2 C13.9,9.7 13.3,9.4 12.6,9.4 C11.7,9.4 11,10.1 11,11 C11,11.9 11.7,12.6 12.6,12.6 C13,12.6 13.4,12.4 13.6,12.1"/>
+                            <TextBlock Text="UBISOFT" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </RadioButton>
+
+                    <!-- EA -->
+                    <RadioButton x:Name="CategoryEA" Style="{StaticResource CategoryPillRadioButtonStyle}"
+                                 GroupName="BypassCategory" Tag="EA" Checked="CategoryFilter_Checked">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border Width="16" Height="16" CornerRadius="8" BorderThickness="1.2" Margin="0,0,8,0"
+                                    BorderBrush="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="EA" FontSize="7.5" FontWeight="Black" FontStyle="Italic"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-0.5,0,0"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
+                            </Border>
+                            <TextBlock Text="EA" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </RadioButton>
+
+                    <!-- ROCKSTAR -->
+                    <RadioButton x:Name="CategoryRockstar" Style="{StaticResource CategoryPillRadioButtonStyle}"
+                                 GroupName="BypassCategory" Tag="ROCKSTAR" Checked="CategoryFilter_Checked">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border Width="17" Height="17" CornerRadius="4" BorderThickness="1.2" Margin="0,0,8,0"
+                                    BorderBrush="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"
+                                    VerticalAlignment="Center">
+                                <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="R" FontSize="11" FontWeight="Black" Margin="-3,-1,3,0"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
+                                    <Path Width="5.5" Height="5.5" Margin="5,4,0,0" Stretch="Uniform"
+                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"
+                                          Data="M12,2 L15.09,8.26 L22,9.27 L17,14.14 L18.18,21.02 L12,17.77 L5.82,21.02 L7,14.14 L2,9.27 L8.91,8.26 Z"/>
+                                </Grid>
+                            </Border>
+                            <TextBlock Text="ROCKSTAR" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </RadioButton>
+
+                    <!-- OTHERS -->
+                    <RadioButton x:Name="CategoryOthers" Style="{StaticResource CategoryPillRadioButtonStyle}"
+                                 GroupName="BypassCategory" Tag="OTHERS" Checked="CategoryFilter_Checked">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Path Width="14" Height="14" Margin="0,0,8,0" Stretch="Uniform"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"
+                                  Data="M5,12 A2,2 0 1,1 1,12 A2,2 0 1,1 5,12 Z M14,12 A2,2 0 1,1 10,12 A2,2 0 1,1 14,12 Z M23,12 A2,2 0 1,1 19,12 A2,2 0 1,1 23,12 Z"/>
+                            <TextBlock Text="OTHERS" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </RadioButton>
+                </StackPanel>
+            </ScrollViewer>
+
             <!-- File Cards Grid & Pagination -->
-            <Grid Grid.Row="1">
+            <Grid Grid.Row="2">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>

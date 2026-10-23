@@ -9,6 +9,9 @@ namespace SteamPluginManager.Models
         [JsonPropertyName("dlc_app_id")]
         public int AppId { get; set; }
 
+        [JsonIgnore]
+        public int DlcAppId => AppId;
+
         [JsonPropertyName("dlc_name")]
         public string Name { get; set; } = string.Empty;
 

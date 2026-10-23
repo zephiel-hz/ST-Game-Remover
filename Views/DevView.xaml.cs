@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
@@ -14,9 +15,12 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Collections.ObjectModel;
 using SteamPluginManager.Models;
 using SteamPluginManager.Services.API;
 using SteamPluginManager.Services.Profile;
+using SteamPluginManager.Services.Steam;
+using SteamPluginManager;
 
 namespace SteamPluginManager.Views
 {
@@ -27,6 +31,17 @@ namespace SteamPluginManager.Views
         private readonly List<DevDeviceAccessItem> _allDevices = new();
         private readonly List<DevBlockedItem> _allBlocked = new();
         private readonly List<DevUserItem> _allUsers = new();
+        private readonly List<DevStorageFileItem> _allGameBypassFiles = new();
+        private readonly List<DevStorageFileItem> _allOnlineFixFiles = new();
+        private long _totalGameBypassBytes = 0;
+        private long _totalOnlineFixBytes = 0;
+        private string _activeStorageCategory = "gamebypass";
+        private string _selectedStorageCategory = "ALL";
+        private readonly List<CustomLaunchTutorial> _allTutorials = new();
+        private readonly ObservableCollection<CustomLaunchTutorial> _filteredTutorials = new();
+        private readonly ObservableCollection<TutorialStep> _editingSteps = new();
+        private CustomLaunchTutorial? _selectedTutorial;
+        private string _selectedTutorialPlatformFilter = "ALL";
 
         private DevUserItem? _selectedUser;
         private UserProfile? _currentAdminProfile;
@@ -36,6 +51,8 @@ namespace SteamPluginManager.Views
         public DevView()
         {
             InitializeComponent();
+            TutorialsListBox.ItemsSource = _filteredTutorials;
+            EditorStepsItemsControl.ItemsSource = _editingSteps;
             Loaded += DevView_Loaded;
         }
 
@@ -77,12 +94,14 @@ namespace SteamPluginManager.Views
                 RefreshAllButton.IsEnabled = false;
                 LogConsole("[DevConsole] Refreshing all console datasets...");
 
+                await LoadGamesAsync();
                 await Task.WhenAll(
-                    LoadGamesAsync(),
                     LoadTokensAndDevicesAsync(),
                     LoadBlockedDevicesAsync(),
                     LoadUsersAsync(),
-                    LoadActiveBroadcastAsync()
+                    LoadActiveBroadcastAsync(),
+                    LoadStorageDataAsync(),
+                    LoadTutorialsAsync()
                 );
 
                 LogConsole("[DevConsole] All console datasets successfully refreshed.");
@@ -157,6 +176,85 @@ namespace SteamPluginManager.Views
             await LoadGamesAsync();
         }
 
+        private async void ReplaceLuaManifestButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                int? prefilledAppId = null;
+                var selectedGame = _allGames.FirstOrDefault(g => g.IsSelected) ?? (GamesDataGrid?.SelectedItem as DevManifestGame);
+                if (selectedGame != null)
+                {
+                    prefilledAppId = selectedGame.AppId;
+                }
+                else if (StorageDataGrid?.SelectedItem is DevStorageFileItem sfi)
+                {
+                    var match = System.Text.RegularExpressions.Regex.Match(sfi.Key, @"^(\d+)");
+                    if (match.Success && int.TryParse(match.Groups[1].Value, out int sAppId))
+                    {
+                        prefilledAppId = sAppId;
+                    }
+                }
+                else if (!string.IsNullOrWhiteSpace(GameSearchTextBox?.Text) && int.TryParse(GameSearchTextBox.Text.Trim(), out int searchId))
+                {
+                    prefilledAppId = searchId;
+                }
+
+                var dialog = new UI.Dialogs.DevReplaceLuaManifestDialog(_allGames, prefilledAppId)
+                {
+                    Owner = Window.GetWindow(this)
+                };
+
+                if (dialog.ShowDialog() == true && dialog.ReplaceSucceeded)
+                {
+                    LogConsole($"[DevConsole] Replaced Lua & Manifest files for AppID {dialog.TargetAppId} ({dialog.ReplacedFilesCount} files, {SupabaseStorageService.FormatSize(dialog.ReplacedTotalBytes)}).");
+                    await LoadGamesAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                LogConsole($"[DevConsole] Error opening replace dialog: {ex.Message}");
+            }
+        }
+
+        private async void GameRowReplaceLuaManifest_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                int? targetAppId = null;
+                if (sender is MenuItem mi)
+                {
+                    if (mi.DataContext is DevManifestGame game)
+                    {
+                        targetAppId = game.AppId;
+                    }
+                    else if (mi.Parent is ContextMenu cm && cm.PlacementTarget is DataGridRow row && row.DataContext is DevManifestGame rGame)
+                    {
+                        targetAppId = rGame.AppId;
+                    }
+                }
+
+                if (targetAppId == null && GamesDataGrid?.SelectedItem is DevManifestGame sel)
+                {
+                    targetAppId = sel.AppId;
+                }
+
+                var dialog = new UI.Dialogs.DevReplaceLuaManifestDialog(_allGames, targetAppId)
+                {
+                    Owner = Window.GetWindow(this)
+                };
+
+                if (dialog.ShowDialog() == true && dialog.ReplaceSucceeded)
+                {
+                    LogConsole($"[DevConsole] Replaced Lua & Manifest files for AppID {dialog.TargetAppId} ({dialog.ReplacedFilesCount} files, {SupabaseStorageService.FormatSize(dialog.ReplacedTotalBytes)}).");
+                    await LoadGamesAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                LogConsole($"[DevConsole] Error opening row replace dialog: {ex}");
+            }
+        }
+
         private void SelectAllGames_Click(object sender, RoutedEventArgs e)
         {
             var visibleGames = GamesDataGrid.ItemsSource as IEnumerable<DevManifestGame> ?? _allGames;
@@ -204,6 +302,14 @@ namespace SteamPluginManager.Views
                 game.IsSelected = !game.IsSelected;
                 GamesDataGrid.Items.Refresh();
                 UpdateGameSelectionUI();
+            }
+        }
+
+        private void GamesDataGrid_Row_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is DataGridRow row && row.DataContext is DevManifestGame game)
+            {
+                GamesDataGrid.SelectedItem = game;
             }
         }
 
@@ -424,8 +530,25 @@ namespace SteamPluginManager.Views
                     // 4. Cloudflare R2 GameBypass Purge
                     if (doGameBypass)
                     {
-                        bool r2Res = await R2Config.DeleteFileAsync($"gamebypass/{appId}.zip");
-                        LogConsole($"  - Cloudflare R2 delete gamebypass/{appId}.zip: {r2Res}");
+                        var matchedKeys = _allGameBypassFiles.Where(f => f.AppId == appId).Select(f => f.Key).ToList();
+                        if (matchedKeys.Count > 0)
+                        {
+                            foreach (var key in matchedKeys)
+                            {
+                                bool r2Res = await R2Config.DeleteFileAsync(key);
+                                LogConsole($"  - Cloudflare R2 delete {key}: {r2Res}");
+                            }
+                        }
+                        else
+                        {
+                            string[] cats = { "DENUVO", "UBISOFT", "EA", "ROCKSTAR", "OTHERS" };
+                            foreach (var cat in cats)
+                            {
+                                await R2Config.DeleteFileAsync($"gamebypass/{cat}/{appId}.zip");
+                            }
+                            bool r2Res = await R2Config.DeleteFileAsync($"gamebypass/{appId}.zip");
+                            LogConsole($"  - Cloudflare R2 delete gamebypass/(all categories)/{appId}.zip: {r2Res}");
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -1120,7 +1243,368 @@ namespace SteamPluginManager.Views
 
         #endregion
 
-        #region 5. Storage & Orphan Cleaner
+        #region 5. Cloud Storage Manager & Orphan Scanner
+
+        public static string FormatStorageBytes(long bytes)
+        {
+            if (bytes < 1024) return $"{bytes} B";
+            if (bytes < 1024 * 1024) return $"{(bytes / 1024.0):F1} KB";
+            if (bytes < 1024 * 1024 * 1024) return $"{(bytes / (1024.0 * 1024)):F2} MB";
+            return $"{(bytes / (1024.0 * 1024 * 1024)):F2} GB";
+        }
+
+        private static int? TryParseAppId(string fileName)
+        {
+            string baseName = Path.GetFileNameWithoutExtension(fileName);
+            var match = Regex.Match(baseName, @"\b(\d{4,8})\b");
+            if (match.Success && int.TryParse(match.Groups[1].Value, out int appId))
+            {
+                return appId;
+            }
+            return null;
+        }
+
+        private async Task LoadStorageDataAsync()
+        {
+            try
+            {
+                LogConsole("[DevConsole] Fetching Cloudflare R2 and Backblaze B2 storage file catalogs...");
+
+                var r2Task = R2Config.ListFilesAsync("gamebypass/");
+                var b2Task = B2Config.ListFilesAsync("onlinefix/");
+
+                await Task.WhenAll(r2Task, b2Task);
+
+                var r2Files = await r2Task;
+                var b2Files = await b2Task;
+
+                var gameDict = _allGames.GroupBy(g => g.AppId).ToDictionary(g => g.Key, g => g.First());
+
+                _allGameBypassFiles.Clear();
+                foreach (var rf in r2Files)
+                {
+                    string fileName = Path.GetFileName(rf.Key);
+                    int? appId = TryParseAppId(fileName);
+                    string gameTitle = "—";
+                    if (appId.HasValue && gameDict.TryGetValue(appId.Value, out var matched))
+                    {
+                        gameTitle = matched.Name;
+                    }
+
+                    // Extract category from R2 subfolder structure (e.g. gamebypass/DENUVO/12345.zip -> "DENUVO")
+                    string category = "OTHERS";
+                    var pathParts = rf.Key.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (pathParts.Length >= 3 && string.Equals(pathParts[0], "gamebypass", StringComparison.OrdinalIgnoreCase))
+                    {
+                        category = pathParts[1].Trim().ToUpperInvariant();
+                    }
+                    else if (pathParts.Length == 2 && !string.Equals(pathParts[0], "gamebypass", StringComparison.OrdinalIgnoreCase))
+                    {
+                        category = pathParts[0].Trim().ToUpperInvariant();
+                    }
+
+                    _allGameBypassFiles.Add(new DevStorageFileItem
+                    {
+                        Key = rf.Key,
+                        FileName = fileName,
+                        Category = category,
+                        StorageProvider = "gamebypass",
+                        Url = rf.Url,
+                        SizeBytes = rf.Size,
+                        LastModified = rf.LastModified,
+                        AppId = appId,
+                        MatchedGameTitle = gameTitle
+                    });
+                }
+
+                _allOnlineFixFiles.Clear();
+                foreach (var bf in b2Files)
+                {
+                    string fileName = Path.GetFileName(bf.Key);
+                    int? appId = TryParseAppId(fileName);
+                    string gameTitle = "—";
+                    if (appId.HasValue && gameDict.TryGetValue(appId.Value, out var matched))
+                    {
+                        gameTitle = matched.Name;
+                    }
+
+                    _allOnlineFixFiles.Add(new DevStorageFileItem
+                    {
+                        Key = bf.Key,
+                        FileName = fileName,
+                        Category = "—",
+                        StorageProvider = "onlinefix",
+                        Url = bf.Url,
+                        SizeBytes = bf.Size,
+                        LastModified = bf.LastModified,
+                        AppId = appId,
+                        MatchedGameTitle = gameTitle
+                    });
+                }
+
+                _totalGameBypassBytes = _allGameBypassFiles.Sum(f => f.SizeBytes);
+                _totalOnlineFixBytes = _allOnlineFixFiles.Sum(f => f.SizeBytes);
+
+                Dispatcher.Invoke(() =>
+                {
+                    R2TotalSizeText.Text = FormatStorageBytes(_totalGameBypassBytes);
+                    R2TotalFilesText.Text = $"{_allGameBypassFiles.Count:N0} files";
+
+                    B2TotalSizeText.Text = FormatStorageBytes(_totalOnlineFixBytes);
+                    B2TotalFilesText.Text = $"{_allOnlineFixFiles.Count:N0} files";
+
+                    ApplyStorageFilter();
+                });
+
+                LogConsole($"[DevConsole] Cloud storage loaded: R2 GameBypass={_allGameBypassFiles.Count} files ({FormatStorageBytes(_totalGameBypassBytes)}), B2 OnlineFix={_allOnlineFixFiles.Count} files ({FormatStorageBytes(_totalOnlineFixBytes)}).");
+            }
+            catch (Exception ex)
+            {
+                LogConsole($"[DevConsole] Error loading cloud storage data: {ex.Message}");
+            }
+        }
+
+        private void StorageSubTab_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!IsLoaded) return;
+
+            if (StorageSubTabMaintenanceRadio?.IsChecked == true)
+            {
+                StorageDataGridContainer.Visibility = Visibility.Collapsed;
+                StorageMaintenanceContainer.Visibility = Visibility.Visible;
+                StorageSearchContainer.Visibility = Visibility.Collapsed;
+                UploadStorageFileButton.Visibility = Visibility.Collapsed;
+                if (StorageCategoryFilterContainer != null) StorageCategoryFilterContainer.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                StorageDataGridContainer.Visibility = Visibility.Visible;
+                StorageMaintenanceContainer.Visibility = Visibility.Collapsed;
+                StorageSearchContainer.Visibility = Visibility.Visible;
+                UploadStorageFileButton.Visibility = Visibility.Visible;
+
+                if (StorageSubTabOnlineFixRadio?.IsChecked == true)
+                {
+                    _activeStorageCategory = "onlinefix";
+                    if (StorageCategoryFilterContainer != null) StorageCategoryFilterContainer.Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    _activeStorageCategory = "gamebypass";
+                    if (StorageCategoryFilterContainer != null) StorageCategoryFilterContainer.Visibility = Visibility.Visible;
+                }
+
+                ApplyStorageFilter();
+            }
+        }
+
+        private void StorageCategoryFilter_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!IsLoaded) return;
+            if (sender is RadioButton rb && rb.Tag is string cat)
+            {
+                _selectedStorageCategory = cat.Trim().ToUpperInvariant();
+                ApplyStorageFilter();
+            }
+        }
+
+        private void StorageSearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            ApplyStorageFilter();
+        }
+
+        private void ApplyStorageFilter()
+        {
+            var sourceList = _activeStorageCategory == "onlinefix" ? _allOnlineFixFiles : _allGameBypassFiles;
+
+            if (_activeStorageCategory == "gamebypass" && !string.Equals(_selectedStorageCategory, "ALL", StringComparison.OrdinalIgnoreCase))
+            {
+                sourceList = sourceList.Where(f => string.Equals(f.Category, _selectedStorageCategory, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+
+            string query = StorageSearchTextBox?.Text?.Trim() ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                StorageDataGrid.ItemsSource = sourceList.OrderByDescending(f => f.LastModified ?? DateTime.MinValue).ToList();
+            }
+            else
+            {
+                var filtered = sourceList.Where(f =>
+                    f.FileName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    f.Key.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    f.Category.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    f.AppIdText.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    f.MatchedGameTitle.Contains(query, StringComparison.OrdinalIgnoreCase)
+                ).OrderByDescending(f => f.LastModified ?? DateTime.MinValue).ToList();
+
+                StorageDataGrid.ItemsSource = filtered;
+            }
+        }
+
+        private async void RefreshStorageButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                RefreshStorageButton.IsEnabled = false;
+                await LoadStorageDataAsync();
+            }
+            finally
+            {
+                RefreshStorageButton.IsEnabled = true;
+            }
+        }
+
+        private async void UploadStorageFile_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string initialCat = _selectedStorageCategory != "ALL" ? _selectedStorageCategory : "DENUVO";
+                var dialog = new UI.Dialogs.DevStorageUploadDialog(_allGames, _activeStorageCategory, initialCat);
+                dialog.Owner = Window.GetWindow(this);
+                if (dialog.ShowDialog() == true && dialog.UploadSucceeded)
+                {
+                    LogConsole($"[DevConsole] Archive uploaded: '{dialog.UploadedKey}' to {dialog.UploadedStorageType}. Reloading storage...");
+                    await LoadStorageDataAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                LogConsole($"[DevConsole] Error launching storage upload dialog: {ex.Message}");
+            }
+        }
+
+        private async void DownloadStorageFile_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is DevStorageFileItem item)
+            {
+                try
+                {
+                    var saveDialog = new Microsoft.Win32.SaveFileDialog
+                    {
+                        Title = $"Save {item.FileName} to disk",
+                        FileName = item.FileName,
+                        Filter = "Archive Files (*.zip;*.7z;*.rar;*.tar.gz)|*.zip;*.7z;*.rar;*.tar.gz|All Files (*.*)|*.*"
+                    };
+
+                    if (saveDialog.ShowDialog(Window.GetWindow(this)) == true)
+                    {
+                        string targetPath = saveDialog.FileName;
+                        LogConsole($"[DevConsole] Downloading '{item.Key}' ({item.FormattedSize}) to '{targetPath}'...");
+
+                        btn.IsEnabled = false;
+                        btn.Content = "⏳ Downloading...";
+
+                        try
+                        {
+                            if (item.StorageProvider == "gamebypass")
+                            {
+                                await R2Config.DownloadFileToPathAsync(item.Key, targetPath);
+                            }
+                            else
+                            {
+                                await B2Config.DownloadFileToPathAsync(item.Key, targetPath);
+                            }
+
+                            LogConsole($"[DevConsole] Download complete: '{targetPath}'");
+                            ModernMessageBox.ShowInformation($"Successfully downloaded '{item.FileName}' ({item.FormattedSize}) to:\n{targetPath}", "Download Complete");
+                        }
+                        finally
+                        {
+                            btn.IsEnabled = true;
+                            btn.Content = "⬇ Download";
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogConsole($"[DevConsole] Error downloading '{item.Key}': {ex.Message}");
+                    ModernMessageBox.ShowError($"Failed to download '{item.FileName}': {ex.Message}", "Download Failed");
+                }
+            }
+        }
+
+        private void CopyStorageFileUrl_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button && ((Button)sender).DataContext is DevStorageFileItem item)
+            {
+                try
+                {
+                    string url = item.Url;
+                    if (string.IsNullOrEmpty(url))
+                    {
+                        if (item.StorageProvider == "gamebypass")
+                        {
+                            url = $"{R2Config.R2Endpoint}/{R2Config.R2Bucket}/{item.Key}";
+                        }
+                        else
+                        {
+                            url = $"{B2Config.B2Endpoint}/{B2Config.B2Bucket}/{item.Key}";
+                        }
+                    }
+
+                    Clipboard.SetText(url);
+                    LogConsole($"[DevConsole] Copied storage URL for '{item.Key}' to clipboard.");
+                    ModernMessageBox.ShowInformation($"Storage URL copied to clipboard:\n\n{url}", "Link Copied");
+                }
+                catch (Exception ex)
+                {
+                    LogConsole($"[DevConsole] Error copying storage URL: {ex.Message}");
+                }
+            }
+        }
+
+        private async void DeleteStorageFile_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is DevStorageFileItem item)
+            {
+                try
+                {
+                    string providerName = item.StorageProvider == "gamebypass" ? "Cloudflare R2 (gamebypass/)" : "Backblaze B2 (onlinefix/)";
+                    bool confirm = ModernMessageBox.ShowConfirm(
+                        $"Are you sure you want to PERMANENTLY delete '{item.Key}' ({item.FormattedSize}) from {providerName}?\n\nThis cannot be undone.",
+                        "Delete Cloud File",
+                        isDestructive: true,
+                        owner: Window.GetWindow(this)
+                    );
+
+                    if (!confirm) return;
+
+                    btn.IsEnabled = false;
+                    btn.Content = "Deleting...";
+
+                    bool deleted = false;
+                    if (item.StorageProvider == "gamebypass")
+                    {
+                        deleted = await R2Config.DeleteFileAsync(item.Key);
+                    }
+                    else
+                    {
+                        deleted = await B2Config.DeleteFileAsync(item.Key);
+                    }
+
+                    if (deleted)
+                    {
+                        LogConsole($"[DevConsole] Deleted '{item.Key}' from {providerName}.");
+                        ModernMessageBox.ShowInformation($"File '{item.FileName}' has been deleted from {providerName}.", "File Deleted");
+                        await LoadStorageDataAsync();
+                    }
+                    else
+                    {
+                        ModernMessageBox.ShowError($"Failed to delete '{item.Key}'. Please check the dev console logs.", "Deletion Failed");
+                        btn.IsEnabled = true;
+                        btn.Content = "🗑 Delete";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogConsole($"[DevConsole] Error deleting '{item.Key}': {ex.Message}");
+                    ModernMessageBox.ShowError($"Error deleting file: {ex.Message}", "Delete Error");
+                    btn.IsEnabled = true;
+                    btn.Content = "🗑 Delete";
+                }
+            }
+        }
 
         private void ClearAvatarDiskCache_Click(object sender, RoutedEventArgs e)
         {
@@ -1447,6 +1931,338 @@ namespace SteamPluginManager.Views
         }
 
         #endregion
+
+        #region 8. Custom Launch Tutorials Manager
+
+        private async Task LoadTutorialsAsync(bool forceRefresh = false)
+        {
+            try
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    TutorialsCountText.Text = "Loading tutorials from Cloudflare R2...";
+                });
+
+                var list = await CustomLaunchTutorialService.GetAllTutorialsAsync(forceRefresh: forceRefresh);
+                _allTutorials.Clear();
+                _allTutorials.AddRange(list);
+
+                ApplyTutorialsFilter();
+
+                Dispatcher.Invoke(() =>
+                {
+                    TutorialsCountText.Text = $"Total: {_allTutorials.Count} tutorials active in R2";
+                    LogConsole($"[CustomLaunch] Loaded {_allTutorials.Count} tutorials from R2.");
+                });
+            }
+            catch (Exception ex)
+            {
+                LogConsole($"[CustomLaunch] Error loading tutorials: {ex.Message}");
+                Dispatcher.Invoke(() =>
+                {
+                    TutorialsCountText.Text = "Failed to load tutorials from R2";
+                });
+            }
+        }
+
+        private void TutorialFilter_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!IsLoaded) return;
+            if (sender is RadioButton rb && rb.Tag is string tag)
+            {
+                _selectedTutorialPlatformFilter = tag.Trim().ToUpperInvariant();
+                ApplyTutorialsFilter();
+            }
+        }
+
+        private void ApplyTutorialsFilter()
+        {
+            Dispatcher.Invoke(() =>
+            {
+                string search = TutorialSearchTextBox?.Text?.Trim().ToLowerInvariant() ?? "";
+                _filteredTutorials.Clear();
+                foreach (var tut in _allTutorials)
+                {
+                    bool matchesPlatform = _selectedTutorialPlatformFilter == "ALL" ||
+                        string.Equals(tut.ApplicableTo, "ALL", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(tut.ApplicableTo, _selectedTutorialPlatformFilter, StringComparison.OrdinalIgnoreCase);
+
+                    if (!matchesPlatform) continue;
+
+                    if (string.IsNullOrWhiteSpace(search) ||
+                        tut.GameTitle.ToLowerInvariant().Contains(search) ||
+                        tut.AppId.ToString().Contains(search) ||
+                        tut.RecommendedExecutable.ToLowerInvariant().Contains(search) ||
+                        tut.ApplicableTo.ToLowerInvariant().Contains(search))
+                    {
+                        _filteredTutorials.Add(tut);
+                    }
+                }
+            });
+        }
+
+        private void TutorialSearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            ApplyTutorialsFilter();
+        }
+
+        private async void RefreshTutorials_Click(object sender, RoutedEventArgs e)
+        {
+            await LoadTutorialsAsync(forceRefresh: true);
+        }
+
+        private void NewTutorialButton_Click(object sender, RoutedEventArgs e)
+        {
+            _selectedTutorial = null;
+            TutorialsListBox.SelectedItem = null;
+            EditorAppIdTextBox.Text = "";
+            EditorGameTitleTextBox.Text = "";
+            EditorSummaryTextBox.Text = "";
+            EditorExeTextBox.Text = "";
+            EditorArgsTextBox.Text = "";
+            EditorNotesTextBox.Text = "";
+            if (EditorPlatformComboBox != null)
+            {
+                EditorPlatformComboBox.SelectedIndex = 0; // ALL
+            }
+
+            _editingSteps.Clear();
+            _editingSteps.Add(new TutorialStep
+            {
+                StepNumber = 1,
+                Title = "Extract Game Files / Bypass / Fix",
+                Description = "Extract all required game files or bypass patches into the game's root installation folder."
+            });
+            _editingSteps.Add(new TutorialStep
+            {
+                StepNumber = 2,
+                Title = "Configure Executable & Launch Arguments",
+                Description = "Set the target executable and launch parameters, or click Auto-Apply to configure automatically."
+            });
+            _editingSteps.Add(new TutorialStep
+            {
+                StepNumber = 3,
+                Title = "Launch Game",
+                Description = "Launch the game using the PLAY button in your Game Library or via desktop shortcut."
+            });
+
+            TutorialEditorTitle.Text = "Tutorial Editor: Create New";
+            DeleteTutorialButton.IsEnabled = false;
+        }
+
+        private void TutorialsListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (TutorialsListBox.SelectedItem is CustomLaunchTutorial tut)
+            {
+                _selectedTutorial = tut;
+                EditorAppIdTextBox.Text = tut.AppId.ToString();
+                EditorGameTitleTextBox.Text = tut.GameTitle;
+                EditorSummaryTextBox.Text = tut.Summary;
+                EditorExeTextBox.Text = tut.RecommendedExecutable;
+                EditorArgsTextBox.Text = tut.RecommendedArguments;
+                EditorNotesTextBox.Text = tut.Notes;
+
+                if (EditorPlatformComboBox != null)
+                {
+                    string targetPlatform = string.IsNullOrWhiteSpace(tut.ApplicableTo) ? "ALL" : tut.ApplicableTo.ToUpperInvariant();
+                    int targetIdx = 0;
+                    for (int i = 0; i < EditorPlatformComboBox.Items.Count; i++)
+                    {
+                        if (EditorPlatformComboBox.Items[i] is ComboBoxItem cbi && string.Equals(cbi.Tag?.ToString(), targetPlatform, StringComparison.OrdinalIgnoreCase))
+                        {
+                            targetIdx = i;
+                            break;
+                        }
+                    }
+                    EditorPlatformComboBox.SelectedIndex = targetIdx;
+                }
+
+                _editingSteps.Clear();
+                if (tut.Steps != null)
+                {
+                    foreach (var s in tut.Steps)
+                    {
+                        _editingSteps.Add(new TutorialStep
+                        {
+                            StepNumber = s.StepNumber,
+                            Title = s.Title,
+                            Description = s.Description
+                        });
+                    }
+                }
+
+                TutorialEditorTitle.Text = $"Tutorial Editor: {tut.GameTitle} (ID: {tut.AppId})";
+                DeleteTutorialButton.IsEnabled = true;
+            }
+        }
+
+        private void EditorAppIdTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            // Auto lookup title if empty and user types valid AppID
+            if (int.TryParse(EditorAppIdTextBox.Text.Trim(), out int appId) && appId > 0)
+            {
+                if (string.IsNullOrWhiteSpace(EditorGameTitleTextBox.Text))
+                {
+                    var match = _allGames.FirstOrDefault(g => g.AppId == appId);
+                    if (match != null && !string.IsNullOrWhiteSpace(match.Name))
+                    {
+                        EditorGameTitleTextBox.Text = match.Name;
+                    }
+                }
+            }
+        }
+
+        private void LookupCatalogGame_Click(object sender, RoutedEventArgs e)
+        {
+            if (int.TryParse(EditorAppIdTextBox.Text.Trim(), out int appId) && appId > 0)
+            {
+                var match = _allGames.FirstOrDefault(g => g.AppId == appId);
+                if (match != null && !string.IsNullOrWhiteSpace(match.Name))
+                {
+                    EditorGameTitleTextBox.Text = match.Name;
+                    ModernMessageBox.Show($"Game found in catalog: {match.Name}", "Game Found", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+                ModernMessageBox.Show($"Game with AppID {appId} was not found in the local catalog.", "Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            else
+            {
+                ModernMessageBox.Show("Please enter a valid numeric Steam AppID.", "Invalid AppID", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void AddStepButton_Click(object sender, RoutedEventArgs e)
+        {
+            int nextNumber = _editingSteps.Count + 1;
+            _editingSteps.Add(new TutorialStep
+            {
+                StepNumber = nextNumber,
+                Title = $"Step {nextNumber}",
+                Description = ""
+            });
+        }
+
+        private void RemoveStepButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is TutorialStep step)
+            {
+                _editingSteps.Remove(step);
+                // Renumber steps
+                for (int i = 0; i < _editingSteps.Count; i++)
+                {
+                    _editingSteps[i].StepNumber = i + 1;
+                }
+            }
+        }
+
+        private async void PublishTutorial_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (!int.TryParse(EditorAppIdTextBox.Text.Trim(), out int appId) || appId <= 0)
+                {
+                    ModernMessageBox.Show("Please enter a valid positive numeric Steam AppID.", "Validation Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                string title = EditorGameTitleTextBox.Text.Trim();
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    ModernMessageBox.Show("Game title cannot be empty.", "Validation Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                string platform = (EditorPlatformComboBox?.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "ALL";
+
+                PublishTutorialButton.IsEnabled = false;
+                PublishTutorialButton.Content = "Publishing to R2...";
+
+                var tutorial = new CustomLaunchTutorial
+                {
+                    AppId = appId,
+                    GameTitle = title,
+                    ApplicableTo = platform,
+                    Summary = EditorSummaryTextBox.Text.Trim(),
+                    RecommendedExecutable = EditorExeTextBox.Text.Trim(),
+                    RecommendedArguments = EditorArgsTextBox.Text.Trim(),
+                    Notes = EditorNotesTextBox.Text.Trim(),
+                    Steps = _editingSteps.ToList()
+                };
+
+                bool success = await CustomLaunchTutorialService.SaveTutorialAsync(tutorial);
+                if (success)
+                {
+                    LogConsole($"[CustomLaunch] Tutorial for '{title}' (AppID: {appId}, Platform: {platform}) published successfully to R2.");
+                    ModernMessageBox.Show(
+                        $"Custom Launch tutorial for '{title}' successfully published to Cloudflare R2!\n\nTarget Platform: {platform}\nThe tutorial is now live and will appear in details view for compatible games.",
+                        "Published Successfully",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information
+                    );
+                    await LoadTutorialsAsync(forceRefresh: true);
+                }
+                else
+                {
+                    ModernMessageBox.Show("Failed to publish tutorial to Cloudflare R2. Check network connection or dev logs.", "Publish Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogConsole($"[CustomLaunch] Publish error: {ex.Message}");
+                ModernMessageBox.Show($"Error while publishing: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                PublishTutorialButton.IsEnabled = true;
+                PublishTutorialButton.Content = "🚀 Publish to Cloud (R2)";
+            }
+        }
+
+        private async void DeleteTutorial_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (!int.TryParse(EditorAppIdTextBox.Text.Trim(), out int appId) || appId <= 0)
+                {
+                    ModernMessageBox.Show("Please select a tutorial to delete first.", "No Selection", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                var confirm = ModernMessageBox.Show(
+                    $"Are you sure you want to permanently delete the custom launch tutorial for AppID {appId} ({EditorGameTitleTextBox.Text}) from Cloudflare R2?",
+                    "Confirm Tutorial Deletion",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question
+                );
+
+                if (confirm != MessageBoxResult.Yes) return;
+
+                DeleteTutorialButton.IsEnabled = false;
+                bool success = await CustomLaunchTutorialService.DeleteTutorialAsync(appId);
+                if (success)
+                {
+                    LogConsole($"[CustomLaunch] Tutorial for AppID {appId} deleted from R2.");
+                    ModernMessageBox.Show("Tutorial successfully deleted from Cloudflare R2.", "Deleted Successfully", MessageBoxButton.OK, MessageBoxImage.Information);
+                    NewTutorialButton_Click(this, new RoutedEventArgs());
+                    await LoadTutorialsAsync(forceRefresh: true);
+                }
+                else
+                {
+                    ModernMessageBox.Show("Failed to delete tutorial from Cloudflare R2.", "Delete Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogConsole($"[CustomLaunch] Delete error: {ex.Message}");
+                ModernMessageBox.Show($"Error while deleting: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                DeleteTutorialButton.IsEnabled = true;
+            }
+        }
+
+        #endregion
     }
 
     #region View Models for DevView
@@ -1527,6 +2343,76 @@ namespace SteamPluginManager.Views
             2 => 3, // Member
             _ => 4
         };
+    }
+
+    public class DevStorageFileItem : INotifyPropertyChanged
+    {
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        public string Key { get; set; } = string.Empty;
+        public string FileName { get; set; } = string.Empty;
+        public string StorageProvider { get; set; } = "gamebypass"; // "gamebypass" or "onlinefix"
+        public string Category { get; set; } = "—";
+        public string Url { get; set; } = string.Empty;
+        public long SizeBytes { get; set; }
+        public string FormattedSize => DevView.FormatStorageBytes(SizeBytes);
+        public DateTime? LastModified { get; set; }
+        public string FormattedDate => LastModified.HasValue ? LastModified.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm") : "—";
+
+        public int? AppId { get; set; }
+        public string AppIdText => AppId.HasValue ? AppId.Value.ToString() : "—";
+        public string MatchedGameTitle { get; set; } = "—";
+
+        public Brush MatchedTitleForeground => MatchedGameTitle != "—"
+            ? (Brush)new BrushConverter().ConvertFromString("#F1F5F9")!
+            : (Brush)new BrushConverter().ConvertFromString("#64748B")!;
+
+        public string KeyIcon => StorageProvider == "gamebypass" ? "🚀" : "📦";
+
+        public Visibility CategoryBadgeVisibility => (StorageProvider == "gamebypass" && !string.IsNullOrWhiteSpace(Category) && Category != "—")
+            ? Visibility.Visible : Visibility.Collapsed;
+
+        public Visibility NoCategoryVisibility => CategoryBadgeVisibility == Visibility.Visible
+            ? Visibility.Collapsed : Visibility.Visible;
+
+        public Brush CategoryBadgeBackground => Category.ToUpperInvariant() switch
+        {
+            "DENUVO" => (Brush)new BrushConverter().ConvertFromString("#2A194C")!,
+            "UBISOFT" => (Brush)new BrushConverter().ConvertFromString("#0D2A3A")!,
+            "EA" => (Brush)new BrushConverter().ConvertFromString("#33180D")!,
+            "ROCKSTAR" => (Brush)new BrushConverter().ConvertFromString("#33220A")!,
+            _ => (Brush)new BrushConverter().ConvertFromString("#1E293B")!
+        };
+
+        public Brush CategoryBadgeBorder => Category.ToUpperInvariant() switch
+        {
+            "DENUVO" => (Brush)new BrushConverter().ConvertFromString("#8B5CF6")!,
+            "UBISOFT" => (Brush)new BrushConverter().ConvertFromString("#06B6D4")!,
+            "EA" => (Brush)new BrushConverter().ConvertFromString("#F97316")!,
+            "ROCKSTAR" => (Brush)new BrushConverter().ConvertFromString("#F59E0B")!,
+            _ => (Brush)new BrushConverter().ConvertFromString("#475569")!
+        };
+
+        public Brush CategoryBadgeForeground => Category.ToUpperInvariant() switch
+        {
+            "DENUVO" => (Brush)new BrushConverter().ConvertFromString("#C084FC")!,
+            "UBISOFT" => (Brush)new BrushConverter().ConvertFromString("#38BDF8")!,
+            "EA" => (Brush)new BrushConverter().ConvertFromString("#FB923C")!,
+            "ROCKSTAR" => (Brush)new BrushConverter().ConvertFromString("#FBBF24")!,
+            _ => (Brush)new BrushConverter().ConvertFromString("#94A3B8")!
+        };
+
+        public Brush SizeBadgeBackground => SizeBytes > 1024L * 1024 * 1024
+            ? (Brush)new BrushConverter().ConvertFromString("#33EC4899")!
+            : (Brush)new BrushConverter().ConvertFromString("#2010B981")!;
+
+        public Brush SizeBadgeBorder => SizeBytes > 1024L * 1024 * 1024
+            ? (Brush)new BrushConverter().ConvertFromString("#EC4899")!
+            : (Brush)new BrushConverter().ConvertFromString("#10B981")!;
+
+        public Brush SizeBadgeForeground => SizeBytes > 1024L * 1024 * 1024
+            ? (Brush)new BrushConverter().ConvertFromString("#F472B6")!
+            : (Brush)new BrushConverter().ConvertFromString("#34D399")!;
     }
 
     #endregion

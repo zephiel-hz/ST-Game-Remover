@@ -266,6 +266,16 @@ namespace SteamPluginManager.Views
             try { GlobalSidebar?.SetActiveMenu("Library"); } catch { }
         }
 
+        public void NavigateToGameLibraryDetail(GameEntry game)
+        {
+            if (game == null) return;
+            CloseInspector();
+            TitleText.Text = game.Name;
+            var detailView = new GameLibraryDetailView(game);
+            TransitionToView(detailView);
+            try { GlobalSidebar?.SetActiveMenu("Library"); } catch { }
+        }
+
         public void NavigateToSettings()
         {
             TitleText.Text = "Settings";

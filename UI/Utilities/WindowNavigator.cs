@@ -79,6 +79,11 @@ namespace SteamPluginManager
             }
         }
 
+        public static void NavigateToGameLibraryDetail(GameEntry game)
+        {
+            _mainShellInstance?.NavigateToGameLibraryDetail(game);
+        }
+
         public static void NavigateToSettings()
         {
             _mainShellInstance?.NavigateToSettings();
@@ -310,6 +315,13 @@ namespace SteamPluginManager
         public static void RegisterMainWindow(MainWindow window)
         {
             _mainWindowInstance = window;
+        }
+
+        public static MainWindow? GetMainWindow()
+        {
+            return _mainWindowInstance 
+                ?? (_mainShellInstance?.DataContext as MainWindow)
+                ?? Application.Current?.Windows.OfType<MainWindow>().FirstOrDefault();
         }
 
         public static void RefreshGameList()

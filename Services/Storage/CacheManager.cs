@@ -5,6 +5,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using SteamPluginManager.Models;
 
 namespace SteamPluginManager
 {
@@ -19,6 +20,7 @@ namespace SteamPluginManager
         private static readonly string HzmCacheFile = Path.Combine(CacheDirectory, "hzmCache.json");
         private static readonly string ManifestStateFile = Path.Combine(CacheDirectory, "manifest_state.json");
         private static readonly string PendingRequestsFile = Path.Combine(CacheDirectory, "pending_requests.json");
+        private static readonly string DlcCacheFile = Path.Combine(CacheDirectory, "dlcCache.json");
 
         // Cache expiration settings (in hours)
         private const int DefaultHzmCacheExpirationsHours = 24; // 24 hours default cache duration
@@ -26,6 +28,7 @@ namespace SteamPluginManager
         private static ConcurrentDictionary<int, CacheItem>? _cache;
         private static ConcurrentDictionary<string, HzmCacheItem>? _hzmCache;
         private static ConcurrentDictionary<int, WebhookRequestData>? _pendingRequests;
+        private static ConcurrentDictionary<int, List<DLCItem>>? _dlcCache;
 
         private static bool _initialized = false;
         private static readonly object _lockObj = new object();
@@ -138,6 +141,34 @@ namespace SteamPluginManager
                     else
                     {
                         _pendingRequests = new ConcurrentDictionary<int, WebhookRequestData>();
+                    }
+
+                    // Load DLC cache from file if it exists
+                    if (File.Exists(DlcCacheFile))
+                    {
+                        try
+                        {
+                            string json = File.ReadAllText(DlcCacheFile, Encoding.UTF8);
+                            var loadedDlc = JsonSerializer.Deserialize<Dictionary<int, List<DLCItem>>>(json);
+                            if (loadedDlc != null)
+                            {
+                                _dlcCache = new ConcurrentDictionary<int, List<DLCItem>>(loadedDlc);
+                                Logger.Log($"DLC cache loaded with {_dlcCache.Count} games");
+                            }
+                            else
+                            {
+                                _dlcCache = new ConcurrentDictionary<int, List<DLCItem>>();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Log($"Failed to load DLC cache: {ex.Message}");
+                            _dlcCache = new ConcurrentDictionary<int, List<DLCItem>>();
+                        }
+                    }
+                    else
+                    {
+                        _dlcCache = new ConcurrentDictionary<int, List<DLCItem>>();
                     }
 
                     _initialized = true;
@@ -504,21 +535,29 @@ namespace SteamPluginManager
                     _cache.AddOrUpdate(appId, item, (k, v) => item);
                 }
 
-                if (language == "zh")
+                if (!string.IsNullOrWhiteSpace(description))
                 {
-                    item.DescriptionZh = description;
-                }
-                else
-                {
-                    item.DescriptionEn = description;
+                    if (language == "zh")
+                    {
+                        item.DescriptionZh = description;
+                    }
+                    else
+                    {
+                        item.DescriptionEn = description;
+                    }
                 }
                 
-                // These are language-agnostic, so we can just update them
-                item.ScreenshotUrl = screenshotUrl;
-                item.ReleaseDate = releaseDate;
-                item.Publisher = publisher;
-                item.DRM = drm;
-                item.AntiCheat = antiCheat;
+                // These are language-agnostic; only update if non-empty to prevent wiping out existing data
+                if (!string.IsNullOrWhiteSpace(screenshotUrl))
+                    item.ScreenshotUrl = screenshotUrl;
+                if (!string.IsNullOrWhiteSpace(releaseDate))
+                    item.ReleaseDate = releaseDate;
+                if (!string.IsNullOrWhiteSpace(publisher))
+                    item.Publisher = publisher;
+                if (!string.IsNullOrWhiteSpace(drm))
+                    item.DRM = drm;
+                if (!string.IsNullOrWhiteSpace(antiCheat))
+                    item.AntiCheat = antiCheat;
                 
                 item.LastUpdated = DateTime.Now;
             }
@@ -628,6 +667,43 @@ namespace SteamPluginManager
                 }
             }
             return null;
+        }
+
+        public static List<DLCItem>? GetCachedDlcItems(int appId)
+        {
+            if (!_initialized) Initialize();
+            if (_dlcCache != null && _dlcCache.TryGetValue(appId, out var items) && items != null)
+            {
+                return new List<DLCItem>(items);
+            }
+            return null;
+        }
+
+        public static void SaveCachedDlcItems(int appId, List<DLCItem> items)
+        {
+            if (!_initialized) Initialize();
+            if (_dlcCache == null) _dlcCache = new ConcurrentDictionary<int, List<DLCItem>>();
+
+            _dlcCache[appId] = items ?? new List<DLCItem>();
+            SaveDlcCacheToFile();
+        }
+
+        private static void SaveDlcCacheToFile()
+        {
+            try
+            {
+                lock (_lockObj)
+                {
+                    if (_dlcCache == null) return;
+                    var copy = new Dictionary<int, List<DLCItem>>(_dlcCache);
+                    string json = JsonSerializer.Serialize(copy, new JsonSerializerOptions { WriteIndented = true });
+                    File.WriteAllText(DlcCacheFile, json, Encoding.UTF8);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Failed to save DLC cache: {ex.Message}");
+            }
         }
 
         private static void SaveCacheToFile()

@@ -26,6 +26,14 @@ namespace SteamPluginManager.Views
         private ICollectionView? _collectionView; // For sorted view
         private const int SaltSize = 16;
 
+        // Long-press / Hold gesture for selection mode
+        private readonly System.Windows.Threading.DispatcherTimer _holdTimer = new System.Windows.Threading.DispatcherTimer();
+        private System.Windows.Threading.DispatcherTimer? _collectionChangedDebounceTimer;
+        private GameEntry? _holdTargetGame;
+        private Border? _holdTargetBorder;
+        private Point _holdStartPoint;
+        private bool _isHoldTriggered;
+
         private static string GetBackupPassword()
         {
             var password = Environment.GetEnvironmentVariable("SPM_BACKUP_PASSWORD");
@@ -37,9 +45,32 @@ namespace SteamPluginManager.Views
             return password;
         }
 
+        public static readonly DependencyProperty IsSelectionModeProperty =
+            DependencyProperty.Register(
+                nameof(IsSelectionMode),
+                typeof(bool),
+                typeof(GameLibraryView),
+                new PropertyMetadata(false, OnIsSelectionModeChanged));
+
+        public bool IsSelectionMode
+        {
+            get => (bool)GetValue(IsSelectionModeProperty);
+            set => SetValue(IsSelectionModeProperty, value);
+        }
+
+        private static void OnIsSelectionModeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is GameLibraryView view)
+            {
+                view.UpdateInfoPanel(autoExitIfEmpty: false);
+            }
+        }
+
         public GameLibraryView()
         {
             InitializeComponent();
+            _holdTimer.Interval = TimeSpan.FromMilliseconds(450);
+            _holdTimer.Tick += HoldTimer_Tick;
             Loaded += GameLibraryView_Loaded;
             Unloaded += GameLibraryView_Unloaded;
             SizeChanged += (s, e) => UpdateGridColumns();
@@ -54,6 +85,8 @@ namespace SteamPluginManager.Views
 
         private void GameLibraryView_Unloaded(object sender, RoutedEventArgs e)
         {
+            _holdTimer.Stop();
+            _collectionChangedDebounceTimer?.Stop();
             // Unsubscribe from language change event to prevent memory leak
             App.LanguageChanged -= LanguageChanged_Handler;
             
@@ -69,15 +102,15 @@ namespace SteamPluginManager.Views
             RefreshLanguageUI();
         }
 
-        public void Refresh()
+        public async Task RefreshAsync()
         {
-            // First, refresh the game list from disk (checks installation status)
+            // First, refresh the game list from disk asynchronously
             if (_mainWindow != null)
             {
-                _mainWindow.RefreshGameList();
+                await _mainWindow.RefreshGameListAsync();
             }
             
-            // Re-check installation status
+            // Re-check installation status using instant RAM map
             RefreshInstallationStatus();
 
             // Then refresh view and respect current filter (All / Installed / NotInstalled)
@@ -93,19 +126,31 @@ namespace SteamPluginManager.Views
             }
         }
 
+        public void Refresh()
+        {
+            _ = RefreshAsync();
+        }
+
         private void RefreshInstallationStatus()
         {
             try
             {
                 if (_mainWindow?.Games == null) return;
 
+                var installedMap = SteamHelper.GetInstalledGamesMap();
+
                 foreach (var game in _mainWindow.Games)
                 {
-                    // Re-check if game is installed
-                    string? installPath = _mainWindow.GetGameInstallationPath(game.AppId);
-                    if (game.IsInstalled != (installPath != null))
+                    bool isInstalled = installedMap.TryGetValue(game.AppId, out string? installPath);
+                    if (!isInstalled && game.ParentAppId.HasValue && installedMap.TryGetValue(game.ParentAppId.Value, out var parentPath))
                     {
-                        game.IsInstalled = installPath != null;
+                        isInstalled = true;
+                        installPath = parentPath;
+                    }
+
+                    if (game.IsInstalled != isInstalled || game.InstallationPath != installPath)
+                    {
+                        game.IsInstalled = isInstalled;
                         game.InstallationPath = installPath;
                         Logger.Log($"[GameLibraryView] Updated IsInstalled status for {game.Name} (AppID: {game.AppId}): {game.IsInstalled}");
                     }
@@ -181,29 +226,28 @@ namespace SteamPluginManager.Views
         {
             try
             {
-                Logger.Log($"[GameLibraryView] Games collection changed: {e.Action} - Count: {_mainWindow?.Games.Count ?? 0}");
-                
-                // Ensure ItemsSource is properly set before refresh
+                // Ensure ItemsSource is properly set
                 EnsureItemsSourceIsSet();
                 
-                // Refresh collection view to reflect changes
-                if (_collectionView != null)
+                // Debounce UI info and column update to prevent repeated expensive operations during batch changes
+                if (_collectionChangedDebounceTimer == null)
                 {
-                    _collectionView.Refresh();
-                    Logger.Log($"[GameLibraryView] ✓ Collection view refreshed (real-time)");
-                    
-                    // Update UI info
-                    UpdateInfoPanel();
-                }
-                else
-                {
-                    Logger.Log("[GameLibraryView] WARNING: _collectionView is NULL during collection change - attempting to reset");
-                    if (_mainWindow != null)
+                    _collectionChangedDebounceTimer = new System.Windows.Threading.DispatcherTimer(
+                        System.Windows.Threading.DispatcherPriority.Normal,
+                        Dispatcher)
                     {
-                        SetupCollectionView();
+                        Interval = TimeSpan.FromMilliseconds(50)
+                    };
+                    _collectionChangedDebounceTimer.Tick += (s, args) =>
+                    {
+                        _collectionChangedDebounceTimer.Stop();
                         UpdateInfoPanel();
-                    }
+                        UpdateGridColumns();
+                    };
                 }
+
+                _collectionChangedDebounceTimer.Stop();
+                _collectionChangedDebounceTimer.Start();
             }
             catch (Exception ex)
             {
@@ -391,16 +435,30 @@ namespace SteamPluginManager.Views
                 {
                     game.IsSelected = true;
                 }
-                UpdateInfoPanel();
             }
+
+            if (!IsSelectionMode)
+            {
+                IsSelectionMode = true;
+            }
+
+            UpdateInfoPanel();
         }
 
-        private void Refresh_Click(object sender, RoutedEventArgs e)
+        private async void Refresh_Click(object sender, RoutedEventArgs e)
         {
             if (_mainWindow != null)
             {
-                Refresh();
-                UpdateActivityLog("Game list refreshed");
+                if (RefreshBtn != null) RefreshBtn.IsEnabled = false;
+                try
+                {
+                    await RefreshAsync();
+                    UpdateActivityLog("Game list refreshed");
+                }
+                finally
+                {
+                    if (RefreshBtn != null) RefreshBtn.IsEnabled = true;
+                }
             }
         }
 
@@ -448,6 +506,7 @@ namespace SteamPluginManager.Views
                 {
                     game.IsSelected = false;
                 }
+                IsSelectionMode = false;
                 UpdateInfoPanel();
                 UpdateActivityLog("Cleared all selections");
             }
@@ -887,13 +946,88 @@ namespace SteamPluginManager.Views
             WindowNavigator.NavigateToDashboard();
         }
 
-        private void GameCard_MouseLeftButtonUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        private void HoldTimer_Tick(object? sender, EventArgs e)
         {
-            // Allow clicking on card to select/deselect
+            _holdTimer.Stop();
+            _isHoldTriggered = true;
+
+            if (_holdTargetGame != null)
+            {
+                _holdTargetGame.IsSelected = true;
+                if (!IsSelectionMode)
+                {
+                    IsSelectionMode = true;
+                }
+                UpdateInfoPanel();
+            }
+        }
+
+        private void GameCard_PreviewMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            _isHoldTriggered = false;
+
             if (sender is Border border && border.DataContext is GameEntry game)
             {
-                game.IsSelected = !game.IsSelected;
-                UpdateInfoPanel();
+                // Only start hold timer if not already in selection mode
+                if (!IsSelectionMode)
+                {
+                    _holdTargetBorder = border;
+                    _holdTargetGame = game;
+                    _holdStartPoint = e.GetPosition(border);
+                    _holdTimer.Stop();
+                    _holdTimer.Start();
+                }
+            }
+        }
+
+        private void GameCard_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            if (_holdTimer.IsEnabled && _holdTargetBorder != null)
+            {
+                var currentPoint = e.GetPosition(_holdTargetBorder);
+                var diff = currentPoint - _holdStartPoint;
+                if (Math.Abs(diff.X) > 8 || Math.Abs(diff.Y) > 8)
+                {
+                    // User moved/dragged mouse away, cancel hold
+                    _holdTimer.Stop();
+                }
+            }
+        }
+
+        private void GameCard_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            if (_holdTimer.IsEnabled)
+            {
+                _holdTimer.Stop();
+            }
+        }
+
+        private void GameCard_MouseLeftButtonUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (_holdTimer.IsEnabled)
+            {
+                _holdTimer.Stop();
+            }
+
+            if (_isHoldTriggered)
+            {
+                // Hold gesture completed and activated selection mode, suppress regular click
+                _isHoldTriggered = false;
+                e.Handled = true;
+                return;
+            }
+
+            if (sender is Border border && border.DataContext is GameEntry game)
+            {
+                if (IsSelectionMode)
+                {
+                    game.IsSelected = !game.IsSelected;
+                    UpdateInfoPanel();
+                }
+                else
+                {
+                    WindowNavigator.NavigateToGameLibraryDetail(game);
+                }
             }
         }
 
@@ -929,19 +1063,28 @@ namespace SteamPluginManager.Views
             if (DeleteBtn != null) DeleteBtn.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
             if (ClearAllBtn != null) ClearAllBtn.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
 
+            // Show Select All only if in selection mode
+            if (SelectAllBtn != null) SelectAllBtn.Visibility = IsSelectionMode ? Visibility.Visible : Visibility.Collapsed;
+
             // Temporarily hide global action buttons when selection is active to keep the toolbar clean
-            var defaultActionsVisibility = hasSelection ? Visibility.Collapsed : Visibility.Visible;
-            if (SelectAllBtn != null) SelectAllBtn.Visibility = defaultActionsVisibility;
+            var defaultActionsVisibility = IsSelectionMode ? Visibility.Collapsed : Visibility.Visible;
             if (RefreshBtn != null) RefreshBtn.Visibility = defaultActionsVisibility;
             if (ImportBtn != null) ImportBtn.Visibility = defaultActionsVisibility;
         }
 
-        private void UpdateInfoPanel()
+        private void UpdateInfoPanel(bool autoExitIfEmpty = true)
         {
             if (_mainWindow == null) return;
 
             var selectedCount = _mainWindow.Games.Count(g => g.IsSelected);
             var totalCount = _mainWindow.Games.Count;
+
+            // When all selections are cleared, exit selection mode automatically
+            if (autoExitIfEmpty && IsSelectionMode && selectedCount == 0)
+            {
+                IsSelectionMode = false;
+                return;
+            }
             
             // Update selection counter texts with current language
             UpdateSelectionCounterText(selectedCount, totalCount);
@@ -1259,81 +1402,84 @@ namespace SteamPluginManager.Views
                 Directory.CreateDirectory(depotCachePath);
                 Directory.CreateDirectory(depotCachePathOld);
 
-                int successCount = 0;
-                int failureCount = 0;
-                var processedFiles = new List<string>();
-
-                foreach (string file in files)
+                var (successCount, failureCount, processedFiles) = await Task.Run(() =>
                 {
-                    try
+                    int sCount = 0;
+                    int fCount = 0;
+                    var pFiles = new List<string>();
+
+                    foreach (string file in files)
                     {
-                        if (file.EndsWith(".hzbak", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".spmb", StringComparison.OrdinalIgnoreCase))
+                        try
                         {
-                            UpdateImportProgressStatus($"Restoring backup: {Path.GetFileName(file)}...", 2);
-                            if (ProcessBackupFile(file, pluginPath, luaPath, depotCachePath, depotCachePathOld))
+                            if (file.EndsWith(".hzbak", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".spmb", StringComparison.OrdinalIgnoreCase))
                             {
-                                processedFiles.Add(Path.GetFileName(file));
-                                successCount++;
+                                Dispatcher.Invoke(() => UpdateImportProgressStatus($"Restoring backup: {Path.GetFileName(file)}...", 2));
+                                if (ProcessBackupFile(file, pluginPath, luaPath, depotCachePath, depotCachePathOld))
+                                {
+                                    pFiles.Add(Path.GetFileName(file));
+                                    sCount++;
+                                }
+                                else
+                                {
+                                    fCount++;
+                                }
                             }
-                            else
+                            else if (file.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
                             {
-                                failureCount++;
+                                Dispatcher.Invoke(() => UpdateImportProgressStatus($"Extracting archive: {Path.GetFileName(file)}...", 2));
+                                // Extract zip and process contents
+                                if (ProcessZipFile(file, pluginPath, luaPath, depotCachePath, depotCachePathOld))
+                                {
+                                    pFiles.Add(Path.GetFileName(file));
+                                    sCount++;
+                                }
+                                else
+                                {
+                                    fCount++;
+                                }
+                            }
+                            else if (file.EndsWith(".lua", StringComparison.OrdinalIgnoreCase))
+                            {
+                                Dispatcher.Invoke(() => UpdateImportProgressStatus($"Deploying: {Path.GetFileName(file)}...", 3));
+                                // Copy .lua file to both stplug-in and lua folders
+                                string destPath = Path.Combine(pluginPath, Path.GetFileName(file));
+                                string destLuaPath = Path.Combine(luaPath, Path.GetFileName(file));
+                                File.Copy(file, destPath, true);
+                                File.Copy(file, destLuaPath, true);
+                                pFiles.Add(Path.GetFileName(file));
+                                sCount++;
+                                Logger.Log($"[GameLibraryView] Copied .lua file: {Path.GetFileName(file)} → {pluginPath} and {luaPath}");
+                            }
+                            else if (file.EndsWith(".manifest", StringComparison.OrdinalIgnoreCase))
+                            {
+                                Dispatcher.Invoke(() => UpdateImportProgressStatus($"Deploying: {Path.GetFileName(file)}...", 3));
+                                // Copy .manifest file to both depotcache paths
+                                string destPath = Path.Combine(depotCachePath, Path.GetFileName(file));
+                                string destPathOld = Path.Combine(depotCachePathOld, Path.GetFileName(file));
+                                File.Copy(file, destPath, true);
+                                File.Copy(file, destPathOld, true);
+                                pFiles.Add(Path.GetFileName(file));
+                                sCount++;
+                                Logger.Log($"[GameLibraryView] Copied .manifest file: {Path.GetFileName(file)} → {destPath} and {destPathOld}");
                             }
                         }
-                        else if (file.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                        catch (Exception ex)
                         {
-                            UpdateImportProgressStatus($"Extracting archive: {Path.GetFileName(file)}...", 2);
-                            // Extract zip and process contents
-                            if (ProcessZipFile(file, pluginPath, luaPath, depotCachePath, depotCachePathOld))
-                            {
-                                processedFiles.Add(Path.GetFileName(file));
-                                successCount++;
-                            }
-                            else
-                            {
-                                failureCount++;
-                            }
-                        }
-                        else if (file.EndsWith(".lua", StringComparison.OrdinalIgnoreCase))
-                        {
-                            UpdateImportProgressStatus($"Deploying: {Path.GetFileName(file)}...", 3);
-                            // Copy .lua file to both stplug-in and lua folders
-                            string destPath = Path.Combine(pluginPath, Path.GetFileName(file));
-                            string destLuaPath = Path.Combine(luaPath, Path.GetFileName(file));
-                            File.Copy(file, destPath, true);
-                            File.Copy(file, destLuaPath, true);
-                            processedFiles.Add(Path.GetFileName(file));
-                            successCount++;
-                            Logger.Log($"[GameLibraryView] Copied .lua file: {Path.GetFileName(file)} → {pluginPath} and {luaPath}");
-                        }
-                        else if (file.EndsWith(".manifest", StringComparison.OrdinalIgnoreCase))
-                        {
-                            UpdateImportProgressStatus($"Deploying: {Path.GetFileName(file)}...", 3);
-                            // Copy .manifest file to both depotcache paths
-                            string destPath = Path.Combine(depotCachePath, Path.GetFileName(file));
-                            string destPathOld = Path.Combine(depotCachePathOld, Path.GetFileName(file));
-                            File.Copy(file, destPath, true);
-                            File.Copy(file, destPathOld, true);
-                            processedFiles.Add(Path.GetFileName(file));
-                            successCount++;
-                            Logger.Log($"[GameLibraryView] Copied .manifest file: {Path.GetFileName(file)} → {destPath} and {destPathOld}");
+                            Logger.Log($"[GameLibraryView] Error processing file {file}: {ex.Message}");
+                            fCount++;
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        Logger.Log($"[GameLibraryView] Error processing file {file}: {ex.Message}");
-                        failureCount++;
-                    }
-                }
+
+                    return (sCount, fCount, pFiles);
+                });
 
                 // Refresh the game library
                 UpdateImportProgressStatus("Refreshing library...", 4);
-                await Task.Delay(500);
                 
                 // Reload games from file system and refresh view respecting filters
                 Logger.Log("[GameLibraryView] Triggering UI refresh after file drop import");
-                Refresh();
-                await Task.Delay(200);
+                await RefreshAsync();
 
                 // Show results
                 ShowImportProgressOverlay(false);

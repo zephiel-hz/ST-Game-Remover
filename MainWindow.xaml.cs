@@ -21,6 +21,7 @@ using System.IO.Compression;
 using System.Threading;
 using Microsoft.Win32;
 using System.Windows.Media.Effects;
+using SteamPluginManager.Services.Steam;
 
 namespace SteamPluginManager
 {
@@ -1077,7 +1078,13 @@ namespace SteamPluginManager
         }
 
         // ================= Game Loading =================
+        // ================= Game Loading =================
         public void RefreshGameList()
+        {
+            _ = RefreshGameListAsync();
+        }
+
+        public async Task RefreshGameListAsync()
         {
             Log($"[RefreshGameList] START - Current Games collection: {Games?.Count ?? 0} items");
             
@@ -1087,51 +1094,26 @@ namespace SteamPluginManager
                 return;
             }
             
-            Games.Clear();
             IsBusy = true;
 
-            string pluginPath = System.IO.Path.Combine(steamPath, "config", "stplug-in");
-            string luaPath = System.IO.Path.Combine(steamPath, "config", "lua");
-            if (!Directory.Exists(pluginPath) && !Directory.Exists(luaPath))
+            try
             {
-                Log("Plugin folder and lua folder not found.");
-                IsBusy = false;
-                UpdateStatus();
-                return;
-            }
+                string currentSteamPath = steamPath;
+                string currentLang = _currentLanguage;
 
-            Log("Refreshing game list..");
-            
-            // Get lua files from both plugin and lua folders with retry mechanism to ensure file system cache is updated
-            var luaFilesDictionary = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            if (Directory.Exists(pluginPath))
-            {
-                foreach (var file in Directory.GetFiles(pluginPath, "*.lua"))
+                // Offload all heavy directory scanning & batch manifest reading to background thread
+                var loadedEntries = await Task.Run(() =>
                 {
-                    string fileName = Path.GetFileName(file);
-                    luaFilesDictionary[fileName] = file; // prefer stplug-in path if duplicate exists later
-                }
-            }
-            if (Directory.Exists(luaPath))
-            {
-                foreach (var file in Directory.GetFiles(luaPath, "*.lua"))
-                {
-                    string fileName = Path.GetFileName(file);
-                    if (!luaFilesDictionary.ContainsKey(fileName))
-                        luaFilesDictionary[fileName] = file;
-                }
-            }
-            var luaFiles = luaFilesDictionary.Values.ToArray();
-            Log($"[RefreshGameList] Found {luaFiles.Length} unique lua files in {pluginPath} and {luaPath}");
-            
-            // If we just added files, do retries to ensure file system has caught up
-            if (luaFiles.Length == 0)
-            {
-                Log("[RefreshGameList] No files found on first scan, retrying with delays...");
-                for (int attempt = 0; attempt < 5; attempt++)
-                {
-                    System.Threading.Thread.Sleep(300); // Wait 300ms between retries
-                    luaFilesDictionary.Clear();
+                    var entries = new List<GameEntry>();
+                    string pluginPath = System.IO.Path.Combine(currentSteamPath, "config", "stplug-in");
+                    string luaPath = System.IO.Path.Combine(currentSteamPath, "config", "lua");
+
+                    if (!Directory.Exists(pluginPath) && !Directory.Exists(luaPath))
+                    {
+                        return entries;
+                    }
+
+                    var luaFilesDictionary = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                     if (Directory.Exists(pluginPath))
                     {
                         foreach (var file in Directory.GetFiles(pluginPath, "*.lua"))
@@ -1149,67 +1131,113 @@ namespace SteamPluginManager
                                 luaFilesDictionary[fileName] = file;
                         }
                     }
-                    luaFiles = luaFilesDictionary.Values.ToArray();
-                    Log($"[RefreshGameList] Retry {attempt + 1}: Found {luaFiles.Length} unique lua files");
-                    if (luaFiles.Length > 0)
+
+                    // Fast batch scan of installed Steam games across all libraries in one pass
+                    var installedMap = SteamHelper.GetInstalledGamesMap();
+
+                    foreach (var kvp in luaFilesDictionary)
                     {
-                        break;
-                    }
-                }
-            }
-            
-            Log($"Found {luaFiles.Length} lua file(s) in {pluginPath}");
-            
-            int addedCount = 0;
-            foreach (var file in luaFiles)
-            {
-                try
-                {
-                    // Extra verification - check file actually exists before processing
-                    if (!File.Exists(file))
-                    {
-                        Log($"  ⚠ File disappeared during scan (file system race condition): {file}");
-                        continue;
-                    }
-                    
-                    string fileName = System.IO.Path.GetFileNameWithoutExtension(file);
-                    if (int.TryParse(fileName, out int appId))
-                    {
-                        // Coba dapatkan nama dari cache dulu dengan current language
-                        string? cachedName = CacheManager.GetGameName(appId, _currentLanguage);
-                        string initialName = cachedName ?? $"Game {appId}";
-                        
-                        string? installPath = GetGameInstallationPath(appId);
-                        var gameEntry = new GameEntry
+                        string file = kvp.Value;
+                        if (!File.Exists(file)) continue;
+
+                        string fileName = System.IO.Path.GetFileNameWithoutExtension(file);
+                        if (int.TryParse(fileName, out int appId))
                         {
-                            AppId = appId,
-                            Name = initialName,
-                            FilePath = file,
-                            Genre = "Loading...",
-                            IsSelected = false,
-                            IsInstalled = installPath != null,
-                            InstallationPath = installPath,
-                            ScreenshotUrl = CacheManager.GetGameScreenshotUrl(appId)
-                        };
-                        
-                        Games.Add(gameEntry);
-                        addedCount++;
-                        Log($"  ✓ Loaded game: {initialName} (AppID: {appId})");
+                            string? cachedName = CacheManager.GetGameName(appId, currentLang);
+                            string initialName = cachedName ?? $"Game {appId}";
+                            string? installPath = installedMap.TryGetValue(appId, out var path) ? path : null;
+                            int? parentAppId = SteamHelper.GetParentAppIdFromLuaFile(file);
+
+                            // Fallback: if not mapped directly, check if the parent application is installed
+                            if (installPath == null && parentAppId.HasValue && installedMap.TryGetValue(parentAppId.Value, out var parentPath))
+                            {
+                                installPath = parentPath;
+                                installedMap[appId] = parentPath;
+                            }
+
+                            var gameEntry = new GameEntry
+                            {
+                                AppId = appId,
+                                ParentAppId = parentAppId,
+                                Name = initialName,
+                                FilePath = file,
+                                Genre = CacheManager.GetGameGenre(appId, currentLang) ?? "Loading...",
+                                IsSelected = false,
+                                IsInstalled = installPath != null,
+                                InstallationPath = installPath,
+                                ScreenshotUrl = CacheManager.GetGameScreenshotUrl(appId)
+                            };
+
+                            entries.Add(gameEntry);
+                        }
                     }
-                }
-                catch (Exception ex)
+
+                    return entries;
+                });
+
+                // Synchronize collection with zero UI flicker and no redundant item recreation
+                SyncGamesCollection(loadedEntries);
+
+                ApplyFilterAndSort();
+                Log($"[RefreshGameList] COMPLETE - Synced Total: {Games.Count} game(s). Cache: {CacheManager.GetCacheSize()} items");
+
+                _ = UpdateGameNamesAsync();
+                UpdateStatus();
+            }
+            catch (Exception ex)
+            {
+                Log($"[RefreshGameList] Error: {ex.Message}");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
+
+        private void SyncGamesCollection(List<GameEntry> freshEntries)
+        {
+            var freshDict = freshEntries.ToDictionary(e => e.AppId);
+
+            // 1. Remove deleted items
+            for (int i = Games.Count - 1; i >= 0; i--)
+            {
+                var existing = Games[i];
+                if (!freshDict.ContainsKey(existing.AppId))
                 {
-                    Log($"Error loading {file}: {ex.Message}");
+                    Games.RemoveAt(i);
                 }
             }
 
-            ApplyFilterAndSort();
-            Log($"[RefreshGameList] COMPLETE - Added {addedCount} new games, Total: {Games.Count} game(s). Cache: {CacheManager.GetCacheSize()} items");
-
-            // Update nama game secara asynchronous (dengan cache)
-            _ = UpdateGameNamesAsync();
-            UpdateStatus();
-            
+            // 2. Update existing in place or add new ones
+            var existingDict = Games.ToDictionary(e => e.AppId);
+            foreach (var fresh in freshEntries)
+            {
+                if (existingDict.TryGetValue(fresh.AppId, out var existing))
+                {
+                    existing.FilePath = fresh.FilePath;
+                    existing.ParentAppId = fresh.ParentAppId;
+                    if (existing.IsInstalled != fresh.IsInstalled)
+                    {
+                        existing.IsInstalled = fresh.IsInstalled;
+                    }
+                    if (existing.InstallationPath != fresh.InstallationPath)
+                    {
+                        existing.InstallationPath = fresh.InstallationPath;
+                    }
+                    if (existing.Name.StartsWith("Game ") && !fresh.Name.StartsWith("Game "))
+                    {
+                        existing.Name = fresh.Name;
+                    }
+                    if (string.IsNullOrEmpty(existing.ScreenshotUrl) && !string.IsNullOrEmpty(fresh.ScreenshotUrl))
+                    {
+                        existing.ScreenshotUrl = fresh.ScreenshotUrl;
+                    }
+                }
+                else
+                {
+                    Games.Add(fresh);
+                }
+            }
         }
 
         private async Task UpdateGameNamesAsync()
@@ -1840,7 +1868,7 @@ namespace SteamPluginManager
         }
 
         // ================= Buttons =================
-        private void Refresh_Click(object sender, RoutedEventArgs e) => RefreshGameList();
+        private async void Refresh_Click(object sender, RoutedEventArgs e) => await RefreshGameListAsync();
 
         private void SelectAll_Click(object sender, RoutedEventArgs e)
         {
@@ -1882,20 +1910,18 @@ namespace SteamPluginManager
                 int totalManifestsDeleted = 0;
                 int totalUninstallTriggered = 0;
                 int totalLuaDeleted = 0;
+                int totalFoldersDeleted = 0;
 
                 foreach (var game in selected)
                 {
                     try
                     {
-                        // If we will delete manifest & lua, read the LUA first (used by ProcessManifestFile)
-                        if (action == DeleteChoiceDialog.DeleteAction.ManifestAndLua || action == DeleteChoiceDialog.DeleteAction.Both)
-                        {
-                            _ = File.ReadAllText(game.FilePath);
-                        }
-
                         // Uninstall if requested
-                        if ((action == DeleteChoiceDialog.DeleteAction.Uninstall || action == DeleteChoiceDialog.DeleteAction.Both) && IsGameInstalled(game.AppId))
+                        if ((action == DeleteChoiceDialog.DeleteAction.Uninstall || action == DeleteChoiceDialog.DeleteAction.Both) && (IsGameInstalled(game.AppId) || SteamHelper.IsSteamAppInstalled(game.AppId)))
                         {
+                            // Get installation path before uninstall
+                            string? installationPath = SteamHelper.GetGameInstallationPath(game.AppId, game.Name) ?? GetGameInstallationPath(game.AppId);
+
                             if (TriggerSteamUninstall(game.AppId))
                             {
                                 totalUninstallTriggered++;
@@ -1907,6 +1933,26 @@ namespace SteamPluginManager
                                 if (uninstalled)
                                 {
                                     Log($"Uninstall completed for {game.AppId}.");
+
+                                    // Delete installation folder after uninstall completes
+                                    if (!string.IsNullOrEmpty(installationPath) && Directory.Exists(installationPath))
+                                    {
+                                        Log($"Deleting installation folder for {game.AppId}: {installationPath}");
+                                        bool folderDeleted = await Task.Run(() => DeleteGameFolder(installationPath));
+                                        if (folderDeleted)
+                                        {
+                                            totalFoldersDeleted++;
+                                            Log($"Successfully deleted installation folder for {game.AppId}.");
+                                        }
+                                        else
+                                        {
+                                            Log($"Failed to completely delete installation folder for {game.AppId}.");
+                                        }
+                                    }
+
+                                    // Clean tracking records and custom launch settings
+                                    OnlineFixTrackerService.DeleteInstallRecord(game.AppId);
+                                    CustomLaunchService.RemoveConfig(game.AppId);
                                 }
                                 else
                                 {
@@ -1922,14 +1968,20 @@ namespace SteamPluginManager
                         // Delete manifests & lua if requested
                         if (action == DeleteChoiceDialog.DeleteAction.ManifestAndLua || action == DeleteChoiceDialog.DeleteAction.Both)
                         {
-                            int manifestsDeleted = ProcessManifestFile(game.FilePath);
-                            totalManifestsDeleted += manifestsDeleted;
-
-                            if (File.Exists(game.FilePath))
+                            var (mCount, lCount) = await Task.Run(() =>
                             {
-                                File.Delete(game.FilePath);
-                                totalLuaDeleted++;
-                            }
+                                int m = ProcessManifestFile(game.FilePath);
+                                int l = 0;
+                                if (File.Exists(game.FilePath))
+                                {
+                                    File.Delete(game.FilePath);
+                                    l++;
+                                }
+                                return (m, l);
+                            });
+
+                            totalManifestsDeleted += mCount;
+                            totalLuaDeleted += lCount;
                         }
                     }
                     catch (Exception ex)
@@ -1938,7 +1990,7 @@ namespace SteamPluginManager
                     }
                 }
 
-                Log($"Total: Triggered uninstall for {totalUninstallTriggered} app(s), deleted {totalLuaDeleted} Lua file(s) and {totalManifestsDeleted} manifest file(s)");
+                Log($"Total: Triggered uninstall for {totalUninstallTriggered} app(s), deleted {totalLuaDeleted} Lua file(s), {totalManifestsDeleted} manifest file(s), and {totalFoldersDeleted} installation folder(s)");
             }
             finally
             {
@@ -1946,7 +1998,7 @@ namespace SteamPluginManager
                 button?.SetValue(System.Windows.Controls.Button.IsEnabledProperty, true);
                 if (!cancelled)
                 {
-                    RefreshGameList();
+                    await RefreshGameListAsync();
                     UpdateStatus();
                 }
             }
@@ -1971,21 +2023,17 @@ namespace SteamPluginManager
                 int totalLuaDeleted = 0;
                 int totalFoldersDeleted = 0;
 
+                string? steamPath = SteamHelper.GetSteamPath();
+
                 foreach (var game in selected)
                 {
                     try
                     {
-                        // If we will delete manifest & lua, read the LUA first (used by ProcessManifestFile)
-                        if (action == DeleteChoiceDialog.DeleteAction.ManifestAndLua || action == DeleteChoiceDialog.DeleteAction.Both)
-                        {
-                            _ = File.ReadAllText(game.FilePath);
-                        }
-
                         // Uninstall if requested
-                        if ((action == DeleteChoiceDialog.DeleteAction.Uninstall || action == DeleteChoiceDialog.DeleteAction.Both) && IsGameInstalled(game.AppId))
+                        if ((action == DeleteChoiceDialog.DeleteAction.Uninstall || action == DeleteChoiceDialog.DeleteAction.Both) && (IsGameInstalled(game.AppId) || SteamHelper.IsSteamAppInstalled(game.AppId)))
                         {
                             // Get installation path before uninstall
-                            string? installationPath = GetGameInstallationPath(game.AppId);
+                            string? installationPath = SteamHelper.GetGameInstallationPath(game.AppId, game.Name) ?? GetGameInstallationPath(game.AppId);
                             
                             if (TriggerSteamUninstall(game.AppId))
                             {
@@ -2003,7 +2051,8 @@ namespace SteamPluginManager
                                     if (!string.IsNullOrEmpty(installationPath) && Directory.Exists(installationPath))
                                     {
                                         Log($"Deleting installation folder for {game.AppId}: {installationPath}");
-                                        if (DeleteGameFolder(installationPath))
+                                        bool folderDeleted = await Task.Run(() => DeleteGameFolder(installationPath));
+                                        if (folderDeleted)
                                         {
                                             totalFoldersDeleted++;
                                             Log($"Successfully deleted installation folder for {game.AppId}.");
@@ -2013,6 +2062,10 @@ namespace SteamPluginManager
                                             Log($"Failed to completely delete installation folder for {game.AppId}.");
                                         }
                                     }
+
+                                    // Clean tracking records and custom launch settings
+                                    OnlineFixTrackerService.DeleteInstallRecord(game.AppId);
+                                    CustomLaunchService.RemoveConfig(game.AppId);
                                 }
                                 else
                                 {
@@ -2028,34 +2081,39 @@ namespace SteamPluginManager
                         // Delete manifests & lua if requested
                         if (action == DeleteChoiceDialog.DeleteAction.ManifestAndLua || action == DeleteChoiceDialog.DeleteAction.Both)
                         {
-                            int manifestsDeleted = ProcessManifestFile(game.FilePath);
-                            totalManifestsDeleted += manifestsDeleted;
-
-                            string deletedLuaFileName = Path.GetFileName(game.FilePath);
-                            string? steamPath = SteamHelper.GetSteamPath();
-
-                            if (!string.IsNullOrEmpty(steamPath) && !string.IsNullOrEmpty(deletedLuaFileName))
+                            var (mCount, lCount) = await Task.Run(() =>
                             {
-                                string pluginLuaFile = Path.Combine(steamPath, "config", "stplug-in", deletedLuaFileName);
-                                string luaFolderLuaFile = Path.Combine(steamPath, "config", "lua", deletedLuaFileName);
+                                int manifestsDeleted = ProcessManifestFile(game.FilePath);
+                                int luaDeleted = 0;
+                                string deletedLuaFileName = Path.GetFileName(game.FilePath);
 
-                                if (File.Exists(pluginLuaFile))
+                                if (!string.IsNullOrEmpty(steamPath) && !string.IsNullOrEmpty(deletedLuaFileName))
                                 {
-                                    File.Delete(pluginLuaFile);
-                                    totalLuaDeleted++;
-                                }
+                                    string pluginLuaFile = Path.Combine(steamPath, "config", "stplug-in", deletedLuaFileName);
+                                    string luaFolderLuaFile = Path.Combine(steamPath, "config", "lua", deletedLuaFileName);
 
-                                if (File.Exists(luaFolderLuaFile) && !string.Equals(luaFolderLuaFile, pluginLuaFile, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    File.Delete(luaFolderLuaFile);
-                                    totalLuaDeleted++;
+                                    if (File.Exists(pluginLuaFile))
+                                    {
+                                        File.Delete(pluginLuaFile);
+                                        luaDeleted++;
+                                    }
+
+                                    if (File.Exists(luaFolderLuaFile) && !string.Equals(luaFolderLuaFile, pluginLuaFile, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        File.Delete(luaFolderLuaFile);
+                                        luaDeleted++;
+                                    }
                                 }
-                            }
-                            else if (File.Exists(game.FilePath))
-                            {
-                                File.Delete(game.FilePath);
-                                totalLuaDeleted++;
-                            }
+                                else if (File.Exists(game.FilePath))
+                                {
+                                    File.Delete(game.FilePath);
+                                    luaDeleted++;
+                                }
+                                return (manifestsDeleted, luaDeleted);
+                            });
+
+                            totalManifestsDeleted += mCount;
+                            totalLuaDeleted += lCount;
                         }
                     }
                     catch (Exception ex)
@@ -2066,8 +2124,8 @@ namespace SteamPluginManager
 
                 Log($"Total: Triggered uninstall for {totalUninstallTriggered} app(s), deleted {totalLuaDeleted} Lua file(s), {totalManifestsDeleted} manifest file(s), and {totalFoldersDeleted} installation folder(s)");
                 
-                // Refresh game list after deletion
-                RefreshGameList();
+                // Refresh game list after deletion asynchronously
+                await RefreshGameListAsync();
                 UpdateStatus();
             }
             catch (Exception ex)
@@ -2362,54 +2420,28 @@ namespace SteamPluginManager
         {
             try
             {
-                foreach (var library in EnumerateSteamLibraries())
+                var progress = SteamHelper.GetGameDownloadProgress(appId);
+                if (progress.State == SteamAppState.Installed && !string.IsNullOrEmpty(progress.InstallPath) && Directory.Exists(progress.InstallPath))
                 {
-                    string manifest = System.IO.Path.Combine(library, "steamapps", $"appmanifest_{appId}.acf");
-                    if (File.Exists(manifest))
-                    {
-                        try
-                        {
-                            string manifestContent = File.ReadAllText(manifest);
-                            var stateMatch = System.Text.RegularExpressions.Regex.Match(manifestContent, "\"StateFlags\"\\s*\"([^\"]+)\"");
-                            if (stateMatch.Success)
-                            {
-                                string stateFlags = stateMatch.Groups[1].Value;
-                                if (stateFlags == "0")
-                                {
-                                    Log($"[GetGameInstallationPath] Game {appId} manifest StateFlags=0 (uninstalled)");
-                                    continue;
-                                }
-                            }
-                            if (manifestContent.Contains("\"installdir\""))
-                            {
-                                var match = System.Text.RegularExpressions.Regex.Match(manifestContent, "\"installdir\"\\s*\"([^\"]+)\"");
-                                if (match.Success)
-                                {
-                                    string installDir = match.Groups[1].Value;
-                                    string gameFolder = System.IO.Path.Combine(library, "steamapps", "common", installDir);
-                                    if (Directory.Exists(gameFolder))
-                                    {
-                                        Log($"[GetGameInstallationPath] Game {appId} confirmed installed at: {gameFolder}");
-                                        return gameFolder;
-                                    }
-                                    else
-                                    {
-                                        Log($"[GetGameInstallationPath] Game {appId} manifest exists but game folder missing: {gameFolder}");
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                Log($"[GetGameInstallationPath] Game {appId} manifest found but appears uninstalled (no installdir)");
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Log($"[GetGameInstallationPath] Error parsing manifest for {appId}: {ex.Message}");
-                        }
-                    }
+                    Log($"[GetGameInstallationPath] Game {appId} confirmed installed at: {progress.InstallPath}");
+                    return progress.InstallPath;
                 }
-                Log($"[GetGameInstallationPath] Game {appId} NOT found in any Steam library");
+
+                // Fallback to direct library check (handles cases where Steam is validating or updating files)
+                string? directPath = SteamHelper.GetGameInstallationPath(appId);
+                if (!string.IsNullOrEmpty(directPath) && Directory.Exists(directPath))
+                {
+                    Log($"[GetGameInstallationPath] Game {appId} found via direct Steam library check at: {directPath}");
+                    return directPath;
+                }
+                
+                if (progress.State == SteamAppState.Downloading || progress.State == SteamAppState.Paused)
+                {
+                    Log($"[GetGameInstallationPath] Game {appId} is currently downloading/updating ({progress.FormattedProgress}) - not fully installed yet.");
+                    return null;
+                }
+
+                Log($"[GetGameInstallationPath] Game {appId} is not installed (State: {progress.State})");
             }
             catch (Exception ex)
             {
@@ -2516,11 +2548,11 @@ namespace SteamPluginManager
                 var sw = Stopwatch.StartNew();
                 while (sw.Elapsed < timeout)
                 {
-                    if (!IsGameInstalled(appId)) return true;
+                    if (!SteamHelper.IsSteamAppInstalled(appId)) return true;
                     await Task.Delay(2000);
                 }
                 // Final check after timeout
-                return !IsGameInstalled(appId);
+                return !SteamHelper.IsSteamAppInstalled(appId);
             }
             catch (Exception ex)
             {
@@ -2533,47 +2565,7 @@ namespace SteamPluginManager
         {
             try
             {
-                if (string.IsNullOrEmpty(folderPath) || !Directory.Exists(folderPath))
-                {
-                    Log($"[DeleteGameFolder] Folder does not exist: {folderPath}");
-                    return false;
-                }
-
-                Log($"[DeleteGameFolder] Attempting to delete folder: {folderPath}");
-                
-                // Attempt to delete with retries for locked files
-                int maxRetries = 5;
-                int retryDelay = 500; // milliseconds
-                
-                for (int attempt = 0; attempt < maxRetries; attempt++)
-                {
-                    try
-                    {
-                        // Delete directory recursively
-                        Directory.Delete(folderPath, true);
-                        Log($"[DeleteGameFolder] Successfully deleted folder: {folderPath}");
-                        return true;
-                    }
-                    catch (IOException ex) when (attempt < maxRetries - 1)
-                    {
-                        Log($"[DeleteGameFolder] Attempt {attempt + 1} failed: {ex.Message}. Retrying in {retryDelay}ms...");
-                        System.Threading.Thread.Sleep(retryDelay);
-                        retryDelay *= 2; // Exponential backoff
-                    }
-                    catch (UnauthorizedAccessException ex)
-                    {
-                        Log($"[DeleteGameFolder] Access denied when deleting {folderPath}: {ex.Message}");
-                        return false;
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"[DeleteGameFolder] Unexpected error: {ex.Message}");
-                        return false;
-                    }
-                }
-                
-                Log($"[DeleteGameFolder] Failed to delete folder after {maxRetries} attempts: {folderPath}");
-                return false;
+                return SteamHelper.DeleteGameFolderCleanly(folderPath);
             }
             catch (Exception ex)
             {
@@ -3510,6 +3502,7 @@ namespace SteamPluginManager
             get => _installationPath;
             set { _installationPath = value; OnPropertyChanged(nameof(InstallationPath)); OnPropertyChanged(nameof(InstallationStatus)); }
         }
+        public int? ParentAppId { get; set; }
         public string InstallationStatus => IsInstalled ? "Installed" : "Not Installed";
 
         public event PropertyChangedEventHandler? PropertyChanged;

@@ -9,6 +9,8 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Animation;
+using SteamPluginManager.Models;
+using SteamPluginManager.Services.Steam;
 
 namespace SteamPluginManager.Views
 {
@@ -31,6 +33,7 @@ namespace SteamPluginManager.Views
                 }
             }
         private BypassFile? _currentFile;
+        private CustomLaunchTutorial? _currentTutorial;
         private CancellationTokenSource? _downloadCancellationTokenSource;
         private bool _isPaused;
 
@@ -308,11 +311,175 @@ namespace SteamPluginManager.Views
                     descriptionDetail.Text = _currentFile.Description ?? "No description available";
                 
                 UpdateAddToLibraryButton();
+                _ = LoadTutorialAsync();
             }
             catch (Exception ex)
             {
                 Logger.Log($"[GameBypassDetailView] Error displaying details: {ex.Message}");
                 ModernMessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task LoadTutorialAsync()
+        {
+            try
+            {
+                if (_currentFile == null || !_currentFile.AppId.HasValue || _currentFile.AppId.Value <= 0)
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        if (FindName("TutorialCard") is Border card) card.Visibility = Visibility.Collapsed;
+                    });
+                    return;
+                }
+
+                int appId = _currentFile.AppId.Value;
+                var tutorial = await CustomLaunchTutorialService.GetTutorialForAppAsync(appId, "GAMEBYPASS");
+                _currentTutorial = tutorial;
+
+                Dispatcher.Invoke(() =>
+                {
+                    if (FindName("TutorialCard") is not Border card) return;
+
+                    if (tutorial != null)
+                    {
+                        if (FindName("TutorialSummaryText") is TextBlock summaryText)
+                            summaryText.Text = string.IsNullOrWhiteSpace(tutorial.Summary)
+                                ? "This game has recommended custom launch configurations to ensure optimal gameplay."
+                                : tutorial.Summary;
+
+                        if (FindName("TutorialExeText") is TextBlock exeText)
+                            exeText.Text = string.IsNullOrWhiteSpace(tutorial.RecommendedExecutable)
+                                ? "(Default Executable)"
+                                : tutorial.RecommendedExecutable;
+
+                        if (FindName("TutorialArgsText") is TextBlock argsText)
+                            argsText.Text = string.IsNullOrWhiteSpace(tutorial.RecommendedArguments)
+                                ? "(None)"
+                                : tutorial.RecommendedArguments;
+
+                        if (FindName("TutorialStepsList") is ItemsControl stepsList)
+                            stepsList.ItemsSource = tutorial.Steps;
+
+                        if (FindName("TutorialNotesBorder") is Border notesBorder && FindName("TutorialNotesText") is TextBlock notesText)
+                        {
+                            if (!string.IsNullOrWhiteSpace(tutorial.Notes))
+                            {
+                                notesText.Text = tutorial.Notes;
+                                notesBorder.Visibility = Visibility.Visible;
+                            }
+                            else
+                            {
+                                notesBorder.Visibility = Visibility.Collapsed;
+                            }
+                        }
+
+                        card.Visibility = Visibility.Visible;
+                    }
+                    else
+                    {
+                        card.Visibility = Visibility.Collapsed;
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[GameBypassDetailView] Error loading tutorial: {ex.Message}");
+                Dispatcher.Invoke(() =>
+                {
+                    if (FindName("TutorialCard") is Border card) card.Visibility = Visibility.Collapsed;
+                });
+            }
+        }
+
+        private void CopyExe_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_currentTutorial != null && !string.IsNullOrWhiteSpace(_currentTutorial.RecommendedExecutable))
+                {
+                    Clipboard.SetText(_currentTutorial.RecommendedExecutable);
+                    ModernMessageBox.Show($"Executable path copied to clipboard:\n{_currentTutorial.RecommendedExecutable}", "Copied to Clipboard", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch { }
+        }
+
+        private void CopyArgs_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_currentTutorial != null && !string.IsNullOrWhiteSpace(_currentTutorial.RecommendedArguments))
+                {
+                    Clipboard.SetText(_currentTutorial.RecommendedArguments);
+                    ModernMessageBox.Show($"Launch arguments copied to clipboard:\n{_currentTutorial.RecommendedArguments}", "Copied to Clipboard", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch { }
+        }
+
+        private void ApplyTutorialButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_currentFile == null || !_currentFile.AppId.HasValue || _currentTutorial == null)
+                {
+                    ModernMessageBox.Show("Tutorial configuration data is not available.", "Notice", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                int appId = _currentFile.AppId.Value;
+                string? gamePath = SteamHelper.GetGameInstallationPath(appId, _currentFile.Name);
+
+                if (string.IsNullOrEmpty(gamePath) || !Directory.Exists(gamePath))
+                {
+                    ModernMessageBox.Show("This game is not currently installed in your local Steam library.\n\nPlease install the game first before applying automatic Custom Launch settings.", "Game Not Installed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                bool success = CustomLaunchTutorialService.ApplyTutorialToLocalGame(appId, _currentTutorial, gamePath);
+                if (success)
+                {
+                    ModernMessageBox.Show($"Custom Launch configuration for '{_currentFile.Name}' has been applied successfully!\n\n• Target: {_currentTutorial.RecommendedExecutable}\n• Arguments: {_currentTutorial.RecommendedArguments}\n\nYou can now launch the game directly via PLAY in your Game Library.", "Applied Successfully", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    ModernMessageBox.Show("Failed to apply Custom Launch configuration. Please verify that the game directory exists.", "Application Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                ModernMessageBox.Show($"An unexpected error occurred: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void OpenGameInLibrary_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_currentFile == null || !_currentFile.AppId.HasValue)
+                {
+                    WindowNavigator.NavigateToGameLibrary();
+                    return;
+                }
+
+                int appId = _currentFile.AppId.Value;
+                string? gamePath = SteamHelper.GetGameInstallationPath(appId, _currentFile.Name);
+
+                var gameEntry = new GameEntry
+                {
+                    AppId = appId,
+                    Name = _currentFile.Name ?? "Game",
+                    InstallationPath = gamePath ?? string.Empty,
+                    IsInstalled = !string.IsNullOrEmpty(gamePath) && Directory.Exists(gamePath)
+                };
+
+                WindowNavigator.NavigateToGameLibraryDetail(gameEntry);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[GameBypassDetailView] Error navigating to game library: {ex.Message}");
+                WindowNavigator.NavigateToGameLibrary();
             }
         }
 
@@ -712,6 +879,17 @@ namespace SteamPluginManager.Views
                     return;
                 }
 
+                if (_currentFile.AppId.HasValue && SteamHelper.IsGameValidating(_currentFile.AppId.Value))
+                {
+                    ModernMessageBox.Show(
+                        $"Steam is currently verifying and validating files for '{_currentFile.Name}'.\n\n" +
+                        "Please wait until Steam finishes validating game files before applying the bypass.",
+                        "Steam Validation In Progress",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    return;
+                }
+
                 if (FindName("AddToLibraryButton") is Button addBtn)
                     addBtn.IsEnabled = false;
 
@@ -722,15 +900,37 @@ namespace SteamPluginManager.Views
                 ShowLoadingState(true, "Verifying game installation...", "Checking Steam library...");
                 UpdateProgressStep(1);
 
-                // Cek apakah game sudah terinstal
-                var mainWindow = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w is SteamPluginManager.MainWindow) as SteamPluginManager.MainWindow;
-                bool isInstalled = false;
+                // Cek apakah game sudah terinstal via SteamHelper (direct ACF + common + manifest check)
                 string? gameFolder = null;
-                if (mainWindow != null && _currentFile.AppId != null)
+                if (_currentFile.AppId.HasValue && _currentFile.AppId.Value > 0)
                 {
-                    gameFolder = mainWindow.GetGameInstallationPath(_currentFile.AppId.Value);
-                    isInstalled = !string.IsNullOrEmpty(gameFolder) && Directory.Exists(gameFolder);
+                    gameFolder = SteamHelper.GetGameInstallationPath(_currentFile.AppId.Value, _currentFile.Name);
                 }
+
+                // Fallback: If not found automatically, prompt user to select folder manually
+                if (string.IsNullOrEmpty(gameFolder) || !Directory.Exists(gameFolder))
+                {
+                    var browsePrompt = ModernMessageBox.Show(
+                        $"The game installation folder for '{_currentFile.Name}' was not detected automatically in your Steam libraries.\n\n" +
+                        "Would you like to manually locate and select your game directory?",
+                        "Game Folder Not Found",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+
+                    if (browsePrompt == MessageBoxResult.Yes)
+                    {
+                        var folderDialog = new Microsoft.Win32.OpenFolderDialog
+                        {
+                            Title = $"Select Game Installation Directory for '{_currentFile.Name}'"
+                        };
+                        if (folderDialog.ShowDialog() == true && Directory.Exists(folderDialog.FolderName))
+                        {
+                            gameFolder = folderDialog.FolderName;
+                        }
+                    }
+                }
+
+                bool isInstalled = !string.IsNullOrEmpty(gameFolder) && Directory.Exists(gameFolder);
                 if (!isInstalled)
                 {
                     ShowResultNotification(false, "✗ Game not installed in Steam library!");

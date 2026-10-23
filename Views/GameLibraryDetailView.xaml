@@ -1,0 +1,596 @@
+<UserControl x:Class="SteamPluginManager.Views.GameLibraryDetailView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="850" d:DesignWidth="1200"
+             Background="#121214"
+             Foreground="{DynamicResource ForegroundBrush}">
+
+    <UserControl.Resources>
+        <!-- Modern Launcher Primary Play Button -->
+        <Style x:Key="LauncherPrimaryPlayButton" TargetType="Button">
+            <Setter Property="Background" Value="#10B981"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="12"
+                                Padding="{TemplateBinding Padding}">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#10B981" BlurRadius="20" ShadowDepth="4" Opacity="0.45"/>
+                            </Border.Effect>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#059669"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern Launcher Primary Stop Button -->
+        <Style x:Key="LauncherPrimaryStopButton" TargetType="Button">
+            <Setter Property="Background" Value="#EF4444"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="12"
+                                Padding="{TemplateBinding Padding}">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#EF4444" BlurRadius="20" ShadowDepth="4" Opacity="0.45"/>
+                            </Border.Effect>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#DC2626"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern Launcher Primary Install Button -->
+        <Style x:Key="LauncherPrimaryInstallButton" TargetType="Button">
+            <Setter Property="Background" Value="#0284C7"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="12"
+                                Padding="{TemplateBinding Padding}">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#0284C7" BlurRadius="20" ShadowDepth="4" Opacity="0.45"/>
+                            </Border.Effect>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#0369A1"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Launcher Secondary Action Button -->
+        <Style x:Key="LauncherQuickActionButton" TargetType="Button">
+            <Setter Property="Background" Value="#252528"/>
+            <Setter Property="BorderBrush" Value="#38383C"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="#E2E8F0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Height" Value="42"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#323236"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Opacity" Value="0.75"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border" Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Glassmorphic Card Style -->
+        <Style x:Key="LauncherGlassCard" TargetType="Border">
+            <Setter Property="Background" Value="#7A18181C"/>
+            <Setter Property="BorderBrush" Value="#40FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="14"/>
+            <Setter Property="Padding" Value="20"/>
+            <Setter Property="Margin" Value="0,0,0,16"/>
+        </Style>
+    </UserControl.Resources>
+
+    <!-- Main Outer Container with Full-Bleed Game Thumbnail Background -->
+    <Grid>
+        <!-- 1. Full-Bleed Game Artwork Background (Clear & Vibrant) -->
+        <Image x:Name="BackgroundHeroImage"
+               Stretch="UniformToFill"
+               HorizontalAlignment="Center"
+               VerticalAlignment="Top"
+               RenderOptions.BitmapScalingMode="HighQuality"/>
+
+        <!-- 2. Soft Bottom-Only Fade (Keeps the background artwork 100% clear and bright) -->
+        <Border>
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#00000000" Offset="0.0"/>
+                    <GradientStop Color="#00000000" Offset="0.45"/>
+                    <GradientStop Color="#40121214" Offset="0.65"/>
+                    <GradientStop Color="#B3121214" Offset="0.85"/>
+                    <GradientStop Color="#F0121214" Offset="1.0"/>
+                </LinearGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <!-- 3. Foreground Interactive Content -->
+        <Grid Margin="32,20,32,24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Top Navigation Bar (Back Button) -->
+            <Grid Grid.Row="0" Margin="0,0,0,24">
+                <Button x:Name="BackButton"
+                        Style="{StaticResource LauncherQuickActionButton}"
+                        Height="38"
+                        Padding="14,0"
+                        HorizontalAlignment="Left"
+                        Click="BackButton_Click">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="&#xE72B;" FontFamily="Segoe MDL2 Assets" FontSize="12" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Back to Library" FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <!-- Scrollable Launcher Content -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
+                <StackPanel>
+                    <!-- HERO LAUNCHER HEADER SECTION -->
+                    <Grid Margin="0,0,0,32">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Left: Title, Badges, and Primary Play/Install Actions -->
+                        <StackPanel Grid.Column="0" VerticalAlignment="Bottom" Margin="0,0,24,0">
+                            <!-- Status Badges Row -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12" VerticalAlignment="Center">
+                                <!-- Dynamic Installed Status Chip -->
+                                <Border x:Name="InstalledStatusBadge"
+                                        CornerRadius="8"
+                                        Padding="10,5"
+                                        Margin="0,0,10,0"
+                                        VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock x:Name="InstalledStatusIcon" Text="●" FontSize="10" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="InstalledStatusText" Text="INSTALLED" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- AppID Pill -->
+                                <Border Background="#33FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1" CornerRadius="8" Padding="10,5" Margin="0,0,10,0" VerticalAlignment="Center">
+                                    <TextBlock x:Name="HeroAppIdText" Text="AppID: 0" FontSize="11" FontWeight="SemiBold" Foreground="#E2E8F0"/>
+                                </Border>
+
+                                <!-- Genre Chip -->
+                                <Border x:Name="HeroGenreBorder" Background="#26A855F7" BorderBrush="#6A0DAD" BorderThickness="1" CornerRadius="8" Padding="10,5" Margin="0,0,10,0" VerticalAlignment="Center">
+                                    <TextBlock x:Name="HeroGenreText" Text="Genre" FontSize="11" FontWeight="SemiBold" Foreground="#D8B4FE"/>
+                                </Border>
+
+                                <!-- Base Game Badge (for DLC / Sub-Apps) -->
+                                <Border x:Name="HeroBaseGameBorder" Background="#2638BDF8" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="8" Padding="10,5" Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="&#xE7FC;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="#38BDF8" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="HeroBaseGameText" Text="Base Game: 0" FontSize="11" FontWeight="SemiBold" Foreground="#38BDF8"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- Big Game Title -->
+                            <TextBlock x:Name="GameTitleText"
+                                       Text="Game Title"
+                                       FontSize="36"
+                                       FontWeight="ExtraBold"
+                                       Foreground="White"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,14">
+                                <TextBlock.Effect>
+                                    <DropShadowEffect Color="#000000" BlurRadius="28" ShadowDepth="4" Opacity="0.95"/>
+                                </TextBlock.Effect>
+                            </TextBlock>
+
+                            <!-- Install Location Subtitle (Shown if installed) -->
+                            <Border x:Name="InstallLocationPanel" Background="#80000000" BorderBrush="#22FFFFFF" BorderThickness="1" CornerRadius="8" Padding="10,5" Margin="0,0,0,20" HorizontalAlignment="Left">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="#E2E8F0" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="InstallPathText" Text="C:\Program Files (x86)\Steam\steamapps\common\..." FontSize="12" Foreground="#E2E8F0" TextTrimming="CharacterEllipsis" MaxWidth="650"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- PRIMARY LAUNCHER CTA ACTION ROW -->
+                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <!-- Dynamic Big PLAY Button (Shown when installed) -->
+                                <Button x:Name="PlayButton"
+                                        Style="{StaticResource LauncherPrimaryPlayButton}"
+                                        Height="50"
+                                        Padding="36,0"
+                                        Margin="0,0,12,10"
+                                        Click="PlayButton_Click"
+                                        ToolTip="Launch game immediately via Steam">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock x:Name="PlayButtonIcon" Text="▶" FontSize="17" Foreground="White" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="PlayButtonText" Text="PLAY" FontSize="16" FontWeight="ExtraBold" Foreground="White" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- Custom Launch Active Indicator Badge -->
+                                <Border x:Name="CustomLaunchIndicatorBadge"
+                                        Background="#2210B981"
+                                        BorderBrush="#10B981"
+                                        BorderThickness="1"
+                                        CornerRadius="10"
+                                        Padding="10,6"
+                                        Margin="0,0,12,10"
+                                        VerticalAlignment="Center"
+                                        Visibility="Collapsed"
+                                        Cursor="Hand"
+                                        MouseLeftButtonDown="CustomLaunchIndicatorBadge_Click"
+                                        ToolTip="Custom Launch is active. Click to modify or reset.">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="⚡" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="CustomLaunchBadgeText" Text="CUSTOM LAUNCH" FontSize="11" FontWeight="Bold" Foreground="#10B981" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Dynamic Big INSTALL Button (Shown when not installed) -->
+                                <Button x:Name="InstallButton"
+                                        Style="{StaticResource LauncherPrimaryInstallButton}"
+                                        Height="50"
+                                        Padding="32,0"
+                                        Margin="0,0,12,10"
+                                        Click="InstallButton_Click"
+                                        ToolTip="Open Steam installation dialog and begin download">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="📥" FontSize="16" Foreground="White" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="INSTALL GAME" FontSize="15" FontWeight="ExtraBold" Foreground="White" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- Dynamic Download Progress Panel (Shown when downloading from Steam) -->
+                                <Border x:Name="DownloadProgressPanel"
+                                        Background="#D9161619"
+                                        BorderBrush="#0284C7"
+                                        BorderThickness="1.5"
+                                        CornerRadius="14"
+                                        Padding="18,12"
+                                        Margin="0,0,16,10"
+                                        MinWidth="360"
+                                        Visibility="Collapsed">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,8">
+                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock x:Name="DownloadStatusIcon" Text="📥" FontSize="13" Foreground="#38BDF8" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                <TextBlock x:Name="DownloadStatusLabel" Text="DOWNLOADING VIA STEAM..." FontSize="12" FontWeight="Bold" Foreground="#38BDF8"/>
+                                            </StackPanel>
+                                            <TextBlock x:Name="DownloadPercentText" Text="0.0%" HorizontalAlignment="Right" FontSize="13" FontWeight="ExtraBold" Foreground="White"/>
+                                        </Grid>
+
+                                        <!-- Modern Sleek Progress Bar -->
+                                        <ProgressBar x:Name="DownloadProgressBar"
+                                                     Height="8"
+                                                     Minimum="0"
+                                                     Maximum="100"
+                                                     Value="0"
+                                                     Foreground="#0284C7"
+                                                     Background="#252528"
+                                                     BorderThickness="0"
+                                                     Margin="0,0,0,8"/>
+
+                                        <Grid>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock x:Name="DownloadBytesText" Text="0 MB / 0 MB" FontSize="11" Foreground="#94A3B8" VerticalAlignment="Center"/>
+                                                <TextBlock x:Name="DownloadSpeedText" Text="" FontSize="11" FontWeight="Bold" Foreground="#38BDF8" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                                <TextBlock x:Name="DownloadEtaText" Text="" FontSize="11" Foreground="#94A3B8" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                            <Button x:Name="OpenSteamDownloadsBtn"
+                                                    Style="{StaticResource LauncherQuickActionButton}"
+                                                    Height="26"
+                                                    Padding="10,0"
+                                                    HorizontalAlignment="Right"
+                                                    Click="OpenSteamDownloads_Click"
+                                                    ToolTip="Open Steam Downloads Queue">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="Steam Queue" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Button>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Browse Files Button (Hidden if not installed) -->
+                                <Button x:Name="BrowseFilesBtn"
+                                        Style="{StaticResource LauncherQuickActionButton}"
+                                        Margin="0,0,8,10"
+                                        Visibility="Collapsed"
+                                        Click="BrowseFiles_Click"
+                                        ToolTip="Open Game Folder in File Explorer">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="&#xED25;" FontFamily="Segoe MDL2 Assets" FontSize="13" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Browse Files" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- Verify Integrity Button (Hidden if not installed or running) -->
+                                <Button x:Name="VerifyFilesBtn"
+                                        Style="{StaticResource LauncherQuickActionButton}"
+                                        Margin="0,0,8,10"
+                                        Visibility="Collapsed"
+                                        Click="VerifyFiles_Click"
+                                        ToolTip="Verify integrity of game files via Steam">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Verify" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- Steam Store Page Button -->
+                                <Button x:Name="StorePageBtn"
+                                        Style="{StaticResource LauncherQuickActionButton}"
+                                        Margin="0,0,8,10"
+                                        Click="StorePage_Click"
+                                        ToolTip="Open Steam Store page in browser">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="&#xE774;" FontFamily="Segoe MDL2 Assets" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Store" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- SteamDB Button -->
+                                <Button x:Name="SteamDbBtn"
+                                        Style="{StaticResource LauncherQuickActionButton}"
+                                        Margin="0,0,8,10"
+                                        Click="SteamDb_Click"
+                                        ToolTip="View game on SteamDB">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="&#xE9D9;" FontFamily="Segoe MDL2 Assets" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="SteamDB" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- Desktop Shortcut Button (Hidden if not installed) -->
+                                <Button x:Name="CreateShortcutBtn"
+                                        Style="{StaticResource LauncherQuickActionButton}"
+                                        Margin="0,0,8,10"
+                                        Visibility="Collapsed"
+                                        Click="CreateShortcut_Click"
+                                        ToolTip="Create Desktop Shortcut for this game">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="&#xE71B;" FontFamily="Segoe MDL2 Assets" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Shortcut" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- Custom Launch Config Button (Hidden if not installed or running) -->
+                                <Button x:Name="CustomLaunchBtn"
+                                        Style="{StaticResource LauncherQuickActionButton}"
+                                        Margin="0,0,8,10"
+                                        Visibility="Collapsed"
+                                        Click="CustomLaunch_Click"
+                                        ToolTip="Configure custom launch executable or batch script">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="&#xE7AC;" FontFamily="Segoe MDL2 Assets" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="CustomLaunchBtnText" Text="Custom Launch" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <Border x:Name="CustomLaunchActiveDot"
+                                                Width="6" Height="6"
+                                                CornerRadius="3"
+                                                Background="{DynamicResource SuccessButtonBrush}"
+                                                Margin="6,0,0,0"
+                                                VerticalAlignment="Center"
+                                                Visibility="Collapsed"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- Uninstall Button (Only visible if installed and not running) -->
+                                <Button x:Name="UninstallBtn"
+                                        Style="{StaticResource LauncherQuickActionButton}"
+                                        Margin="0,0,8,10"
+                                        Visibility="Collapsed"
+                                        Click="UninstallGame_Click"
+                                        ToolTip="Uninstall game via Steam">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="#F87171" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Uninstall" Foreground="#F87171" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- Remove from ST-Game-Remover Button -->
+                                <Button x:Name="RemoveFromLibraryBtn"
+                                        Style="{StaticResource LauncherQuickActionButton}"
+                                        Margin="0,0,8,10"
+                                        Click="RemoveFromLibrary_Click"
+                                        ToolTip="Remove Lua unlocker script and manifest from library">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="#EF4444" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Remove Lua" Foreground="#EF4444" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </WrapPanel>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- BODY INFORMATION & TABS -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="65*"/>
+                            <ColumnDefinition Width="35*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- LEFT COLUMN: Overview & Unlocked DLC List -->
+                        <StackPanel Grid.Column="0" Margin="0,0,20,0">
+                            <!-- About Game Card -->
+                            <Border Style="{StaticResource LauncherGlassCard}">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,14" VerticalAlignment="Center">
+                                        <TextBlock Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{DynamicResource AccentBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="About This Game" FontSize="16" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="GameDescriptionText"
+                                               Text="Loading game description..."
+                                               FontSize="13"
+                                               LineHeight="20"
+                                               Foreground="#CBD5E1"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Unlocked DLCs Card -->
+                            <Border Style="{StaticResource LauncherGlassCard}">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,14">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="&#xE71D;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{DynamicResource AccentBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Unlocked DLCs &amp; Depots" FontSize="16" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                        <TextBlock x:Name="DlcCountBadge" Text="0 DLCs" FontSize="11" FontWeight="Bold" Foreground="#A855F7" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                    </Grid>
+
+                                    <!-- DLC Items List -->
+                                    <ItemsControl x:Name="DlcItemsControl">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="#20FFFFFF" BorderBrush="#15FFFFFF" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,0,0,8">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="🧩" FontSize="13" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                                        <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold" Foreground="White" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                                        <Border Grid.Column="2" Background="#33FFFFFF" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding AppId, StringFormat='ID: {0}'}" FontSize="10" Foreground="#CBD5E1"/>
+                                                        </Border>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <TextBlock x:Name="NoDlcPlaceholder"
+                                               Text="No additional DLC records found for this entry."
+                                               FontSize="12"
+                                               Foreground="{DynamicResource MutedForegroundBrush}"
+                                               Visibility="Collapsed"
+                                               Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- RIGHT COLUMN: Specifications, Protection & Technical Details -->
+                        <StackPanel Grid.Column="1">
+                            <Border Style="{StaticResource LauncherGlassCard}">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,16" VerticalAlignment="Center">
+                                        <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="{DynamicResource AccentBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Game Details" FontSize="16" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                                    </StackPanel>
+
+                                    <!-- Release Date -->
+                                    <StackPanel Margin="0,0,0,12">
+                                        <TextBlock Text="RELEASE DATE" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,0,2"/>
+                                        <TextBlock x:Name="SpecReleaseDate" Text="-" FontSize="12.5" Foreground="White" FontWeight="SemiBold"/>
+                                    </StackPanel>
+
+                                    <!-- Publisher -->
+                                    <StackPanel Margin="0,0,0,12">
+                                        <TextBlock Text="DEVELOPER / PUBLISHER" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,0,2"/>
+                                        <TextBlock x:Name="SpecPublisher" Text="-" FontSize="12.5" Foreground="White" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+
+                                    <!-- DRM Protection -->
+                                    <StackPanel Margin="0,0,0,12">
+                                        <TextBlock Text="DRM NOTICE" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,0,2"/>
+                                        <TextBlock x:Name="SpecDrm" Text="Standard Steam DRM" FontSize="12.5" Foreground="#CBD5E1"/>
+                                    </StackPanel>
+
+                                    <!-- Anti-Cheat -->
+                                    <StackPanel Margin="0,0,0,12">
+                                        <TextBlock Text="ANTI-CHEAT / INTEGRITY" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,0,2"/>
+                                        <TextBlock x:Name="SpecAntiCheat" Text="None reported" FontSize="12.5" Foreground="#CBD5E1"/>
+                                    </StackPanel>
+
+                                    <!-- Lua Unlocker File -->
+                                    <StackPanel Margin="0,0,0,12">
+                                        <TextBlock Text="UNLOCKER SCRIPT PATH" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,0,2"/>
+                                        <TextBlock x:Name="SpecLuaPath" Text="-" FontSize="11" Foreground="#94A3B8" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+
+                                    <!-- Installation Directory -->
+                                    <StackPanel Margin="0,0,0,4">
+                                        <TextBlock Text="INSTALLATION FOLDER" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,0,2"/>
+                                        <TextBlock x:Name="SpecInstallPath" Text="Not Installed" FontSize="11" Foreground="#94A3B8" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</UserControl>
