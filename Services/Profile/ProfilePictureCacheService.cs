@@ -51,7 +51,7 @@ namespace SteamPluginManager.Services.Profile
         }
 
         /// <summary>
-        /// Mengambil ImageSource avatar pengguna secara sinkron dari memory cache jika tersedia, atau null jika belum ada.
+        /// Mengambil ImageSource avatar pengguna secara sinkron dari memory cache atau disk cache jika tersedia.
         /// </summary>
         public static ImageSource? GetCachedAvatarInMemory(int userId)
         {
@@ -60,6 +60,23 @@ namespace SteamPluginManager.Services.Profile
             {
                 return cached;
             }
+
+            // Quick check disk cache (instant local read, frozen thread-safe BitmapImage)
+            try
+            {
+                string diskPath = GetDiskCachePath(userId);
+                if (File.Exists(diskPath))
+                {
+                    var img = LoadBitmapFromDisk(diskPath);
+                    if (img != null)
+                    {
+                        _memoryCache[userId] = img;
+                        return img;
+                    }
+                }
+            }
+            catch { }
+
             return null;
         }
 

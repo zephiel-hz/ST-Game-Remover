@@ -11,7 +11,15 @@ namespace SteamPluginManager.Models
 
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            var app = System.Windows.Application.Current;
+            if (app?.Dispatcher != null && !app.Dispatcher.CheckAccess())
+            {
+                app.Dispatcher.Invoke(() => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName)));
+            }
+            else
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            }
         }
 
         [JsonPropertyName("id")]
@@ -228,12 +236,25 @@ namespace SteamPluginManager.Models
         {
             if (!Id.HasValue || string.IsNullOrWhiteSpace(AvatarUrl))
             {
-                AvatarImage = null;
+                SetAvatarImageSafe(null);
                 return;
             }
 
             var img = await Services.Profile.ProfilePictureCacheService.GetAvatarAsync(Id.Value, AvatarUrl);
-            AvatarImage = img;
+            SetAvatarImageSafe(img);
+        }
+
+        private void SetAvatarImageSafe(System.Windows.Media.ImageSource? img)
+        {
+            var app = System.Windows.Application.Current;
+            if (app?.Dispatcher != null && !app.Dispatcher.CheckAccess())
+            {
+                app.Dispatcher.Invoke(() => AvatarImage = img);
+            }
+            else
+            {
+                AvatarImage = img;
+            }
         }
     }
 }

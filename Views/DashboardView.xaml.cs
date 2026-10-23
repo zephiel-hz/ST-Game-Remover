@@ -13,6 +13,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using System.IO;
@@ -50,6 +51,11 @@ namespace SteamPluginManager.Views
         private bool _isSteamRunning = false;
         private UserProfile? _currentUserProfile = null;
         private bool _isProfileEditorOpen = false;
+        private List<ManifestFile> _mostDownloadedManifests = new();
+        private int _currentSlideIndex = 0;
+        private DispatcherTimer? _slideAutoAdvanceTimer;
+        private bool _isSliderHovered = false;
+        private bool _isImageAActive = true;
         private List<ManifestFile> _newestManifests = new();
         private int _newestManifestColumns = 3;
         private readonly HttpClient _thumbnailHttpClient = new();
@@ -90,8 +96,8 @@ namespace SteamPluginManager.Views
                 _ = LoadUserProfileAsync();
             }
 
-            // Always reload newest manifests and stats whenever user visits Dashboard
-            _ = LoadDashboardStatsAsync();
+            // Always reload newest manifests and featured slider whenever user visits Dashboard
+            _ = LoadFeaturedSliderAsync();
             _ = LoadNewestManifestCardsAsync();
 
             App.LanguageChanged += LanguageChanged_Handler;
@@ -111,7 +117,7 @@ namespace SteamPluginManager.Views
                 {
                     try
                     {
-                        await _currentInstance.LoadDashboardStatsAsync();
+                        await _currentInstance.LoadFeaturedSliderAsync();
                         await _currentInstance.LoadNewestManifestCardsAsync();
                     }
                     catch (Exception ex)
@@ -257,6 +263,12 @@ namespace SteamPluginManager.Views
                 _dashboardResizeDebounceTimer = null;
             }
 
+            if (_slideAutoAdvanceTimer != null)
+            {
+                _slideAutoAdvanceTimer.Stop();
+                _slideAutoAdvanceTimer = null;
+            }
+
             if (_steamCheckTimer != null)
             {
                 _steamCheckTimer.Stop();
@@ -395,75 +407,456 @@ namespace SteamPluginManager.Views
             catch { }
         }
 
-        private async Task LoadDashboardStatsAsync()
+        private async Task LoadFeaturedSliderAsync()
         {
             try
             {
-                var hzManifestCountTask = FetchHZManifestFileCountAsync();
-                var gameBypassCountTask = FetchR2FileCountAsync("gamebypass/");  // GameBypass tetap di R2
-                var onlineFixCountTask = FetchB2FileCountAsync("onlinefix/");    // OnlineFix sudah di B2
+                Logger.Log("[DashboardView] LoadFeaturedSliderAsync started");
+                if (SliderLoadingOverlay != null && _mostDownloadedManifests.Count == 0)
+                {
+                    SliderLoadingOverlay.Visibility = Visibility.Visible;
+                }
 
-                await Task.WhenAll(hzManifestCountTask, gameBypassCountTask, onlineFixCountTask);
+                var manifests = await SupabaseConfig.GetMostDownloadedManifestFilesAsync(10);
+                var filtered = FilterNewestManifests(manifests);
+                _mostDownloadedManifests = filtered.Take(8).ToList();
+                Logger.Log($"[DashboardView] LoadFeaturedSliderAsync loaded {_mostDownloadedManifests.Count} manifests");
 
-                UpdateDashboardStats(hzManifestCountTask.Result, gameBypassCountTask.Result, onlineFixCountTask.Result);
+                if (SliderLoadingOverlay != null)
+                {
+                    SliderLoadingOverlay.Visibility = Visibility.Collapsed;
+                }
+
+                if (_mostDownloadedManifests.Count == 0)
+                {
+                    FeaturedSliderCard.Visibility = Visibility.Collapsed;
+                    return;
+                }
+
+                FeaturedSliderCard.Visibility = Visibility.Visible;
+                PopulateSliderDots();
+
+                _currentSlideIndex = 0;
+                ShowSlide(_currentSlideIndex, animate: false);
+
+                StartSlideAutoAdvanceTimer();
+
+                // Prefetch artworks in background for all carousel games (same cache as GameLibraryDetailView)
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        string imagesDir = Path.Combine(CacheManager.CacheDirectory, "Images");
+                        Directory.CreateDirectory(imagesDir);
+
+                        foreach (var m in _mostDownloadedManifests)
+                        {
+                            if (!m.AppId.HasValue || m.AppId.Value <= 0) continue;
+                            int aid = m.AppId.Value;
+                            string hPath = Path.Combine(imagesDir, $"{aid}_hero.jpg");
+                            string hdPath = Path.Combine(imagesDir, $"{aid}.jpg");
+
+                            if (!File.Exists(hPath))
+                            {
+                                try
+                                {
+                                    using var resp = await _thumbnailHttpClient.GetAsync($"https://steamcdn-a.akamaihd.net/steam/apps/{aid}/library_hero.jpg");
+                                    if (resp.IsSuccessStatusCode)
+                                    {
+                                        var b = await resp.Content.ReadAsByteArrayAsync();
+                                        if (b != null && b.Length > 0)
+                                        {
+                                            await File.WriteAllBytesAsync(hPath, b);
+                                            Dispatcher.Invoke(() =>
+                                            {
+                                                if (_mostDownloadedManifests != null && _currentSlideIndex < _mostDownloadedManifests.Count && _mostDownloadedManifests[_currentSlideIndex].AppId == aid)
+                                                {
+                                                    SetSlideArtwork(hPath, animate: true);
+                                                }
+                                            });
+                                            continue;
+                                        }
+                                    }
+                                }
+                                catch { }
+
+                                if (!File.Exists(hdPath))
+                                {
+                                    try
+                                    {
+                                        using var fb = await _thumbnailHttpClient.GetAsync($"https://cdn.cloudflare.steamstatic.com/steam/apps/{aid}/header.jpg");
+                                        if (fb.IsSuccessStatusCode)
+                                        {
+                                            var b = await fb.Content.ReadAsByteArrayAsync();
+                                            if (b != null && b.Length > 0)
+                                            {
+                                                await File.WriteAllBytesAsync(hdPath, b);
+                                                Dispatcher.Invoke(() =>
+                                                {
+                                                    if (_mostDownloadedManifests != null && _currentSlideIndex < _mostDownloadedManifests.Count && _mostDownloadedManifests[_currentSlideIndex].AppId == aid)
+                                                    {
+                                                        SetSlideArtwork(hdPath, animate: true);
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    }
+                                    catch { }
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+                });
             }
             catch (Exception ex)
             {
-                Logger.Log($"[DashboardView] LoadDashboardStatsAsync failed: {ex.Message}");
+                Logger.Log($"[DashboardView] LoadFeaturedSliderAsync failed: {ex.Message}");
+                if (SliderLoadingOverlay != null)
+                    SliderLoadingOverlay.Visibility = Visibility.Collapsed;
             }
         }
 
-        private async Task<int> FetchHZManifestFileCountAsync()
+        private void PopulateSliderDots()
+        {
+            if (SliderDotsPanel == null) return;
+            SliderDotsPanel.Children.Clear();
+
+            for (int i = 0; i < _mostDownloadedManifests.Count; i++)
+            {
+                int index = i;
+                var dotBorder = new Border
+                {
+                    Height = 8,
+                    Width = (i == _currentSlideIndex) ? 26 : 8,
+                    CornerRadius = new CornerRadius(4),
+                    Margin = new Thickness(4, 0, 4, 0),
+                    Cursor = Cursors.Hand,
+                    Background = (i == _currentSlideIndex)
+                        ? (Application.Current.Resources["AccentBrush"] as Brush ?? new SolidColorBrush(Color.FromRgb(59, 130, 246)))
+                        : new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)),
+                    SnapsToDevicePixels = true
+                };
+
+                dotBorder.MouseLeftButtonUp += (s, e) =>
+                {
+                    e.Handled = true;
+                    if (_currentSlideIndex != index)
+                    {
+                        _currentSlideIndex = index;
+                        ShowSlide(_currentSlideIndex, animate: true);
+                        RestartSlideAutoAdvanceTimer();
+                    }
+                };
+
+                SliderDotsPanel.Children.Add(dotBorder);
+            }
+        }
+
+        private void UpdateSliderDots(int activeIndex)
+        {
+            if (SliderDotsPanel == null) return;
+            for (int i = 0; i < SliderDotsPanel.Children.Count; i++)
+            {
+                if (SliderDotsPanel.Children[i] is Border dot)
+                {
+                    bool isActive = (i == activeIndex);
+                    dot.Width = isActive ? 26 : 8;
+                    dot.Background = isActive
+                        ? (Application.Current.Resources["AccentBrush"] as Brush ?? new SolidColorBrush(Color.FromRgb(59, 130, 246)))
+                        : new SolidColorBrush(Color.FromArgb(120, 255, 255, 255));
+                }
+            }
+        }
+
+        private void ShowSlide(int index, bool animate)
+        {
+            if (_mostDownloadedManifests == null || _mostDownloadedManifests.Count == 0)
+                return;
+
+            if (index < 0 || index >= _mostDownloadedManifests.Count)
+                return;
+
+            var manifest = _mostDownloadedManifests[index];
+
+            // 1. Update text metadata
+            SlideGameTitle.Text = manifest.Name ?? "Unknown Game";
+            SlideGameDescription.Text = !string.IsNullOrWhiteSpace(manifest.Description)
+                ? manifest.Description
+                : "Explore and download the latest manifest files.";
+
+            SlideDownloadsText.Text = $"{manifest.DownloadCountDisplay} Downloads";
+            SlideAppIdText.Text = manifest.AppId.HasValue ? $"AppID: {manifest.AppId.Value}" : "";
+            SlideAppIdText.Visibility = manifest.AppId.HasValue ? Visibility.Visible : Visibility.Collapsed;
+
+            UpdateSliderDots(index);
+
+            // 2. Load artwork using the EXACT same logic as GameLibraryDetailView
+            LoadSlideArtwork(manifest, index, animate);
+        }
+
+        private void LoadSlideArtwork(ManifestFile manifest, int slideIndex, bool animate)
         {
             try
             {
-                return await SupabaseConfig.GetHzManifestFilesCountAsync();
+                if (!manifest.AppId.HasValue || manifest.AppId.Value <= 0)
+                {
+                    ClearSlideArtwork(animate);
+                    return;
+                }
+
+                int appId = manifest.AppId.Value;
+                string imagesDir = Path.Combine(CacheManager.CacheDirectory, "Images");
+                Directory.CreateDirectory(imagesDir);
+
+                string heroLocalPath = Path.Combine(imagesDir, $"{appId}_hero.jpg");
+                string headerLocalPath = Path.Combine(imagesDir, $"{appId}.jpg");
+
+                // 1. INSTANT LOCAL CACHE DISPLAY (0ms, no network delay, prevents black screen)
+                bool displayedFromCache = false;
+                if (File.Exists(heroLocalPath) && new FileInfo(heroLocalPath).Length > 0)
+                {
+                    SetSlideArtwork(heroLocalPath, animate);
+                    displayedFromCache = true;
+                }
+                else if (File.Exists(headerLocalPath) && new FileInfo(headerLocalPath).Length > 0)
+                {
+                    SetSlideArtwork(headerLocalPath, animate);
+                    displayedFromCache = true;
+                }
+                else
+                {
+                    ClearSlideArtwork(animate);
+                }
+
+                // If high-resolution hero art is already on disk, we are 100% done!
+                if (File.Exists(heroLocalPath) && new FileInfo(heroLocalPath).Length > 0)
+                {
+                    Logger.Log($"[DashboardView] Using cached hero artwork for '{manifest.Name}' ({appId})");
+                    return;
+                }
+
+                // 2. ASYNC BACKGROUND FETCH & LOCAL DISK PERSISTENCE (exact same URLs as GameLibraryDetailView)
+                string heroCdnUrl = $"https://steamcdn-a.akamaihd.net/steam/apps/{appId}/library_hero.jpg";
+                string fallbackUrl = $"https://cdn.cloudflare.steamstatic.com/steam/apps/{appId}/header.jpg";
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        // A. Try fetching library_hero.jpg
+                        using var response = await _thumbnailHttpClient.GetAsync(heroCdnUrl);
+                        if (response.IsSuccessStatusCode)
+                        {
+                            var bytes = await response.Content.ReadAsByteArrayAsync();
+                            if (bytes != null && bytes.Length > 0)
+                            {
+                                await File.WriteAllBytesAsync(heroLocalPath, bytes);
+                                Dispatcher.Invoke(() =>
+                                {
+                                    if (_currentSlideIndex == slideIndex)
+                                    {
+                                        SetSlideArtwork(heroLocalPath, animate: true);
+                                    }
+                                });
+                                Logger.Log($"[DashboardView] Downloaded & cached hero artwork for '{manifest.Name}' ({appId})");
+                                return;
+                            }
+                        }
+
+                        // B. Fallback to header.jpg if no local image is displayed yet or hero was missing
+                        if (!displayedFromCache && !File.Exists(headerLocalPath))
+                        {
+                            using var fbResp = await _thumbnailHttpClient.GetAsync(fallbackUrl);
+                            if (fbResp.IsSuccessStatusCode)
+                            {
+                                var bytes = await fbResp.Content.ReadAsByteArrayAsync();
+                                if (bytes != null && bytes.Length > 0)
+                                {
+                                    await File.WriteAllBytesAsync(headerLocalPath, bytes);
+                                    Dispatcher.Invoke(() =>
+                                    {
+                                        if (_currentSlideIndex == slideIndex)
+                                        {
+                                            SetSlideArtwork(headerLocalPath, animate: true);
+                                        }
+                                    });
+                                    Logger.Log($"[DashboardView] Downloaded & cached fallback header for '{manifest.Name}' ({appId})");
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log($"[DashboardView] Background hero fetch error for {appId}: {ex.Message}");
+                    }
+                });
             }
             catch (Exception ex)
             {
-                Logger.Log($"[DashboardView] FetchHZManifestFileCountAsync failed: {ex.Message}");
-                return 0;
+                Logger.Log($"[DashboardView] LoadSlideArtwork error: {ex.Message}");
             }
         }
 
-        private async Task<int> FetchR2FileCountAsync(string folderPrefix)
+        private void SetSlideArtwork(string filePath, bool animate)
         {
             try
             {
-                var files = await SteamPluginManager.R2Config.ListFilesAsync(folderPrefix);
-                return files?.Count ?? 0;
+                if (!File.Exists(filePath)) return;
+
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.UriSource = new Uri(filePath, UriKind.Absolute);
+                bmp.EndInit();
+                bmp.Freeze();
+
+                if (!animate)
+                {
+                    SlideImageA.Source = bmp;
+                    SlideImageA.Opacity = 1.0;
+                    SlideImageB.Source = null;
+                    SlideImageB.Opacity = 0.0;
+                    _isImageAActive = true;
+                    return;
+                }
+
+                // Cross-fade animation
+                var targetImage = _isImageAActive ? SlideImageB : SlideImageA;
+                var currentImage = _isImageAActive ? SlideImageA : SlideImageB;
+
+                targetImage.Source = bmp;
+
+                var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0.0, 1.0, TimeSpan.FromMilliseconds(300));
+                var fadeOut = new System.Windows.Media.Animation.DoubleAnimation(1.0, 0.0, TimeSpan.FromMilliseconds(300));
+
+                targetImage.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+                currentImage.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+
+                _isImageAActive = !_isImageAActive;
             }
             catch (Exception ex)
             {
-                Logger.Log($"[DashboardView] FetchR2FileCountAsync failed for {folderPrefix}: {ex.Message}");
-                return 0;
+                Logger.Log($"[DashboardView] SetSlideArtwork error: {ex.Message}");
             }
         }
 
-        private async Task<int> FetchB2FileCountAsync(string folderPrefix)
+        private void ClearSlideArtwork(bool animate)
         {
             try
             {
-                var files = await SteamPluginManager.B2Config.ListFilesAsync(folderPrefix);
-                return files?.Count ?? 0;
+                if (!animate)
+                {
+                    SlideImageA.Source = null;
+                    SlideImageB.Source = null;
+                    SlideImageA.Opacity = 0.0;
+                    SlideImageB.Opacity = 0.0;
+                    return;
+                }
+
+                var activeImage = _isImageAActive ? SlideImageA : SlideImageB;
+                var fadeOut = new System.Windows.Media.Animation.DoubleAnimation(activeImage.Opacity, 0.0, TimeSpan.FromMilliseconds(200));
+                activeImage.BeginAnimation(UIElement.OpacityProperty, fadeOut);
             }
-            catch (Exception ex)
+            catch { }
+        }
+
+        private void SliderPrevButton_Click(object sender, RoutedEventArgs e)
+        {
+            e.Handled = true;
+            if (_mostDownloadedManifests.Count <= 1) return;
+            _currentSlideIndex = (_currentSlideIndex - 1 + _mostDownloadedManifests.Count) % _mostDownloadedManifests.Count;
+            ShowSlide(_currentSlideIndex, animate: true);
+            RestartSlideAutoAdvanceTimer();
+        }
+
+        private void SliderNextButton_Click(object sender, RoutedEventArgs e)
+        {
+            e.Handled = true;
+            if (_mostDownloadedManifests.Count <= 1) return;
+            _currentSlideIndex = (_currentSlideIndex + 1) % _mostDownloadedManifests.Count;
+            ShowSlide(_currentSlideIndex, animate: true);
+            RestartSlideAutoAdvanceTimer();
+        }
+
+        private void FeaturedSliderCard_Click(object sender, MouseButtonEventArgs e)
+        {
+            NavigateToCurrentSlideManifest();
+        }
+
+        private void SlideActionButton_Click(object sender, RoutedEventArgs e)
+        {
+            e.Handled = true;
+            NavigateToCurrentSlideManifest();
+        }
+
+        private void NavigateToCurrentSlideManifest()
+        {
+            if (_mostDownloadedManifests != null && _currentSlideIndex >= 0 && _currentSlideIndex < _mostDownloadedManifests.Count)
             {
-                Logger.Log($"[DashboardView] FetchB2FileCountAsync failed for {folderPrefix}: {ex.Message}");
-                return 0;
+                var manifest = _mostDownloadedManifests[_currentSlideIndex];
+                WindowNavigator.NavigateToHZManifestDetail(manifest, source: "Dashboard");
             }
         }
 
-        private void UpdateDashboardStats(int hzManifestCount, int gameBypassCount, int onlineFixCount)
+        private void FeaturedSlider_MouseEnter(object sender, MouseEventArgs e)
         {
-            if (HZManifestFileCountText != null)
-                HZManifestFileCountText.Text = hzManifestCount.ToString("N0");
+            _isSliderHovered = true;
+            _slideAutoAdvanceTimer?.Stop();
+            SetSliderNavButtonsVisible(true);
+        }
 
-            if (GameBypassFileCountText != null)
-                GameBypassFileCountText.Text = gameBypassCount.ToString("N0");
+        private void FeaturedSlider_MouseLeave(object sender, MouseEventArgs e)
+        {
+            _isSliderHovered = false;
+            RestartSlideAutoAdvanceTimer();
+            SetSliderNavButtonsVisible(false);
+        }
 
-            if (OnlineFixFileCountText != null)
-                OnlineFixFileCountText.Text = onlineFixCount.ToString("N0");
+        private void SetSliderNavButtonsVisible(bool visible)
+        {
+            if (SliderPrevButton == null || SliderNextButton == null) return;
+
+            bool shouldShow = visible && _mostDownloadedManifests != null && _mostDownloadedManifests.Count > 1;
+
+            SliderPrevButton.IsHitTestVisible = shouldShow;
+            SliderNextButton.IsHitTestVisible = shouldShow;
+
+            double targetOpacity = shouldShow ? 1.0 : 0.0;
+            var anim = new System.Windows.Media.Animation.DoubleAnimation(targetOpacity, TimeSpan.FromMilliseconds(200));
+
+            SliderPrevButton.BeginAnimation(UIElement.OpacityProperty, anim);
+            SliderNextButton.BeginAnimation(UIElement.OpacityProperty, anim);
+        }
+
+        private void StartSlideAutoAdvanceTimer()
+        {
+            if (_slideAutoAdvanceTimer == null)
+            {
+                _slideAutoAdvanceTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(5)
+                };
+                _slideAutoAdvanceTimer.Tick += (s, e) =>
+                {
+                    if (_isSliderHovered || _mostDownloadedManifests.Count <= 1)
+                        return;
+
+                    _currentSlideIndex = (_currentSlideIndex + 1) % _mostDownloadedManifests.Count;
+                    ShowSlide(_currentSlideIndex, animate: true);
+                };
+            }
+            _slideAutoAdvanceTimer.Stop();
+            _slideAutoAdvanceTimer.Start();
+        }
+
+        private void RestartSlideAutoAdvanceTimer()
+        {
+            if (!_isSliderHovered && _slideAutoAdvanceTimer != null)
+            {
+                _slideAutoAdvanceTimer.Stop();
+                _slideAutoAdvanceTimer.Start();
+            }
         }
 
         private async Task LoadUserProfileAsync()
@@ -591,6 +984,7 @@ namespace SteamPluginManager.Views
             try
             {
                 Logger.Log($"[DashboardView] Adult content preference changed: {isEnabled}");
+                _ = LoadFeaturedSliderAsync();
                 _ = LoadNewestManifestCardsAsync();
             }
             catch (Exception ex)

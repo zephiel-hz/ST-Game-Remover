@@ -5,11 +5,17 @@
 ## [3.1.1] - 2026-10-23
 
 ### Added
+* **Dashboard Featured Games Carousel:** Replaced the legacy file statistics cards with a high-definition featured image slider spotlighting the most downloaded HZ Manifest games. Features smooth cross-fade animations, Steam CDN hero artwork caching, background prefetching, download counters, interactive hover navigation controls, and direct click-through to game details.
 * **Online-Fix Restore Feature:** Easily restore modified games to their original state by automatically removing tracked Online-Fix files and triggering Steam file integrity verification.
 
+### Changed
+* **Carousel Artwork Logic Alignment:** Synchronized image fetching and presentation logic with `GameLibraryDetailView`, using local disk cache first (0ms instant display), non-blocking background fetching with fallback headers, and top-aligned vibrant artwork.
+* **Optimized Dashboard Loading:** Eliminated heavy R2 and B2 cloud storage bucket listing calls on dashboard startup, dramatically speeding up dashboard loading and eliminating unnecessary network overhead.
+
 ### Fixed
+* **Community Chat Avatar Rendering:** Fixed an issue where own profile picture did not display on sent chat bubbles or update during background polling. Added instant disk cache resolution and thread-safe UI Dispatcher updates for profile avatars.
 * **Clean Game Uninstall:** Fixed an issue where uninstalling games left leftover files and folders behind due to a manifest detection deadlock; game folders and unmanaged files are now completely wiped upon uninstall completion.
-* **Online-Fix File Validation Protection:** Temporarily disables applying Online-Fix while Steam is actively validating or verifying game files to avoid conflicts.
+* **Online-Fix File Validation Protection:** Temporarily hides action buttons while Steam is actively validating or verifying game files to avoid conflicts, cleanly showing only the verification progress state.
 * **Game Library Selection Gesture:** Fixed selection mode activation so hold/long-press on library cards triggers consistently on the first attempt.
 
 ---

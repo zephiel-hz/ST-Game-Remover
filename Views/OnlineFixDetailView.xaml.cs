@@ -22,7 +22,6 @@ namespace SteamPluginManager.Views
         private OnlineFixFile? _currentFile;
         private CustomLaunchTutorial? _currentTutorial;
         private System.Windows.Threading.DispatcherTimer? _validationMonitorTimer;
-        private bool _isValidatingFiles = false;
         private bool _isActionInProgress = false;
         
         public OnlineFixDetailView()
@@ -219,24 +218,17 @@ namespace SteamPluginManager.Views
 
                 if (isCurrentlyValidating)
                 {
-                    _isValidatingFiles = true;
-
+                    // Hide both buttons while validating so only the validation status badge is displayed
                     if (FindName("AddToLibraryButton") is Button addBtn)
                     {
+                        addBtn.Visibility = Visibility.Collapsed;
                         addBtn.IsEnabled = false;
                         addBtn.ToolTip = "Steam is currently validating / verifying files for this game. Please wait until verification completes.";
-                    }
-                    if (FindName("AddToLibraryButtonText") is TextBlock addText)
-                    {
-                        addText.Text = "Validating Files...";
-                    }
-                    else if (FindName("AddToLibraryButton") is Button addBtnFallback && addBtnFallback.Content is string)
-                    {
-                        addBtnFallback.Content = "Validating Files...";
                     }
 
                     if (FindName("RestoreGameButton") is Button restoreBtn)
                     {
+                        restoreBtn.Visibility = Visibility.Collapsed;
                         restoreBtn.IsEnabled = false;
                         restoreBtn.ToolTip = "Steam file verification is currently in progress.";
                     }
@@ -246,15 +238,22 @@ namespace SteamPluginManager.Views
                         badge.Visibility = Visibility.Visible;
                     }
                 }
-                else if (_isValidatingFiles)
+                else
                 {
-                    _isValidatingFiles = false;
+                    // Hide validation status badge
+                    if (FindName("ValidationStatusBadge") is Border badge)
+                    {
+                        badge.Visibility = Visibility.Collapsed;
+                    }
 
+                    // Show both buttons and ensure they are active
                     if (FindName("AddToLibraryButton") is Button addBtn)
                     {
+                        addBtn.Visibility = Visibility.Visible;
                         addBtn.IsEnabled = true;
                         addBtn.ToolTip = null;
                     }
+
                     if (FindName("AddToLibraryButtonText") is TextBlock addText)
                     {
                         addText.Text = "Apply Online Fix";
@@ -266,13 +265,9 @@ namespace SteamPluginManager.Views
 
                     if (FindName("RestoreGameButton") is Button restoreBtn)
                     {
+                        restoreBtn.Visibility = Visibility.Visible;
                         restoreBtn.IsEnabled = true;
                         restoreBtn.ToolTip = null;
-                    }
-
-                    if (FindName("ValidationStatusBadge") is Border badge)
-                    {
-                        badge.Visibility = Visibility.Collapsed;
                     }
                 }
             }
@@ -640,6 +635,16 @@ namespace SteamPluginManager.Views
             finally
             {
                 _isActionInProgress = false;
+                if (FindName("AddToLibraryButton") is Button addBtn)
+                {
+                    addBtn.IsEnabled = true;
+                    addBtn.ToolTip = null;
+                }
+                if (FindName("RestoreGameButton") is Button restoreBtn)
+                {
+                    restoreBtn.IsEnabled = true;
+                    restoreBtn.ToolTip = null;
+                }
                 CheckSteamValidationState();
             }
         }
@@ -943,8 +948,6 @@ namespace SteamPluginManager.Views
                 await Task.Delay(500);
                 SteamHelper.VerifyGame(appId);
                 Logger.Log($"[OnlineFixDetailView] Triggered Steam integrity validation for AppID {appId}");
-
-                _isValidatingFiles = true;
 
                 UpdateProgressStep(4, true);
 

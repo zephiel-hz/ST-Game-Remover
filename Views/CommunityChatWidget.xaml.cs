@@ -234,10 +234,15 @@ namespace SteamPluginManager.Views
             {
                 Dispatcher.Invoke(() =>
                 {
+                    if (_currentProfile?.Id == userId)
+                    {
+                        _currentProfile.AvatarImage = img;
+                    }
                     foreach (var msg in _messages)
                     {
-                        if (msg.UserId == userId)
+                        if (msg.UserId == userId || (msg.IsOwnMessage && _currentProfile?.Id == userId))
                         {
+                            msg.UserId = userId;
                             msg.AvatarImage = img;
                         }
                     }
@@ -389,28 +394,38 @@ namespace SteamPluginManager.Views
 
                 if (_messages.Any(m => m.Id == msg.Id)) return;
 
-                // Match sender with existing online/offline users or existing messages to resolve UserId, AvatarUrl, and AvatarImage
-                var userMatch = _onlineUsersList.Concat(_offlineUsersList).FirstOrDefault(u =>
-                    (!string.IsNullOrWhiteSpace(msg.DeviceId) && !string.IsNullOrWhiteSpace(u.DeviceId) && string.Equals(u.DeviceId, msg.DeviceId, StringComparison.OrdinalIgnoreCase)) ||
-                    (!string.IsNullOrWhiteSpace(msg.SenderName) && !string.IsNullOrWhiteSpace(u.DisplayName) && string.Equals(u.DisplayName, msg.SenderName, StringComparison.OrdinalIgnoreCase)));
-
-                var existingMatch = _messages.FirstOrDefault(m =>
-                    (!string.IsNullOrWhiteSpace(msg.DeviceId) && !string.IsNullOrWhiteSpace(m.DeviceId) && string.Equals(m.DeviceId, msg.DeviceId, StringComparison.OrdinalIgnoreCase)) ||
-                    (!string.IsNullOrWhiteSpace(msg.SenderName) && !string.IsNullOrWhiteSpace(m.SenderName) && string.Equals(m.SenderName, msg.SenderName, StringComparison.OrdinalIgnoreCase)));
-
-                if (userMatch != null)
+                // Match sender with current profile first, then existing online/offline users or existing messages
+                if (!string.IsNullOrWhiteSpace(_currentDeviceId) && string.Equals(msg.DeviceId, _currentDeviceId, StringComparison.OrdinalIgnoreCase) && _currentProfile != null)
                 {
-                    if (userMatch.Id.HasValue) msg.UserId = userMatch.Id;
-                    msg.AvatarUrl = userMatch.AvatarUrl;
-                    msg.AvatarImage = userMatch.AvatarImage;
-                    msg.Level = userMatch.Level;
+                    if (_currentProfile.Id.HasValue) msg.UserId = _currentProfile.Id;
+                    msg.AvatarUrl = _currentProfile.AvatarUrl;
+                    msg.AvatarImage = _currentProfile.AvatarImage;
+                    msg.Level = _currentProfile.Level;
                 }
-                else if (existingMatch != null)
+                else
                 {
-                    if (existingMatch.UserId.HasValue) msg.UserId = existingMatch.UserId;
-                    msg.AvatarUrl = existingMatch.AvatarUrl;
-                    msg.AvatarImage = existingMatch.AvatarImage;
-                    msg.Level = existingMatch.Level;
+                    var userMatch = _onlineUsersList.Concat(_offlineUsersList).FirstOrDefault(u =>
+                        (!string.IsNullOrWhiteSpace(msg.DeviceId) && !string.IsNullOrWhiteSpace(u.DeviceId) && string.Equals(u.DeviceId, msg.DeviceId, StringComparison.OrdinalIgnoreCase)) ||
+                        (!string.IsNullOrWhiteSpace(msg.SenderName) && !string.IsNullOrWhiteSpace(u.DisplayName) && string.Equals(u.DisplayName, msg.SenderName, StringComparison.OrdinalIgnoreCase)));
+
+                    var existingMatch = _messages.FirstOrDefault(m =>
+                        (!string.IsNullOrWhiteSpace(msg.DeviceId) && !string.IsNullOrWhiteSpace(m.DeviceId) && string.Equals(m.DeviceId, msg.DeviceId, StringComparison.OrdinalIgnoreCase)) ||
+                        (!string.IsNullOrWhiteSpace(msg.SenderName) && !string.IsNullOrWhiteSpace(m.SenderName) && string.Equals(m.SenderName, msg.SenderName, StringComparison.OrdinalIgnoreCase)));
+
+                    if (userMatch != null)
+                    {
+                        if (userMatch.Id.HasValue) msg.UserId = userMatch.Id;
+                        msg.AvatarUrl = userMatch.AvatarUrl;
+                        msg.AvatarImage = userMatch.AvatarImage;
+                        msg.Level = userMatch.Level;
+                    }
+                    else if (existingMatch != null)
+                    {
+                        if (existingMatch.UserId.HasValue) msg.UserId = existingMatch.UserId;
+                        msg.AvatarUrl = existingMatch.AvatarUrl;
+                        msg.AvatarImage = existingMatch.AvatarImage;
+                        msg.Level = existingMatch.Level;
+                    }
                 }
 
                 if (msg.UserId.HasValue && !string.IsNullOrWhiteSpace(msg.AvatarUrl) && msg.AvatarImage == null)
@@ -831,11 +846,23 @@ namespace SteamPluginManager.Views
                     ActiveInputPanel.Visibility = Visibility.Collapsed;
                 }
 
-                // Update IsOwnMessage flags on existing messages
+                // Ensure _currentProfile has AvatarImage loaded
+                if (_currentProfile?.Id.HasValue == true && !string.IsNullOrWhiteSpace(_currentProfile.AvatarUrl) && _currentProfile.AvatarImage == null)
+                {
+                    await _currentProfile.LoadAvatarImageAsync();
+                }
+
+                // Update IsOwnMessage flags and avatar on existing messages
                 foreach (var msg in _messages)
                 {
                     msg.IsOwnMessage = !string.IsNullOrWhiteSpace(_currentDeviceId) &&
                                        string.Equals(msg.DeviceId, _currentDeviceId, StringComparison.OrdinalIgnoreCase);
+                    if (msg.IsOwnMessage && _currentProfile != null)
+                    {
+                        if (_currentProfile.Id.HasValue) msg.UserId = _currentProfile.Id;
+                        if (!string.IsNullOrWhiteSpace(_currentProfile.AvatarUrl)) msg.AvatarUrl = _currentProfile.AvatarUrl;
+                        if (_currentProfile.AvatarImage != null) msg.AvatarImage = _currentProfile.AvatarImage;
+                    }
                 }
             }
             catch (Exception ex)
@@ -894,6 +921,19 @@ namespace SteamPluginManager.Views
                     msg.IsOwnMessage = !string.IsNullOrWhiteSpace(_currentDeviceId) &&
                                        string.Equals(msg.DeviceId, _currentDeviceId, StringComparison.OrdinalIgnoreCase);
                     msg.IsOnline = CommunityChatRealtimeClient.IsUserOnline(msg.SenderName);
+
+                    if (msg.IsOwnMessage && _currentProfile != null)
+                    {
+                        if (_currentProfile.Id.HasValue) msg.UserId = _currentProfile.Id;
+                        if (!string.IsNullOrWhiteSpace(_currentProfile.AvatarUrl)) msg.AvatarUrl = _currentProfile.AvatarUrl;
+                        if (_currentProfile.AvatarImage != null) msg.AvatarImage = _currentProfile.AvatarImage;
+                    }
+
+                    if (msg.UserId.HasValue && !string.IsNullOrWhiteSpace(msg.AvatarUrl) && msg.AvatarImage == null)
+                    {
+                        _ = msg.LoadAvatarImageAsync();
+                    }
+
                     _messages.Add(msg);
                 }
 
@@ -932,6 +972,19 @@ namespace SteamPluginManager.Views
                         msg.IsOwnMessage = !string.IsNullOrWhiteSpace(_currentDeviceId) &&
                                            string.Equals(msg.DeviceId, _currentDeviceId, StringComparison.OrdinalIgnoreCase);
                         msg.IsOnline = CommunityChatRealtimeClient.IsUserOnline(msg.SenderName);
+
+                        if (msg.IsOwnMessage && _currentProfile != null)
+                        {
+                            if (_currentProfile.Id.HasValue) msg.UserId = _currentProfile.Id;
+                            if (!string.IsNullOrWhiteSpace(_currentProfile.AvatarUrl)) msg.AvatarUrl = _currentProfile.AvatarUrl;
+                            if (_currentProfile.AvatarImage != null) msg.AvatarImage = _currentProfile.AvatarImage;
+                        }
+
+                        if (msg.UserId.HasValue && !string.IsNullOrWhiteSpace(msg.AvatarUrl) && msg.AvatarImage == null)
+                        {
+                            _ = msg.LoadAvatarImageAsync();
+                        }
+
                         _messages.Add(msg);
                     }
                     EmptyChatText.Visibility = _messages.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -939,7 +992,7 @@ namespace SteamPluginManager.Views
                 }
                 else
                 {
-                    // Sync individual item properties (SenderName, Level, IsOnline) in case profile changed without new messages
+                    // Sync individual item properties (SenderName, Level, IsOnline, Avatars)
                     for (int i = 0; i < _messages.Count && i < fetched.Count; i++)
                     {
                         if (_messages[i].Id == fetched[i].Id)
@@ -949,6 +1002,21 @@ namespace SteamPluginManager.Views
                             if (_messages[i].Level != fetched[i].Level)
                                 _messages[i].Level = fetched[i].Level;
                             _messages[i].IsOnline = CommunityChatRealtimeClient.IsUserOnline(_messages[i].SenderName);
+
+                            if (fetched[i].UserId.HasValue && _messages[i].UserId != fetched[i].UserId)
+                                _messages[i].UserId = fetched[i].UserId;
+                            if (!string.IsNullOrWhiteSpace(fetched[i].AvatarUrl) && _messages[i].AvatarUrl != fetched[i].AvatarUrl)
+                                _messages[i].AvatarUrl = fetched[i].AvatarUrl;
+
+                            if (_messages[i].IsOwnMessage && _currentProfile?.AvatarImage != null)
+                            {
+                                if (_messages[i].AvatarImage != _currentProfile.AvatarImage)
+                                    _messages[i].AvatarImage = _currentProfile.AvatarImage;
+                            }
+                            else if (_messages[i].AvatarImage == null && _messages[i].UserId.HasValue && !string.IsNullOrWhiteSpace(_messages[i].AvatarUrl))
+                            {
+                                _ = _messages[i].LoadAvatarImageAsync();
+                            }
                         }
                     }
                 }
@@ -1014,6 +1082,13 @@ namespace SteamPluginManager.Views
                     {
                         sentMessage.IsOwnMessage = true;
                         sentMessage.IsOnline = true;
+                        if (_currentProfile != null)
+                        {
+                            sentMessage.UserId = _currentProfile.Id;
+                            sentMessage.AvatarUrl = _currentProfile.AvatarUrl;
+                            sentMessage.AvatarImage = _currentProfile.AvatarImage;
+                            sentMessage.Level = _currentProfile.Level;
+                        }
                         _messages.Add(sentMessage);
                         while (_messages.Count > 50)
                         {
@@ -1449,6 +1524,10 @@ namespace SteamPluginManager.Views
                     {
                         existingCurrent.IsOnline = true;
                         existingCurrent.LastSeen = DateTime.UtcNow;
+                        if (existingCurrent.AvatarImage == null && _currentProfile.AvatarImage != null)
+                        {
+                            existingCurrent.AvatarImage = _currentProfile.AvatarImage;
+                        }
                     }
                     else
                     {
@@ -1459,6 +1538,8 @@ namespace SteamPluginManager.Views
                             DisplayName = _currentProfile.DisplayName,
                             Bio = _currentProfile.Bio,
                             Level = _currentProfile.Level,
+                            AvatarUrl = _currentProfile.AvatarUrl,
+                            AvatarImage = _currentProfile.AvatarImage,
                             IsOnline = true,
                             LastSeen = DateTime.UtcNow
                         };

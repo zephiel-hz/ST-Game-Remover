@@ -156,6 +156,34 @@ namespace SteamPluginManager
             }
         }
 
+        public static async Task<List<ManifestFile>> GetMostDownloadedManifestFilesAsync(int count)
+        {
+            try
+            {
+                using (var client = new HttpClient())
+                {
+                    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {SupabaseKey}");
+                    client.DefaultRequestHeaders.Add("apikey", SupabaseKey);
+
+                    string url = $"{SupabaseUrl}/rest/v1/hzmanifest_files?select=*&order=download_count.desc.nullslast,created_at.desc&limit={count}";
+                    var response = await client.GetAsync(url);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        Console.WriteLine($"[SupabaseConfig] GetMostDownloadedManifestFilesAsync failed with status {response.StatusCode}");
+                        return new List<ManifestFile>();
+                    }
+
+                    var content = await response.Content.ReadAsStringAsync();
+                    return ParseManifestFilesFromJson(content);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SupabaseConfig] GetMostDownloadedManifestFilesAsync error: {ex.Message}");
+                return new List<ManifestFile>();
+            }
+        }
+
         public static async Task<List<ManifestFile>> GetNewestManifestFilesAsync(int count)
         {
             try
@@ -167,119 +195,110 @@ namespace SteamPluginManager
                     client.DefaultRequestHeaders.Add("Prefer", "count=exact");
 
                     string url = $"{SupabaseUrl}/rest/v1/hzmanifest_files?select=*&order=created_at.desc&limit={count}";
-                    Console.WriteLine($"[SupabaseConfig] Requesting URL: {url}");
                     var response = await client.GetAsync(url);
-
-                    Console.WriteLine($"[SupabaseConfig] Response Status: {response.StatusCode}");
-                    
-                    var content = await response.Content.ReadAsStringAsync();
-                    Console.WriteLine($"[SupabaseConfig] Response content: {content}");
-                    
                     if (!response.IsSuccessStatusCode)
                     {
-                        Console.WriteLine($"[SupabaseConfig] Request failed with status {response.StatusCode}");
+                        Console.WriteLine($"[SupabaseConfig] GetNewestManifestFilesAsync failed with status {response.StatusCode}");
                         return new List<ManifestFile>();
                     }
 
-                    if (string.IsNullOrEmpty(content))
-                    {
-                        Console.WriteLine("[SupabaseConfig] Response content is empty");
-                    }
-                    else
-                    {
-                        Console.WriteLine($"[SupabaseConfig] Response content (first 500 chars): {content.Substring(0, Math.Min(500, content.Length))}");
-                    }
-                    
-                    var manifests = new List<ManifestFile>();
-                    try
-                    {
-                        using var document = JsonDocument.Parse(content);
-                        if (document.RootElement.ValueKind == JsonValueKind.Array)
-                        {
-                            foreach (var item in document.RootElement.EnumerateArray())
-                            {
-                                if (item.ValueKind != JsonValueKind.Object)
-                                    continue;
-
-                                var manifest = new ManifestFile();
-                                if (item.TryGetProperty("id", out var idElement) && idElement.TryGetInt32(out var id))
-                                    manifest.Id = id;
-
-                                if (item.TryGetProperty("app_id", out var appIdElement) && appIdElement.TryGetInt32(out var appId))
-                                    manifest.AppId = appId;
-
-                                if (item.TryGetProperty("file_name", out var fileNameElement))
-                                    manifest.FileName = fileNameElement.GetString() ?? "";
-
-                                if (item.TryGetProperty("name", out var nameElement))
-                                    manifest.Name = nameElement.GetString() ?? "";
-
-                                if (item.TryGetProperty("version", out var versionElement))
-                                    manifest.Version = versionElement.GetString() ?? "";
-
-                                if (item.TryGetProperty("file_size", out var fileSizeElement))
-                                    manifest.FileSize = fileSizeElement.GetString() ?? "";
-
-                                if (item.TryGetProperty("updated_date", out var updatedDateElement))
-                                    manifest.UpdatedDate = updatedDateElement.GetString() ?? "";
-
-                                if (item.TryGetProperty("url", out var urlElement))
-                                    manifest.FileUrl = urlElement.GetString() ?? "";
-
-                                if (item.TryGetProperty("storage_type", out var storageTypeElement))
-                                    manifest.StorageType = storageTypeElement.GetString() ?? "zip";
-
-                                if (item.TryGetProperty("folder_path", out var folderPathElement))
-                                    manifest.FolderPath = folderPathElement.GetString() ?? "";
-
-                                if (item.TryGetProperty("description", out var descriptionElement))
-                                    manifest.Description = descriptionElement.GetString() ?? "";
-
-                                if (item.TryGetProperty("genre", out var genreElement))
-                                    manifest.Genre = genreElement.GetString() ?? "";
-
-                                if (item.TryGetProperty("download_count", out var downloadCountElement) && downloadCountElement.TryGetInt32(out var downloadCount))
-                                    manifest.DownloadCount = downloadCount;
-
-                                if (item.TryGetProperty("minimum_requirements", out var minimumRequirementsElement))
-                                    manifest.MinimumRequirements = minimumRequirementsElement.GetString() ?? "";
-
-                                if (item.TryGetProperty("recommended_requirements", out var recommendedRequirementsElement))
-                                    manifest.RecommendedRequirements = recommendedRequirementsElement.GetString() ?? "";
-
-                                if (item.TryGetProperty("is_adult", out var adultElement))
-                                {
-                                    manifest.IsAdult = TryParseBooleanLike(adultElement);
-                                }
-
-                                if (item.TryGetProperty("created_at", out var createdAtElement) && createdAtElement.ValueKind == JsonValueKind.String)
-                                {
-                                    if (DateTime.TryParse(createdAtElement.GetString(), out var createdAt))
-                                        manifest.CreatedAt = createdAt;
-                                }
-
-                                if (item.TryGetProperty("thumbnail_path", out var thumbnailPathElement))
-                                    manifest.ThumbnailPath = thumbnailPathElement.GetString() ?? "";
-
-                                manifests.Add(manifest);
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[SupabaseConfig] Manual manifest parsing failed: {ex.Message}");
-                    }
-
-                    Console.WriteLine($"[SupabaseConfig] Deserialized {manifests.Count} manifests");
-                    return manifests;
+                    var content = await response.Content.ReadAsStringAsync();
+                    return ParseManifestFilesFromJson(content);
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[SupabaseConfig] GetNewestManifestFilesAsync error: {ex.Message}");
-                Console.WriteLine($"[SupabaseConfig] Stack trace: {ex.StackTrace}");
                 return new List<ManifestFile>();
             }
+        }
+
+        internal static List<ManifestFile> ParseManifestFilesFromJson(string content)
+        {
+            var manifests = new List<ManifestFile>();
+            if (string.IsNullOrWhiteSpace(content))
+                return manifests;
+
+            try
+            {
+                using var document = JsonDocument.Parse(content);
+                if (document.RootElement.ValueKind != JsonValueKind.Array)
+                    return manifests;
+
+                foreach (var item in document.RootElement.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.Object)
+                        continue;
+
+                    var manifest = new ManifestFile();
+                    if (item.TryGetProperty("id", out var idElement) && idElement.TryGetInt32(out var id))
+                        manifest.Id = id;
+
+                    if (item.TryGetProperty("app_id", out var appIdElement) && appIdElement.TryGetInt32(out var appId))
+                        manifest.AppId = appId;
+
+                    if (item.TryGetProperty("file_name", out var fileNameElement))
+                        manifest.FileName = fileNameElement.GetString() ?? "";
+
+                    if (item.TryGetProperty("name", out var nameElement))
+                        manifest.Name = nameElement.GetString() ?? "";
+
+                    if (item.TryGetProperty("version", out var versionElement))
+                        manifest.Version = versionElement.GetString() ?? "";
+
+                    if (item.TryGetProperty("file_size", out var fileSizeElement))
+                        manifest.FileSize = fileSizeElement.GetString() ?? "";
+
+                    if (item.TryGetProperty("updated_date", out var updatedDateElement))
+                        manifest.UpdatedDate = updatedDateElement.GetString() ?? "";
+
+                    if (item.TryGetProperty("url", out var urlElement))
+                        manifest.FileUrl = urlElement.GetString() ?? "";
+
+                    if (item.TryGetProperty("storage_type", out var storageTypeElement))
+                        manifest.StorageType = storageTypeElement.GetString() ?? "zip";
+
+                    if (item.TryGetProperty("folder_path", out var folderPathElement))
+                        manifest.FolderPath = folderPathElement.GetString() ?? "";
+
+                    if (item.TryGetProperty("description", out var descriptionElement))
+                        manifest.Description = descriptionElement.GetString() ?? "";
+
+                    if (item.TryGetProperty("genre", out var genreElement))
+                        manifest.Genre = genreElement.GetString() ?? "";
+
+                    if (item.TryGetProperty("download_count", out var downloadCountElement) && downloadCountElement.TryGetInt32(out var downloadCount))
+                        manifest.DownloadCount = downloadCount;
+
+                    if (item.TryGetProperty("minimum_requirements", out var minimumRequirementsElement))
+                        manifest.MinimumRequirements = minimumRequirementsElement.GetString() ?? "";
+
+                    if (item.TryGetProperty("recommended_requirements", out var recommendedRequirementsElement))
+                        manifest.RecommendedRequirements = recommendedRequirementsElement.GetString() ?? "";
+
+                    if (item.TryGetProperty("is_adult", out var adultElement))
+                    {
+                        manifest.IsAdult = TryParseBooleanLike(adultElement);
+                    }
+
+                    if (item.TryGetProperty("created_at", out var createdAtElement) && createdAtElement.ValueKind == JsonValueKind.String)
+                    {
+                        if (DateTime.TryParse(createdAtElement.GetString(), out var createdAt))
+                            manifest.CreatedAt = createdAt;
+                    }
+
+                    if (item.TryGetProperty("thumbnail_path", out var thumbnailPathElement))
+                        manifest.ThumbnailPath = thumbnailPathElement.GetString() ?? "";
+
+                    manifests.Add(manifest);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SupabaseConfig] ParseManifestFilesFromJson failed: {ex.Message}");
+            }
+
+            return manifests;
         }
 
         private static bool TryParseBooleanLike(JsonElement element)

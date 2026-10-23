@@ -64,13 +64,24 @@ namespace SteamPluginManager.Services.API
                         var profiles = JsonSerializer.Deserialize<List<UserProfile>>(profContent, _jsonOptions);
                         if (profiles != null && profiles.Count > 0)
                         {
-                            var deviceMap = profiles
-                                .Where(p => !string.IsNullOrWhiteSpace(p.DeviceId))
-                                .ToDictionary(p => p.DeviceId, p => p, StringComparer.OrdinalIgnoreCase);
+                            var deviceMap = new Dictionary<string, UserProfile>(StringComparer.OrdinalIgnoreCase);
+                            var nameMap = new Dictionary<string, UserProfile>(StringComparer.OrdinalIgnoreCase);
 
-                            var nameMap = profiles
-                                .Where(p => !string.IsNullOrWhiteSpace(p.DisplayName))
-                                .ToDictionary(p => p.DisplayName.Trim().TrimStart('@'), p => p, StringComparer.OrdinalIgnoreCase);
+                            foreach (var p in profiles)
+                            {
+                                if (!string.IsNullOrWhiteSpace(p.DeviceId) && !deviceMap.ContainsKey(p.DeviceId))
+                                {
+                                    deviceMap[p.DeviceId] = p;
+                                }
+                                if (!string.IsNullOrWhiteSpace(p.DisplayName))
+                                {
+                                    var cleanName = p.DisplayName.Trim().TrimStart('@');
+                                    if (!string.IsNullOrWhiteSpace(cleanName) && !nameMap.ContainsKey(cleanName))
+                                    {
+                                        nameMap[cleanName] = p;
+                                    }
+                                }
+                            }
 
                             foreach (var msg in messages)
                             {
