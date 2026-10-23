@@ -2,13 +2,24 @@
 
 ---
 
+## [3.1.1] - 2026-10-23
+
+### Added
+* **Online-Fix Restore Feature:** Easily restore modified games to their original state by automatically removing tracked Online-Fix files and triggering Steam file integrity verification.
+
+### Fixed
+* **Clean Game Uninstall:** Fixed an issue where uninstalling games left leftover files and folders behind due to a manifest detection deadlock; game folders and unmanaged files are now completely wiped upon uninstall completion.
+* **Online-Fix File Validation Protection:** Temporarily disables applying Online-Fix while Steam is actively validating or verifying game files to avoid conflicts.
+* **Game Library Selection Gesture:** Fixed selection mode activation so hold/long-press on library cards triggers consistently on the first attempt.
+
+---
+
 ## [3.1.0] - 2026-10-20
 
 ### Added
 * **Custom Launch Configuration:** Configure custom executable targets (`.exe`), batch scripts (`.bat`, `.cmd`), custom arguments, and working directories directly from the Game Library detail view.
 * **Authentic Desktop Shortcuts:** Create desktop shortcuts that follow your custom launch configurations while automatically resolving and preserving authentic original game icons.
 * **Custom Launch Tutorials & One-Click Auto-Apply:** Game Bypass and Online-Fix detail views now feature step-by-step custom launch guides with an **Auto-Apply Settings** button to configure launch settings with one click.
-* **Online-Fix Restore Feature:** Easily restore modified games to their original state by automatically removing tracked Online-Fix files and triggering Steam file integrity verification.
 * **GameBypass Publisher & DRM Categorization:** Organized GameBypass catalog into publisher and DRM categories (Denuvo, Ubisoft, EA, Rockstar, and Others) with interactive filter badges.
 * **Seamless In-App Library Navigation:** Added quick "Open Game in Library" navigation from Game Bypass and Online-Fix pages to immediately jump to your local library game details.
 
@@ -19,9 +30,6 @@
 * **Custom Launch Safeguards:** Added checks ensuring custom launch settings and auto-apply tutorials can only be configured if the game is already installed in your local Steam library.
 
 ### Fixed
-* **Clean Game Uninstall:** Fixed an issue where uninstalling games left leftover files and folders behind due to a manifest detection deadlock; game folders and unmanaged files are now completely wiped upon uninstall completion.
-* **Online-Fix File Validation Protection:** Temporarily disables applying Online-Fix while Steam is actively validating or verifying game files to avoid conflicts.
-* **Game Library Selection Gesture:** Fixed selection mode activation so hold/long-press on library cards triggers consistently on the first attempt.
 * **Installation & Download Action States:** Action buttons now correctly adapt to real-time installed, not installed, and downloading states.
 * **Sub-DLC Detection Accuracy:** Improved accuracy of installed detection for sub-DLC items across Steam libraries.
 * **Cloud Storage Streaming:** Enhanced connection stability and download streaming for GameBypass and Online-Fix asset packages.
