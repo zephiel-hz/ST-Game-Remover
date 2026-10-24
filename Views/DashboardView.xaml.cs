@@ -24,6 +24,7 @@ using System.Management;
 using System.Linq;
 using System.Net.NetworkInformation;
 using SteamPluginManager.Models;
+using SteamPluginManager.Services.Security;
 
 namespace SteamPluginManager.Views
 {
@@ -1649,6 +1650,9 @@ namespace SteamPluginManager.Views
             try
             {
                 string deviceId = GetDeviceId();
+                if (!DeviceIdentifier.IsValidDeviceId(deviceId))
+                    return false;
+
                 if (await IsDeviceBlockedAsync(deviceId))
                 {
                     Logger.Log($"[DashboardView] Access denied: Hardware ID '{deviceId}' is permanently blocked.");
@@ -1658,13 +1662,30 @@ namespace SteamPluginManager.Views
                 var http = SharedHttpClient.Instance;
                 var queryDeviceId = Uri.EscapeDataString(deviceId);
                 var url = $"{SupabaseConfig.SupabaseUrl}/rest/v1/device_tokens?or=(device_id.eq.{queryDeviceId},device_ids.cs.{{{queryDeviceId}}})&select=device_id,device_ids,is_active";
-                var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.Add("apikey", SupabaseConfig.SupabaseKey);
-                request.Headers.Add("Authorization", $"Bearer {SupabaseConfig.SupabaseKey}");
-                request.Headers.Add("Accept", "application/json");
 
-                var response = await http.SendAsync(request);
-                if (!response.IsSuccessStatusCode)
+                // Toleransi network startup (coba hingga 3x jika koneksi internet masih inisialisasi)
+                HttpResponseMessage? response = null;
+                for (int attempt = 0; attempt < 3; attempt++)
+                {
+                    try
+                    {
+                        var request = new HttpRequestMessage(HttpMethod.Get, url);
+                        request.Headers.Add("apikey", SupabaseConfig.SupabaseKey);
+                        request.Headers.Add("Authorization", $"Bearer {SupabaseConfig.SupabaseKey}");
+                        request.Headers.Add("Accept", "application/json");
+
+                        response = await http.SendAsync(request);
+                        if (response.IsSuccessStatusCode)
+                            break;
+                    }
+                    catch
+                    {
+                        if (attempt == 2) throw;
+                        await Task.Delay(400);
+                    }
+                }
+
+                if (response == null || !response.IsSuccessStatusCode)
                     return false;
 
                 var content = await response.Content.ReadAsStringAsync();
@@ -1715,67 +1736,7 @@ namespace SteamPluginManager.Views
 
         public static string GetDeviceId()
         {
-            try
-            {
-                // Get stable hardware ID (motherboard serial or MAC address)
-                // Using ONLY hardware ID so token remains valid even if user changes device name
-                return GetMotherboardHardwareId();
-            }
-            catch { return "UNKNOWN"; }
-        }
-
-        private static string GetMotherboardHardwareId()
-        {
-            try
-            {
-                // Try to get Motherboard Serial Number from WMI
-                using (var searcher = new ManagementObjectSearcher("Select SerialNumber from Win32_BaseBoard"))
-                {
-                    foreach (ManagementObject obj in searcher.Get())
-                    {
-                        string serialNumber = obj["SerialNumber"]?.ToString();
-                        if (!string.IsNullOrWhiteSpace(serialNumber) && IsValidSerialNumber(serialNumber))
-                        {
-                            return serialNumber;
-                        }
-                    }
-                }
-
-                // Fallback: Get first stable MAC address if motherboard ID fails or is invalid
-                var macAddress = NetworkInterface
-                    .GetAllNetworkInterfaces()
-                    .Where(nic => nic.OperationalStatus == OperationalStatus.Up &&
-                                  !string.IsNullOrEmpty(nic.GetPhysicalAddress().ToString()))
-                    .Select(nic => nic.GetPhysicalAddress().ToString())
-                    .FirstOrDefault() ?? "UNKNOWN";
-
-                return macAddress;
-            }
-            catch { return "UNKNOWN"; }
-        }
-
-        private static bool IsValidSerialNumber(string serialNumber)
-        {
-            // Reject common default/invalid values
-            string lower = serialNumber.ToLower().Trim();
-            
-            var invalidValues = new[]
-            {
-                "0000000", "00000000", "000000000000",
-                "default string", "default", "system default",
-                "not available", "not specified", "unknown",
-                "system reserved", "pending",
-                "to be filled by o.e.m.", "empty", "none", "n/a"
-            };
-
-            if (invalidValues.Contains(lower))
-                return false;
-
-            // Reject if only contains zeros or hyphens/spaces
-            if (string.IsNullOrWhiteSpace(serialNumber.Replace("0", "").Replace("-", "").Replace(" ", "")))
-                return false;
-
-            return true;
+            return DeviceIdentifier.GetDeviceId();
         }
     }
 }

@@ -13,11 +13,14 @@ using System.Windows.Threading;
 using SteamPluginManager.Models;
 using SteamPluginManager.Services.API;
 using SteamPluginManager.Services.Profile;
+using SteamPluginManager.Services.SystemTray;
 
 namespace SteamPluginManager.Views
 {
     public partial class MainShell : Window
     {
+        private SystemTrayService? _systemTrayService;
+        private bool _isExplicitExit = false;
         private bool _isSidebarExpanded = true;
         private bool _isMaximized = false;
         private bool _isTransitioning = false;
@@ -57,11 +60,39 @@ namespace SteamPluginManager.Views
         {
             if (_isClosingHandled) return;
 
+            // Check if minimize to system tray is enabled and this is not an explicit exit
+            if (!_isExplicitExit && SystemTrayPreferences.IsCloseToTrayEnabled())
+            {
+                e.Cancel = true;
+
+                // First time notice dialog
+                if (!SystemTrayPreferences.HasShownCloseToTrayNotice())
+                {
+                    SystemTrayPreferences.SaveShownCloseToTrayNotice(true);
+
+                    ModernMessageBox.Show(
+                        "HZ Lua Manager is now running in the background (System Tray).\n\n" +
+                        "The application remains active for library sync and community chat.\n\n" +
+                        "• Click the icon in the system tray (bottom-right taskbar) to reopen the app.\n" +
+                        "• To close completely, right-click the system tray icon and select 'Exit Application'.\n\n" +
+                        "You can disable this behavior anytime in Settings.",
+                        "Running in System Tray",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information
+                    );
+                }
+
+                HideToTray();
+                return;
+            }
+
             e.Cancel = true;
             _isClosingHandled = true;
 
             try
             {
+                _systemTrayService?.RemoveTrayIcon();
+
                 string deviceId = DashboardView.GetDeviceId();
                 string? currentUsername = HeaderProfileName?.Text;
 
@@ -79,10 +110,57 @@ namespace SteamPluginManager.Views
             }
         }
 
+        public void RestoreFromTray()
+        {
+            try
+            {
+                if (Visibility != Visibility.Visible)
+                {
+                    Show();
+                }
+
+                if (WindowState == WindowState.Minimized)
+                {
+                    WindowState = WindowState.Normal;
+                }
+
+                Activate();
+                Topmost = true;
+                Topmost = false;
+                Focus();
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[MainShell] RestoreFromTray error: {ex.Message}");
+            }
+        }
+
+        public void HideToTray()
+        {
+            try
+            {
+                Hide();
+                _systemTrayService?.UpdateTrayIcon();
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[MainShell] HideToTray error: {ex.Message}");
+            }
+        }
+
+        public void ExitApplication()
+        {
+            _isExplicitExit = true;
+            _systemTrayService?.RemoveTrayIcon();
+            Close();
+        }
+
         private void MainShell_Closed(object? sender, EventArgs e)
         {
             try
             {
+                _systemTrayService?.Dispose();
+                _systemTrayService = null;
                 CommunityChatRealtimeClient.OnMessageReceived -= HandleChatNotification;
                 _notificationToastTimer?.Stop();
                 _steamMonitorTimer?.Stop();
@@ -148,6 +226,39 @@ namespace SteamPluginManager.Views
             ProfilePictureCacheService.OnAvatarUpdated += HandleAvatarUpdated;
 
             _ = LoadUserProfileHeaderAsync();
+
+            // Initialize System Tray service
+            try
+            {
+                _systemTrayService = new SystemTrayService(
+                    this,
+                    onRestoreAction: () => RestoreFromTray(),
+                    onOpenSettingsAction: () =>
+                    {
+                        RestoreFromTray();
+                        NavigateToSettings();
+                    },
+                    onExitAction: () => ExitApplication(),
+                    onNotificationClickAction: () =>
+                    {
+                        RestoreFromTray();
+                        if (GlobalChatWidget != null)
+                        {
+                            GlobalChatWidget.Visibility = Visibility.Visible;
+                            GlobalChatWidget.Expand();
+                            if (_lastNotificationTargetId.HasValue)
+                            {
+                                GlobalChatWidget.ScrollToAndHighlightMessage(_lastNotificationTargetId.Value);
+                            }
+                        }
+                    }
+                );
+                _systemTrayService.Initialize();
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[MainShell] Failed to initialize SystemTrayService: {ex.Message}");
+            }
 
             await CheckStartupActivationAsync();
         }
@@ -1223,7 +1334,33 @@ namespace SteamPluginManager.Views
                 bool isReplied = !string.IsNullOrWhiteSpace(msg.ReplyToSender) &&
                                  string.Equals(msg.ReplyToSender.Trim(), currentName, StringComparison.OrdinalIgnoreCase);
 
-                if (!isMentioned && !isReplied) return;
+                _lastNotificationTargetId = msg.Id;
+
+                string notificationTitle = isReplied
+                    ? $"@{msg.SenderName} replied to your message"
+                    : $"@{msg.SenderName} mentioned you";
+
+                string notificationBody = msg.Message.Length > 120
+                    ? msg.Message.Substring(0, 117) + "..."
+                    : msg.Message;
+
+                // Check if application is in system tray mode (hidden or minimized)
+                bool isHiddenOrMinimized = Visibility != Visibility.Visible || WindowState == WindowState.Minimized || !IsVisible;
+
+                if (isHiddenOrMinimized)
+                {
+                    if (SystemTrayPreferences.IsTrayChatNotificationEnabled())
+                    {
+                        _systemTrayService?.ShowNotification(notificationTitle, notificationBody);
+                    }
+                    return;
+                }
+
+                // Also show desktop notification if window is open but unfocused (user working/gaming elsewhere)
+                if (!IsActive && SystemTrayPreferences.IsTrayChatNotificationEnabled())
+                {
+                    _systemTrayService?.ShowNotification(notificationTitle, notificationBody);
+                }
 
                 if (msg.AvatarImage != null)
                 {
@@ -1238,17 +1375,12 @@ namespace SteamPluginManager.Views
                     ToastAvatarInitial.Text = msg.AvatarInitial;
                     ToastAvatarInitial.Visibility = Visibility.Visible;
                 }
-                if (isReplied)
-                {
-                    ToastTitleText.Text = $"↩ @{msg.SenderName} membalas pesan Anda";
-                }
-                else
-                {
-                    ToastTitleText.Text = $"💬 @{msg.SenderName} me-mention Anda";
-                }
+
+                ToastTitleText.Text = isReplied
+                    ? $"↩ @{msg.SenderName} replied to your message"
+                    : $"💬 @{msg.SenderName} mentioned you";
 
                 ToastBodyText.Text = msg.Message.Length > 60 ? msg.Message.Substring(0, 57) + "..." : msg.Message;
-                _lastNotificationTargetId = msg.Id;
 
                 InAppNotificationToast.Visibility = Visibility.Visible;
 

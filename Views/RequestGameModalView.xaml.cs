@@ -17,6 +17,7 @@ using System.Windows.Media.Animation;
 using SteamPluginManager.Helpers;
 using SteamPluginManager.Services;
 using SteamPluginManager.Services.ResourcePipeline;
+using SteamPluginManager.Services.Security;
 
 namespace SteamPluginManager.Views
 {
@@ -1018,7 +1019,7 @@ namespace SteamPluginManager.Views
         {
             try
             {
-                return GetMotherboardHardwareId();
+                return DeviceIdentifier.GetDeviceId();
             }
             catch (Exception ex)
             {
@@ -1037,60 +1038,6 @@ namespace SteamPluginManager.Views
             var guidBytes = new byte[16];
             Array.Copy(hash, guidBytes, 16);
             return new Guid(guidBytes);
-        }
-
-        private static string GetMotherboardHardwareId()
-        {
-            try
-            {
-                using (var searcher = new ManagementObjectSearcher("Select SerialNumber from Win32_BaseBoard"))
-                {
-                    foreach (ManagementObject obj in searcher.Get())
-                    {
-                        string? serialNumber = obj["SerialNumber"]?.ToString();
-                        if (!string.IsNullOrWhiteSpace(serialNumber) && IsValidSerialNumber(serialNumber))
-                        {
-                            return serialNumber;
-                        }
-                    }
-                }
-
-                var macAddress = NetworkInterface
-                    .GetAllNetworkInterfaces()
-                    .Where(nic => nic.OperationalStatus == OperationalStatus.Up &&
-                                  !string.IsNullOrEmpty(nic.GetPhysicalAddress().ToString()))
-                    .Select(nic => nic.GetPhysicalAddress().ToString())
-                    .FirstOrDefault() ?? "UNKNOWN";
-
-                return macAddress;
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"[RequestGameModalView] [GetMotherboardHardwareId] Error: {ex.Message}");
-                return "UNKNOWN";
-            }
-        }
-
-        private static bool IsValidSerialNumber(string serialNumber)
-        {
-            string lower = serialNumber.ToLower().Trim();
-
-            var invalidValues = new[]
-            {
-                "0000000", "00000000", "000000000000",
-                "default string", "default", "system default",
-                "not available", "not specified", "unknown",
-                "system reserved", "pending",
-                "to be filled by o.e.m.", "empty", "none", "n/a"
-            };
-
-            if (invalidValues.Contains(lower))
-                return false;
-
-            if (string.IsNullOrWhiteSpace(serialNumber.Replace("0", "").Replace("-", "").Replace(" ", "")))
-                return false;
-
-            return true;
         }
 
         #endregion

@@ -515,6 +515,62 @@
                                 <!-- Divider -->
                                 <Border Height="1" Background="{DynamicResource BorderBrush}" Opacity="0.3" Margin="0,8"/>
 
+                                <!-- Row: Minimize to System Tray -->
+                                <Grid Margin="0,6,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Grid.Column="0" Width="34" Height="34" CornerRadius="8" Background="{DynamicResource ButtonBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Margin="0,0,12,0" VerticalAlignment="Center">
+                                        <TextBlock Text="&#xE718;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
+                                        <TextBlock x:Name="SettingsCloseToTrayLabel" Text="Minimize to System Tray on Close" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}"/>
+                                        <TextBlock x:Name="SettingsCloseToTrayDesc" Text="Keep HZ Lua Manager running in the system tray when closing the window" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+
+                                    <ToggleButton Grid.Column="2"
+                                                  x:Name="CloseToTrayCheckBox"
+                                                  VerticalAlignment="Center"
+                                                  Style="{StaticResource SettingsSwitchStyle}"
+                                                  Checked="CloseToTrayCheckBox_Changed"
+                                                  Unchecked="CloseToTrayCheckBox_Changed"/>
+                                </Grid>
+
+                                <!-- Divider -->
+                                <Border Height="1" Background="{DynamicResource BorderBrush}" Opacity="0.3" Margin="0,8"/>
+
+                                <!-- Row: Chat Notifications in System Tray -->
+                                <Grid Margin="0,6,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Grid.Column="0" Width="34" Height="34" CornerRadius="8" Background="{DynamicResource ButtonBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Margin="0,0,12,0" VerticalAlignment="Center">
+                                        <TextBlock Text="&#xE8BD;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
+                                        <TextBlock x:Name="SettingsTrayNotificationLabel" Text="Chat Notifications in System Tray" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}"/>
+                                        <TextBlock x:Name="SettingsTrayNotificationDesc" Text="Show desktop notifications when mentioned or replied to while in system tray" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+
+                                    <ToggleButton Grid.Column="2"
+                                                  x:Name="TrayNotificationCheckBox"
+                                                  VerticalAlignment="Center"
+                                                  Style="{StaticResource SettingsSwitchStyle}"
+                                                  Checked="TrayNotificationCheckBox_Changed"
+                                                  Unchecked="TrayNotificationCheckBox_Changed"/>
+                                </Grid>
+
+                                <!-- Divider -->
+                                <Border Height="1" Background="{DynamicResource BorderBrush}" Opacity="0.3" Margin="0,8"/>
+
                                 <!-- Row: Application Cache -->
                                 <Grid Margin="0,6,0,6">
                                     <Grid.ColumnDefinitions>

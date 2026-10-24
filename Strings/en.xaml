@@ -135,6 +135,10 @@
   <sys:String x:Key="Settings.AutoUpdate">AUTO UPDATE</sys:String>
   <sys:String x:Key="Settings.AutoUpdateLabel">Enable Auto-Update</sys:String>
   <sys:String x:Key="Settings.AutoUpdateDesc">Automatically check for new versions when the app starts</sys:String>
+  <sys:String x:Key="Settings.CloseToTrayLabel">Minimize to System Tray on Close</sys:String>
+  <sys:String x:Key="Settings.CloseToTrayDesc">Keep HZ Lua Manager running in the system tray when closing the window</sys:String>
+  <sys:String x:Key="Settings.TrayNotificationLabel">Chat Notifications in System Tray</sys:String>
+  <sys:String x:Key="Settings.TrayNotificationDesc">Show desktop notifications when mentioned or replied to while in system tray</sys:String>
   <sys:String x:Key="Settings.Cache">CACHE</sys:String>
   <sys:String x:Key="Settings.CacheInfo">Only unused cache will be cleared. Active game data is preserved.</sys:String>
   <sys:String x:Key="Settings.Theme">THEME</sys:String>

@@ -151,6 +151,7 @@ namespace SteamPluginManager.Services.Profile
                         {
                             _memoryCache[uid] = img;
                             _negativeCache.TryRemove(uid, out _);
+                            OnAvatarUpdated?.Invoke(uid, img);
                             return img;
                         }
                     }

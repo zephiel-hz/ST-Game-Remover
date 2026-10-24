@@ -10,6 +10,7 @@ using System.Net.NetworkInformation;
 using System.Management;
 using System.Text.Json.Serialization;
 using SteamPluginManager;
+using SteamPluginManager.Services.Security;
 
 namespace SteamPluginManager.Views
 {
@@ -284,106 +285,15 @@ namespace SteamPluginManager.Views
         {
             try
             {
-                // Get stable hardware ID (motherboard serial or MAC address)
-                // NOTE: Using ONLY hardware ID (not machine name) so token remains valid
-                // even if user changes their device name
-                string deviceId = GetMotherboardHardwareId();
-                Logger.Log($"[VerifyTokenView] Generated device ID: {deviceId}");
-                
+                string deviceId = DeviceIdentifier.GetDeviceId();
+                Logger.Log($"[VerifyTokenView] Resolved stable device ID: {deviceId}");
                 return deviceId;
             }
             catch (Exception ex)
             {
-                Logger.Log($"[VerifyTokenView] Error generating device ID: {ex.Message}");
+                Logger.Log($"[VerifyTokenView] Error getting device ID: {ex.Message}");
                 return "UNKNOWN";
             }
-        }
-
-        private string GetMotherboardHardwareId()
-        {
-            try
-            {
-                // Try to get Motherboard Serial Number from WMI
-                using (var searcher = new ManagementObjectSearcher("Select SerialNumber from Win32_BaseBoard"))
-                {
-                    foreach (ManagementObject obj in searcher.Get())
-                    {
-                        string serialNumber = obj["SerialNumber"]?.ToString();
-                        if (!string.IsNullOrWhiteSpace(serialNumber) && IsValidSerialNumber(serialNumber))
-                        {
-                            Logger.Log($"[GetMotherboardHardwareId] Found Motherboard Serial: {serialNumber}");
-                            return serialNumber;
-                        }
-                        else if (!string.IsNullOrWhiteSpace(serialNumber))
-                        {
-                            Logger.Log($"[GetMotherboardHardwareId] Motherboard serial is invalid/default: '{serialNumber}', will use MAC address instead");
-                        }
-                    }
-                }
-
-                // Fallback: Get first stable MAC address if motherboard ID fails or is invalid
-                Logger.Log("[GetMotherboardHardwareId] Motherboard serial not available or invalid, using MAC address fallback");
-                var macAddress = NetworkInterface
-                    .GetAllNetworkInterfaces()
-                    .Where(nic => nic.OperationalStatus == OperationalStatus.Up &&
-                                  !string.IsNullOrEmpty(nic.GetPhysicalAddress().ToString()))
-                    .Select(nic => nic.GetPhysicalAddress().ToString())
-                    .FirstOrDefault() ?? "UNKNOWN";
-
-                if (macAddress == "UNKNOWN")
-                {
-                    Logger.Log("[GetMotherboardHardwareId] WARNING: Could not get MAC address, using fallback UNKNOWN");
-                }
-
-                return macAddress;
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"[GetMotherboardHardwareId] Error: {ex.Message}");
-                return "UNKNOWN";
-            }
-        }
-
-        private bool IsValidSerialNumber(string serialNumber)
-        {
-            // Reject common default/invalid values
-            string lower = serialNumber.ToLower().Trim();
-            
-            // List of invalid/default values to reject
-            var invalidValues = new[]
-            {
-                "0000000",
-                "00000000",
-                "000000000000",
-                "default string",
-                "default",
-                "system default",
-                "not available",
-                "not specified",
-                "unknown",
-                "system reserved",
-                "pending",
-                "to be filled by o.e.m.",
-                "empty",
-                "none",
-                "n/a"
-            };
-
-            // Check if serial number matches any invalid pattern
-            if (invalidValues.Contains(lower))
-            {
-                Logger.Log($"[IsValidSerialNumber] Rejected invalid serial: {serialNumber}");
-                return false;
-            }
-
-            // Reject if only contains zeros or hyphens/spaces
-            if (string.IsNullOrWhiteSpace(serialNumber.Replace("0", "").Replace("-", "").Replace(" ", "")))
-            {
-                Logger.Log($"[IsValidSerialNumber] Rejected all-zeros serial: {serialNumber}");
-                return false;
-            }
-
-            return true;
         }
 
         private async System.Threading.Tasks.Task<VerificationResult> VerifyTokenAsync(string token, string deviceId)
@@ -472,7 +382,7 @@ namespace SteamPluginManager.Views
                     var updateUrl = $"{SupabaseConfig.SupabaseUrl}/rest/v1/device_tokens?token=eq.{escapedTokenForUpdate}";
                     var updateBody = new
                     {
-                        device_id = tokenRecord.device_id ?? deviceId,
+                        device_id = updatedDeviceIds.FirstOrDefault() ?? deviceId,
                         device_ids = updatedDeviceIds,
                         verified_at = DateTime.UtcNow
                     };
@@ -521,14 +431,14 @@ namespace SteamPluginManager.Views
         private static List<string> GetBoundDeviceIds(TokenRecord tokenRecord)
         {
             var boundDeviceIds = tokenRecord.device_ids?
-                .Where(deviceId => !string.IsNullOrWhiteSpace(deviceId))
-                .Select(deviceId => deviceId.Trim())
+                .Where(id => DeviceIdentifier.IsValidDeviceId(id))
+                .Select(id => id.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList() ?? new List<string>();
 
-            if (boundDeviceIds.Count == 0 && !string.IsNullOrWhiteSpace(tokenRecord.device_id))
+            if (boundDeviceIds.Count == 0 && DeviceIdentifier.IsValidDeviceId(tokenRecord.device_id))
             {
-                boundDeviceIds.Add(tokenRecord.device_id.Trim());
+                boundDeviceIds.Add(tokenRecord.device_id!.Trim());
             }
 
             return boundDeviceIds;

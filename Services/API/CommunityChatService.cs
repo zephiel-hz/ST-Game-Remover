@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using SteamPluginManager.Models;
+using SteamPluginManager.Services.Security;
 
 namespace SteamPluginManager.Services.API
 {
@@ -51,7 +52,7 @@ namespace SteamPluginManager.Services.API
                 // Ambil data user_profiles terkini agar seluruh riwayat pesan selalu menampilkan username, badge level, dan avatar terbaru
                 try
                 {
-                    var profilesUrl = $"{SupabaseConfig.SupabaseUrl}/rest/v1/user_profiles?select=id,device_id,display_name,level,avatar_url&display_name=not.is.null&limit=1000";
+                    var profilesUrl = $"{SupabaseConfig.SupabaseUrl}/rest/v1/user_profiles?select=id,device_id,display_name,level,avatar_url&display_name=not.is.null&order=last_seen.desc.nullslast&limit=1000";
                     using var profReq = new HttpRequestMessage(HttpMethod.Get, profilesUrl);
                     profReq.Headers.Add("apikey", SupabaseConfig.SupabaseKey);
                     profReq.Headers.Add("Authorization", $"Bearer {SupabaseConfig.SupabaseKey}");
@@ -69,14 +70,20 @@ namespace SteamPluginManager.Services.API
 
                             foreach (var p in profiles)
                             {
-                                if (!string.IsNullOrWhiteSpace(p.DeviceId) && !deviceMap.ContainsKey(p.DeviceId))
+                                // Hanya daftarkan ke deviceMap jika DeviceId valid (bukan 'Not applicable' / 'UNKNOWN')
+                                if (DeviceIdentifier.IsValidDeviceId(p.DeviceId))
                                 {
-                                    deviceMap[p.DeviceId] = p;
+                                    if (!deviceMap.TryGetValue(p.DeviceId, out var existingDev) || (string.IsNullOrWhiteSpace(existingDev.AvatarUrl) && !string.IsNullOrWhiteSpace(p.AvatarUrl)))
+                                    {
+                                        deviceMap[p.DeviceId] = p;
+                                    }
                                 }
+
                                 if (!string.IsNullOrWhiteSpace(p.DisplayName))
                                 {
                                     var cleanName = p.DisplayName.Trim().TrimStart('@');
-                                    if (!string.IsNullOrWhiteSpace(cleanName) && !nameMap.ContainsKey(cleanName))
+                                    // Utamakan baris yang memiliki AvatarUrl
+                                    if (!nameMap.TryGetValue(cleanName, out var existingName) || (string.IsNullOrWhiteSpace(existingName.AvatarUrl) && !string.IsNullOrWhiteSpace(p.AvatarUrl)))
                                     {
                                         nameMap[cleanName] = p;
                                     }
@@ -86,13 +93,24 @@ namespace SteamPluginManager.Services.API
                             foreach (var msg in messages)
                             {
                                 UserProfile? matched = null;
-                                if (!string.IsNullOrWhiteSpace(msg.DeviceId) && deviceMap.TryGetValue(msg.DeviceId, out var byDev))
+
+                                // 1. Coba cocokkan via DeviceId yang valid
+                                if (DeviceIdentifier.IsValidDeviceId(msg.DeviceId) && deviceMap.TryGetValue(msg.DeviceId, out var byDev))
                                 {
                                     matched = byDev;
                                 }
-                                else if (!string.IsNullOrWhiteSpace(msg.SenderName) && nameMap.TryGetValue(msg.SenderName.Trim().TrimStart('@'), out var byName))
+
+                                // 2. Cocokkan via DisplayName (atau jika byDev tidak memiliki avatar tetapi byName memiliki avatar)
+                                if (!string.IsNullOrWhiteSpace(msg.SenderName))
                                 {
-                                    matched = byName;
+                                    var cleanSender = msg.SenderName.Trim().TrimStart('@');
+                                    if (nameMap.TryGetValue(cleanSender, out var byName))
+                                    {
+                                        if (matched == null || (string.IsNullOrWhiteSpace(matched.AvatarUrl) && !string.IsNullOrWhiteSpace(byName.AvatarUrl)))
+                                        {
+                                            matched = byName;
+                                        }
+                                    }
                                 }
 
                                 if (matched != null)

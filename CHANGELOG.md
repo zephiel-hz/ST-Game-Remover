@@ -5,6 +5,11 @@
 ## [3.1.1] - 2026-10-23
 
 ### Added
+* **System Tray Integration (Exit to Tray):** HZ Lua Manager now minimizes to the Windows System Tray when clicking the window close button (`✕`) instead of exiting immediately, keeping background services active.
+* **First-Time Exit to Tray Dialog:** Added an informative modern dialog on the first close attempt explaining that the app remains running in the background and can be closed from the tray or toggled in Settings.
+* **System Tray Context Menu:** Right-click context menu supporting instant window restore ("Open HZ Lua Manager"), direct navigation to "Settings", and a complete clean shutdown option ("Exit Application").
+* **Close to Tray Preference in Settings:** Added a dedicated toggle switch under `SYSTEM & PERFORMANCE` in SettingsView to enable or disable the close-to-tray behavior, persisting via Windows Registry.
+* **Tray Chat Notifications (Mention & Reply):** Realtime desktop notifications in the Windows system tray whenever you are mentioned (`@username`) or your message is replied to while HZ Lua Manager is minimized to tray, with direct click-through to open chat and highlight the message. Also includes a toggle in Settings.
 * **Dashboard Featured Games Carousel:** Replaced the legacy file statistics cards with a high-definition featured image slider spotlighting the most downloaded HZ Manifest games. Features smooth cross-fade animations, Steam CDN hero artwork caching, background prefetching, download counters, interactive hover navigation controls, and direct click-through to game details.
 * **Online-Fix Restore Feature:** Easily restore modified games to their original state by automatically removing tracked Online-Fix files and triggering Steam file integrity verification.
 
@@ -13,7 +18,11 @@
 * **Optimized Dashboard Loading:** Eliminated heavy R2 and B2 cloud storage bucket listing calls on dashboard startup, dramatically speeding up dashboard loading and eliminating unnecessary network overhead.
 
 ### Fixed
-* **Community Chat Avatar Rendering:** Fixed an issue where own profile picture did not display on sent chat bubbles or update during background polling. Added instant disk cache resolution and thread-safe UI Dispatcher updates for profile avatars.
+* **Persistent & Deterministic Device ID (Anti-Revert & Anti-Unknown):** Resolved an issue where closing HZ Lua Manager or switching network adapters (Wi-Fi, Ethernet, VPN, WARP) could cause token verification to revert to an unverified state or produce invalid Device IDs (`"Not applicable"`, `"Unknown"`). Implemented a centralized, deterministic multi-source Device ID service (`DeviceIdentifier`) with strict blacklist filtering, Windows `MachineGuid` and BIOS UUID hashing, and dual-layer local persistence (Registry HKCU and AppData).
+* **Token Self-Healing & Legacy Cleanup:** When verifying tokens, legacy invalid identifiers (such as `"Not applicable"` or `"Unknown"`) stored in token binding arrays are automatically filtered and cleansed, preventing users with OEM motherboards from reaching the maximum device limit error.
+* **Network Startup Jitter Tolerance:** Added automated retry mechanisms to token status checks on application launch to prevent transient offline/reconnecting socket exceptions from triggering premature verification prompts.
+* **Community Chat Avatar Rendering & Synchronization:** Fixed an issue where new users saw missing profile pictures in chat bubbles while avatars appeared correctly in the online directory. Resolved profile mapping collisions caused by legacy `"Not applicable"` and `"UNKNOWN"` device identifiers, added `order=last_seen.desc.nullslast` profile sorting to prioritize active avatars, enabled automatic UI notification (`OnAvatarUpdated`) upon cloud avatar download, and implemented automatic avatar backfilling from the loaded user directory into chat messages.
+* **Community Chat Own Avatar Rendering:** Fixed an issue where own profile picture did not display on sent chat bubbles or update during background polling. Added instant disk cache resolution and thread-safe UI Dispatcher updates for profile avatars.
 * **Clean Game Uninstall:** Fixed an issue where uninstalling games left leftover files and folders behind due to a manifest detection deadlock; game folders and unmanaged files are now completely wiped upon uninstall completion.
 * **Online-Fix File Validation Protection:** Temporarily hides action buttons while Steam is actively validating or verifying game files to avoid conflicts, cleanly showing only the verification progress state.
 * **Game Library Selection Gesture:** Fixed selection mode activation so hold/long-press on library cards triggers consistently on the first attempt.

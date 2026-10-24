@@ -96,6 +96,12 @@ namespace SteamPluginManager.Views
                 LanguageHelper.RegisterTextBlock(SettingsAutoUpdateTitle, "Settings.AutoUpdate");
                 LanguageHelper.RegisterTextBlock(SettingsAutoUpdateLabel, "Settings.AutoUpdateLabel");
                 LanguageHelper.RegisterTextBlock(SettingsAutoUpdateDesc, "Settings.AutoUpdateDesc");
+
+                // System Tray section
+                LanguageHelper.RegisterTextBlock(SettingsCloseToTrayLabel, "Settings.CloseToTrayLabel");
+                LanguageHelper.RegisterTextBlock(SettingsCloseToTrayDesc, "Settings.CloseToTrayDesc");
+                LanguageHelper.RegisterTextBlock(SettingsTrayNotificationLabel, "Settings.TrayNotificationLabel");
+                LanguageHelper.RegisterTextBlock(SettingsTrayNotificationDesc, "Settings.TrayNotificationDesc");
                 
                 // Cache section
                 LanguageHelper.RegisterTextBlock(SettingsCacheTitle, "Settings.Cache");
@@ -145,6 +151,12 @@ namespace SteamPluginManager.Views
                 
                 // Load auto-update setting
                 LoadAutoUpdateSetting();
+
+                // Load close to tray setting
+                LoadCloseToTraySetting();
+
+                // Load tray notification setting
+                LoadTrayNotificationSetting();
                 
                 // Load 18+ content setting
                 LoadAllow18PlusSetting();
@@ -1332,6 +1344,98 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"Failed to save auto-update setting: {ex.Message}");
+                ModernMessageBox.Show($"Failed to save setting: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void LoadCloseToTraySetting()
+        {
+            try
+            {
+                _isLoadingSettings = true;
+                bool isEnabled = SystemTrayPreferences.IsCloseToTrayEnabled();
+                CloseToTrayCheckBox.IsChecked = isEnabled;
+                Logger.Log($"[LoadCloseToTraySetting] Close to tray setting loaded: {isEnabled}");
+                _isLoadingSettings = false;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Failed to load close to tray setting: {ex.Message}");
+                CloseToTrayCheckBox.IsChecked = true;
+                _isLoadingSettings = false;
+            }
+        }
+
+        private void CloseToTrayCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoadingSettings)
+                return;
+
+            try
+            {
+                bool isEnabled = CloseToTrayCheckBox.IsChecked ?? true;
+                SystemTrayPreferences.SaveCloseToTrayPreference(isEnabled);
+
+                ModernMessageBox.Show(
+                    isEnabled
+                        ? "Minimize to System Tray enabled.\n\nClosing the window will minimize HZ Lua Manager to the system tray so it remains active in the background."
+                        : "Minimize to System Tray disabled.\n\nClosing the window will completely exit HZ Lua Manager.",
+                    "Settings Saved",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information
+                );
+
+                Logger.Log($"[CloseToTrayCheckBox_Changed] Close to tray changed to: {isEnabled}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Failed to save close to tray setting: {ex.Message}");
+                ModernMessageBox.Show($"Failed to save setting: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void LoadTrayNotificationSetting()
+        {
+            try
+            {
+                _isLoadingSettings = true;
+                bool isEnabled = SystemTrayPreferences.IsTrayChatNotificationEnabled();
+                TrayNotificationCheckBox.IsChecked = isEnabled;
+                Logger.Log($"[LoadTrayNotificationSetting] Tray notification setting loaded: {isEnabled}");
+                _isLoadingSettings = false;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Failed to load tray notification setting: {ex.Message}");
+                TrayNotificationCheckBox.IsChecked = true;
+                _isLoadingSettings = false;
+            }
+        }
+
+        private void TrayNotificationCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoadingSettings)
+                return;
+
+            try
+            {
+                bool isEnabled = TrayNotificationCheckBox.IsChecked ?? true;
+                SystemTrayPreferences.SaveTrayChatNotificationPreference(isEnabled);
+
+                ModernMessageBox.Show(
+                    isEnabled
+                        ? "Chat notifications in system tray enabled.\n\nYou will receive desktop notifications when mentioned or replied to in chat while minimized to tray."
+                        : "Chat notifications in system tray disabled.\n\nDesktop notifications for chat will not be shown while minimized to tray.",
+                    "Settings Saved",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information
+                );
+
+                Logger.Log($"[TrayNotificationCheckBox_Changed] Tray notification changed to: {isEnabled}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Failed to save tray notification setting: {ex.Message}");
                 ModernMessageBox.Show($"Failed to save setting: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }

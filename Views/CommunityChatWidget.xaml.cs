@@ -15,6 +15,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using SteamPluginManager.Models;
 using SteamPluginManager.Services.API;
+using SteamPluginManager.Services.Security;
 
 namespace SteamPluginManager.Views
 {
@@ -404,12 +405,13 @@ namespace SteamPluginManager.Views
                 }
                 else
                 {
+                    bool hasValidMsgDevId = DeviceIdentifier.IsValidDeviceId(msg.DeviceId);
                     var userMatch = _onlineUsersList.Concat(_offlineUsersList).FirstOrDefault(u =>
-                        (!string.IsNullOrWhiteSpace(msg.DeviceId) && !string.IsNullOrWhiteSpace(u.DeviceId) && string.Equals(u.DeviceId, msg.DeviceId, StringComparison.OrdinalIgnoreCase)) ||
+                        (hasValidMsgDevId && DeviceIdentifier.IsValidDeviceId(u.DeviceId) && string.Equals(u.DeviceId, msg.DeviceId, StringComparison.OrdinalIgnoreCase)) ||
                         (!string.IsNullOrWhiteSpace(msg.SenderName) && !string.IsNullOrWhiteSpace(u.DisplayName) && string.Equals(u.DisplayName, msg.SenderName, StringComparison.OrdinalIgnoreCase)));
 
                     var existingMatch = _messages.FirstOrDefault(m =>
-                        (!string.IsNullOrWhiteSpace(msg.DeviceId) && !string.IsNullOrWhiteSpace(m.DeviceId) && string.Equals(m.DeviceId, msg.DeviceId, StringComparison.OrdinalIgnoreCase)) ||
+                        (hasValidMsgDevId && DeviceIdentifier.IsValidDeviceId(m.DeviceId) && string.Equals(m.DeviceId, msg.DeviceId, StringComparison.OrdinalIgnoreCase)) ||
                         (!string.IsNullOrWhiteSpace(msg.SenderName) && !string.IsNullOrWhiteSpace(m.SenderName) && string.Equals(m.SenderName, msg.SenderName, StringComparison.OrdinalIgnoreCase)));
 
                     if (userMatch != null)
@@ -1590,6 +1592,7 @@ namespace SteamPluginManager.Views
 
                 UpdateOnlineCountDisplay(_onlineUsersList.Count);
                 UpdateOnlineStatusOnMessages(onlineNames);
+                SyncAvatarsToMessages(allUsers);
 
                 EmptyOnlineUsersText.Visibility = (_onlineUsersList.Count == 0 && _offlineUsersList.Count == 0)
                     ? Visibility.Visible
@@ -1598,6 +1601,66 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"[CommunityChatWidget] RefreshOnlinePresenceAsync error: {ex.Message}");
+            }
+        }
+
+        private void SyncAvatarsToMessages(List<UserProfile> allUsers)
+        {
+            if (allUsers == null || allUsers.Count == 0 || _messages.Count == 0) return;
+
+            var userByName = new Dictionary<string, UserProfile>(StringComparer.OrdinalIgnoreCase);
+            var userByDev = new Dictionary<string, UserProfile>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var u in allUsers)
+            {
+                if (!string.IsNullOrWhiteSpace(u.DisplayName))
+                {
+                    var clean = u.DisplayName.Trim().TrimStart('@');
+                    if (!userByName.TryGetValue(clean, out var existing) || (string.IsNullOrWhiteSpace(existing.AvatarUrl) && !string.IsNullOrWhiteSpace(u.AvatarUrl)))
+                    {
+                        userByName[clean] = u;
+                    }
+                }
+                if (DeviceIdentifier.IsValidDeviceId(u.DeviceId))
+                {
+                    if (!userByDev.TryGetValue(u.DeviceId, out var existing) || (string.IsNullOrWhiteSpace(existing.AvatarUrl) && !string.IsNullOrWhiteSpace(u.AvatarUrl)))
+                    {
+                        userByDev[u.DeviceId] = u;
+                    }
+                }
+            }
+
+            foreach (var msg in _messages)
+            {
+                UserProfile? match = null;
+                if (!string.IsNullOrWhiteSpace(msg.SenderName))
+                {
+                    userByName.TryGetValue(msg.SenderName.Trim().TrimStart('@'), out match);
+                }
+                if (match == null && DeviceIdentifier.IsValidDeviceId(msg.DeviceId))
+                {
+                    userByDev.TryGetValue(msg.DeviceId, out match);
+                }
+
+                if (match != null)
+                {
+                    if (match.Id.HasValue && msg.UserId != match.Id)
+                    {
+                        msg.UserId = match.Id;
+                    }
+                    if (!string.IsNullOrWhiteSpace(match.AvatarUrl) && msg.AvatarUrl != match.AvatarUrl)
+                    {
+                        msg.AvatarUrl = match.AvatarUrl;
+                    }
+                    if (match.AvatarImage != null && msg.AvatarImage != match.AvatarImage)
+                    {
+                        msg.AvatarImage = match.AvatarImage;
+                    }
+                    else if (msg.AvatarImage == null && msg.UserId.HasValue && !string.IsNullOrWhiteSpace(msg.AvatarUrl))
+                    {
+                        _ = msg.LoadAvatarImageAsync();
+                    }
+                }
             }
         }
 

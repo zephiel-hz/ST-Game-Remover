@@ -20,6 +20,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Globalization;
 using System.Management;
+using SteamPluginManager.Services.Security;
 
 namespace SteamPluginManager.Views
 {
@@ -2721,53 +2722,14 @@ namespace SteamPluginManager.Views
 
         private async Task<bool> CheckDeviceTokenAsync()
         {
-            try
-            {
-                LogDebug("[CheckDeviceTokenAsync] Checking device token binding...");
-
-                string deviceId = GetDeviceId();
-                var http = SharedHttpClient.Instance;
-                var queryDeviceId = Uri.EscapeDataString(deviceId);
-                var url = $"{SupabaseConfig.SupabaseUrl}/rest/v1/device_tokens?or=(device_id.eq.{queryDeviceId},device_ids.cs.{{{queryDeviceId}}})&select=*";
-
-                var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.Add("apikey", SupabaseConfig.SupabaseKey);
-                request.Headers.Add("Authorization", $"Bearer {SupabaseConfig.SupabaseKey}");
-                request.Headers.Add("Accept", "application/json");
-
-                var response = await http.SendAsync(request);
-                var content = await response.Content.ReadAsStringAsync();
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    LogDebug($"[CheckDeviceTokenAsync] Supabase query failed: {response.StatusCode}");
-                    return false;
-                }
-
-                var tokens = JsonSerializer.Deserialize<List<dynamic>>(content);
-                if (tokens == null || tokens.Count == 0)
-                {
-                    LogDebug("[CheckDeviceTokenAsync] No device token binding found for this device ID");
-                    return false;
-                }
-
-                LogDebug("[CheckDeviceTokenAsync] Device token binding found");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                LogDebug($"[CheckDeviceTokenAsync] Error: {ex.Message}");
-                return false;
-            }
+            return await DashboardView.CheckDeviceTokenAsync();
         }
 
         private string GetDeviceId()
         {
             try
             {
-                // Get stable hardware ID (motherboard serial or MAC address)
-                // Using ONLY hardware ID so token remains valid even if user changes device name
-                string deviceId = GetMotherboardHardwareId();
+                string deviceId = DeviceIdentifier.GetDeviceId();
                 LogDebug($"[GetDeviceId] Device ID: {deviceId}");
                 return deviceId;
             }
@@ -2788,76 +2750,6 @@ namespace SteamPluginManager.Views
             var guidBytes = new byte[16];
             Array.Copy(hash, guidBytes, 16);
             return new Guid(guidBytes);
-        }
-
-        private string GetMotherboardHardwareId()
-        {
-            try
-            {
-                // Try to get Motherboard Serial Number from WMI
-                using (var searcher = new ManagementObjectSearcher("Select SerialNumber from Win32_BaseBoard"))
-                {
-                    foreach (ManagementObject obj in searcher.Get())
-                    {
-                        string serialNumber = obj["SerialNumber"]?.ToString();
-                        if (!string.IsNullOrWhiteSpace(serialNumber) && IsValidSerialNumber(serialNumber))
-                        {
-                            LogDebug($"[GetMotherboardHardwareId] Found valid Motherboard Serial: {serialNumber}");
-                            return serialNumber;
-                        }
-                        else if (!string.IsNullOrWhiteSpace(serialNumber))
-                        {
-                            LogDebug($"[GetMotherboardHardwareId] Motherboard serial is invalid/default: '{serialNumber}'");
-                        }
-                    }
-                }
-
-                // Fallback: Get first stable MAC address if motherboard ID fails or is invalid
-                LogDebug("[GetMotherboardHardwareId] Using MAC address fallback");
-                var macAddress = NetworkInterface
-                    .GetAllNetworkInterfaces()
-                    .Where(nic => nic.OperationalStatus == OperationalStatus.Up &&
-                                  !string.IsNullOrEmpty(nic.GetPhysicalAddress().ToString()))
-                    .Select(nic => nic.GetPhysicalAddress().ToString())
-                    .FirstOrDefault() ?? "UNKNOWN";
-
-                return macAddress;
-            }
-            catch (Exception ex)
-            {
-                LogDebug($"[GetMotherboardHardwareId] Error: {ex.Message}");
-                return "UNKNOWN";
-            }
-        }
-
-        private bool IsValidSerialNumber(string serialNumber)
-        {
-            // Reject common default/invalid values
-            string lower = serialNumber.ToLower().Trim();
-            
-            var invalidValues = new[]
-            {
-                "0000000", "00000000", "000000000000",
-                "default string", "default", "system default",
-                "not available", "not specified", "unknown",
-                "system reserved", "pending",
-                "to be filled by o.e.m.", "empty", "none", "n/a"
-            };
-
-            if (invalidValues.Contains(lower))
-            {
-                LogDebug($"[IsValidSerialNumber] Rejected invalid serial: {serialNumber}");
-                return false;
-            }
-
-            // Reject if only contains zeros or hyphens/spaces
-            if (string.IsNullOrWhiteSpace(serialNumber.Replace("0", "").Replace("-", "").Replace(" ", "")))
-            {
-                LogDebug($"[IsValidSerialNumber] Rejected all-zeros serial: {serialNumber}");
-                return false;
-            }
-
-            return true;
         }
 
         /// <summary>
