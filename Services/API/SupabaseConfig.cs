@@ -36,6 +36,14 @@ namespace SteamPluginManager
         // Storage bucket name
         public static string StorageBucketName => ServiceConfiguration.Current.Supabase.StorageBucketName;
 
+        private static HttpRequestMessage CreateAuthenticatedRequest(HttpMethod method, string url)
+        {
+            var req = new HttpRequestMessage(method, url);
+            req.Headers.Add("apikey", SupabaseKey);
+            req.Headers.Add("Authorization", $"Bearer {SupabaseKey}");
+            return req;
+        }
+
         public static async Task<int?> GetDownloadCountAsync(int? recordId, int? appId, string? fileName)
         {
             try
@@ -43,9 +51,7 @@ namespace SteamPluginManager
                 if (!recordId.HasValue && !appId.HasValue && string.IsNullOrWhiteSpace(fileName))
                     return null;
 
-                using var client = new HttpClient();
-                client.DefaultRequestHeaders.Add("Authorization", $"Bearer {SupabaseKey}");
-                client.DefaultRequestHeaders.Add("apikey", SupabaseKey);
+                var client = SharedHttpClient.Instance;
 
                 string filter;
                 if (recordId.HasValue)
@@ -62,9 +68,7 @@ namespace SteamPluginManager
                 }
 
                 var url = $"{SupabaseUrl}/rest/v1/hzmanifest_files?select=download_count&{filter}";
-                var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.Add("apikey", SupabaseKey);
-                request.Headers.Add("Authorization", $"Bearer {SupabaseKey}");
+                using var request = CreateAuthenticatedRequest(HttpMethod.Get, url);
 
                 var response = await client.SendAsync(request);
                 if (!response.IsSuccessStatusCode)
@@ -94,9 +98,7 @@ namespace SteamPluginManager
                     return false;
                 }
 
-                using var client = new HttpClient();
-                client.DefaultRequestHeaders.Add("Authorization", $"Bearer {SupabaseKey}");
-                client.DefaultRequestHeaders.Add("apikey", SupabaseKey);
+                var client = SharedHttpClient.Instance;
 
                 string filter;
                 if (recordId.HasValue)
@@ -113,9 +115,7 @@ namespace SteamPluginManager
                 }
 
                 var selectUrl = $"{SupabaseUrl}/rest/v1/hzmanifest_files?select=download_count&{filter}";
-                var selectRequest = new HttpRequestMessage(HttpMethod.Get, selectUrl);
-                selectRequest.Headers.Add("apikey", SupabaseKey);
-                selectRequest.Headers.Add("Authorization", $"Bearer {SupabaseKey}");
+                using var selectRequest = CreateAuthenticatedRequest(HttpMethod.Get, selectUrl);
 
                 var selectResponse = await client.SendAsync(selectRequest);
                 if (!selectResponse.IsSuccessStatusCode)
@@ -137,12 +137,8 @@ namespace SteamPluginManager
                 var updatePayload = new { download_count = currentCount + 1 };
                 var updateJson = JsonSerializer.Serialize(updatePayload);
                 var updateUrl = $"{SupabaseUrl}/rest/v1/hzmanifest_files?{filter}";
-                var patchRequest = new HttpRequestMessage(HttpMethod.Patch, updateUrl)
-                {
-                    Content = new StringContent(updateJson, System.Text.Encoding.UTF8, "application/json")
-                };
-                patchRequest.Headers.Add("apikey", SupabaseKey);
-                patchRequest.Headers.Add("Authorization", $"Bearer {SupabaseKey}");
+                using var patchRequest = CreateAuthenticatedRequest(HttpMethod.Patch, updateUrl);
+                patchRequest.Content = new StringContent(updateJson, System.Text.Encoding.UTF8, "application/json");
 
                 var patchResponse = await client.SendAsync(patchRequest);
                 Console.WriteLine($"[SupabaseConfig] IncrementDownloadCountAsync status: {(int)patchResponse.StatusCode}");
@@ -160,22 +156,19 @@ namespace SteamPluginManager
         {
             try
             {
-                using (var client = new HttpClient())
+                var client = SharedHttpClient.Instance;
+                string url = $"{SupabaseUrl}/rest/v1/hzmanifest_files?select=*&order=download_count.desc.nullslast,created_at.desc&limit={count}";
+                using var request = CreateAuthenticatedRequest(HttpMethod.Get, url);
+
+                var response = await client.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
                 {
-                    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {SupabaseKey}");
-                    client.DefaultRequestHeaders.Add("apikey", SupabaseKey);
-
-                    string url = $"{SupabaseUrl}/rest/v1/hzmanifest_files?select=*&order=download_count.desc.nullslast,created_at.desc&limit={count}";
-                    var response = await client.GetAsync(url);
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        Console.WriteLine($"[SupabaseConfig] GetMostDownloadedManifestFilesAsync failed with status {response.StatusCode}");
-                        return new List<ManifestFile>();
-                    }
-
-                    var content = await response.Content.ReadAsStringAsync();
-                    return ParseManifestFilesFromJson(content);
+                    Console.WriteLine($"[SupabaseConfig] GetMostDownloadedManifestFilesAsync failed with status {response.StatusCode}");
+                    return new List<ManifestFile>();
                 }
+
+                var content = await response.Content.ReadAsStringAsync();
+                return ParseManifestFilesFromJson(content);
             }
             catch (Exception ex)
             {
@@ -188,23 +181,20 @@ namespace SteamPluginManager
         {
             try
             {
-                using (var client = new HttpClient())
+                var client = SharedHttpClient.Instance;
+                string url = $"{SupabaseUrl}/rest/v1/hzmanifest_files?select=*&order=created_at.desc&limit={count}";
+                using var request = CreateAuthenticatedRequest(HttpMethod.Get, url);
+                request.Headers.Add("Prefer", "count=exact");
+
+                var response = await client.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
                 {
-                    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {SupabaseKey}");
-                    client.DefaultRequestHeaders.Add("apikey", SupabaseKey);
-                    client.DefaultRequestHeaders.Add("Prefer", "count=exact");
-
-                    string url = $"{SupabaseUrl}/rest/v1/hzmanifest_files?select=*&order=created_at.desc&limit={count}";
-                    var response = await client.GetAsync(url);
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        Console.WriteLine($"[SupabaseConfig] GetNewestManifestFilesAsync failed with status {response.StatusCode}");
-                        return new List<ManifestFile>();
-                    }
-
-                    var content = await response.Content.ReadAsStringAsync();
-                    return ParseManifestFilesFromJson(content);
+                    Console.WriteLine($"[SupabaseConfig] GetNewestManifestFilesAsync failed with status {response.StatusCode}");
+                    return new List<ManifestFile>();
                 }
+
+                var content = await response.Content.ReadAsStringAsync();
+                return ParseManifestFilesFromJson(content);
             }
             catch (Exception ex)
             {
@@ -336,9 +326,7 @@ namespace SteamPluginManager
         {
             try
             {
-                using var client = new HttpClient();
-                client.DefaultRequestHeaders.Add("Authorization", $"Bearer {SupabaseKey}");
-                client.DefaultRequestHeaders.Add("apikey", SupabaseKey);
+                var client = SharedHttpClient.StorageInstance;
 
                 string cleanPrefix = (prefix ?? string.Empty).Trim().Trim('/', '\\');
                 var result = new List<string>();
@@ -358,7 +346,9 @@ namespace SteamPluginManager
                     };
 
                     var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-                    var response = await client.PostAsync(storageListUrl, content);
+                    using var request = CreateAuthenticatedRequest(HttpMethod.Post, storageListUrl);
+                    request.Content = content;
+                    var response = await client.SendAsync(request);
 
                     if (response.IsSuccessStatusCode)
                     {
@@ -375,10 +365,10 @@ namespace SteamPluginManager
                                     if (!string.IsNullOrWhiteSpace(name) && !name.EndsWith("/"))
                                     {
                                         string prefixSlash = string.IsNullOrEmpty(cleanPrefix) ? "" : cleanPrefix + "/";
-                                        string fullPath = string.IsNullOrEmpty(cleanPrefix)
-                                            ? name
-                                            : (name.StartsWith(prefixSlash, StringComparison.OrdinalIgnoreCase)
-                                                ? name
+                                        string fullPath = string.IsNullOrEmpty(cleanPrefix) 
+                                            ? name 
+                                            : (name.StartsWith(prefixSlash, StringComparison.OrdinalIgnoreCase) 
+                                                ? name 
                                                 : $"{cleanPrefix}/{name}");
                                         result.Add(fullPath);
                                     }
@@ -399,7 +389,9 @@ namespace SteamPluginManager
                         };
 
                         var fbContent = new StringContent(JsonSerializer.Serialize(fallbackPayload), Encoding.UTF8, "application/json");
-                        var fbResponse = await client.PostAsync(storageListUrl, fbContent);
+                        using var fbRequest = CreateAuthenticatedRequest(HttpMethod.Post, storageListUrl);
+                        fbRequest.Content = fbContent;
+                        var fbResponse = await client.SendAsync(fbRequest);
                         if (fbResponse.IsSuccessStatusCode)
                         {
                             var json = await fbResponse.Content.ReadAsStringAsync();
@@ -440,7 +432,8 @@ namespace SteamPluginManager
 
                 // Method 2 (Fallback): RPC list_bucket_files
                 string rpcUrl = $"{SupabaseUrl}/rest/v1/rpc/list_bucket_files?bucket_name={StorageBucketName}";
-                var rpcResponse = await client.GetAsync(rpcUrl);
+                using var rpcRequest = CreateAuthenticatedRequest(HttpMethod.Get, rpcUrl);
+                var rpcResponse = await client.SendAsync(rpcRequest);
                 if (rpcResponse.IsSuccessStatusCode)
                 {
                     var rpcContent = await rpcResponse.Content.ReadAsStringAsync();
@@ -487,43 +480,35 @@ namespace SteamPluginManager
         {
             try
             {
-                using (var client = new HttpClient())
+                var client = SharedHttpClient.Instance;
+                string url = $"{SupabaseUrl}/rest/v1/hzmanifest_files?select=id";
+                using var request = CreateAuthenticatedRequest(HttpMethod.Get, url);
+                request.Headers.Add("Prefer", "count=exact");
+
+                var response = await client.SendAsync(request);
+                var content = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
                 {
-                    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {SupabaseKey}");
-                    client.DefaultRequestHeaders.Add("apikey", SupabaseKey);
-                    client.DefaultRequestHeaders.Add("Prefer", "count=exact");
+                    Console.WriteLine($"[SupabaseConfig] Request failed with status {response.StatusCode}");
+                    return 0;
+                }
 
-                    string url = $"{SupabaseUrl}/rest/v1/hzmanifest_files?select=id";
-                    Console.WriteLine($"[SupabaseConfig] Requesting URL: {url}");
-                    var response = await client.GetAsync(url);
-
-                    Console.WriteLine($"[SupabaseConfig] Response Status: {response.StatusCode}");
-                    var content = await response.Content.ReadAsStringAsync();
-                    Console.WriteLine($"[SupabaseConfig] Response content: {content}");
-
-                    if (!response.IsSuccessStatusCode)
+                if (response.Headers.TryGetValues("Content-Range", out var values))
+                {
+                    var range = values.FirstOrDefault();
+                    if (range != null)
                     {
-                        Console.WriteLine($"[SupabaseConfig] Request failed with status {response.StatusCode}");
-                        return 0;
-                    }
-
-                    if (response.Headers.TryGetValues("Content-Range", out var values))
-                    {
-                        var range = values.FirstOrDefault();
-                        if (range != null)
+                        var parts = range.Split('/');
+                        if (parts.Length == 2 && int.TryParse(parts[1], out int total))
                         {
-                            var parts = range.Split('/');
-                            if (parts.Length == 2 && int.TryParse(parts[1], out int total))
-                            {
-                                Console.WriteLine($"[SupabaseConfig] HZ manifest count from Content-Range: {total}");
-                                return total;
-                            }
+                            return total;
                         }
                     }
-
-                    var manifests = JsonSerializer.Deserialize<List<ManifestFile>>(content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                    return manifests?.Count ?? 0;
                 }
+
+                var manifests = JsonSerializer.Deserialize<List<ManifestFile>>(content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                return manifests?.Count ?? 0;
             }
             catch (Exception ex)
             {

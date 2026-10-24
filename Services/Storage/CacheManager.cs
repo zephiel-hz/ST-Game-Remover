@@ -32,6 +32,8 @@ namespace SteamPluginManager
 
         private static bool _initialized = false;
         private static readonly object _lockObj = new object();
+        private static CancellationTokenSource? _saveCts;
+        private static readonly object _saveLock = new object();
 
         public static void Initialize()
         {
@@ -706,17 +708,64 @@ namespace SteamPluginManager
             }
         }
 
+        public static void ScheduleSaveCache(int delayMs = 600)
+        {
+            lock (_saveLock)
+            {
+                _saveCts?.Cancel();
+                _saveCts?.Dispose();
+                _saveCts = new CancellationTokenSource();
+                var token = _saveCts.Token;
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(delayMs, token);
+                        if (!token.IsCancellationRequested)
+                        {
+                            SaveCacheToFileNow();
+                        }
+                    }
+                    catch (TaskCanceledException) { }
+                    catch (Exception ex)
+                    {
+                        Logger.Log($"[CacheManager] Debounced save failed: {ex.Message}");
+                    }
+                }, token);
+            }
+        }
+
+        public static void FlushCache()
+        {
+            lock (_saveLock)
+            {
+                _saveCts?.Cancel();
+                _saveCts?.Dispose();
+                _saveCts = null;
+            }
+            SaveCacheToFileNow();
+        }
+
         private static void SaveCacheToFile()
+        {
+            ScheduleSaveCache();
+        }
+
+        private static void SaveCacheToFileNow()
         {
             // Simpan cache ke file (plaintext JSON - no encryption) dengan thread-safe access
             try
             {
+                Dictionary<int, CacheItem>? cacheCopy = null;
                 lock (_lockObj)
                 {
                     if (_cache == null || _cache.Count == 0) return;
-                    
-                    // Create snapshot untuk prevent concurrent modification exception
-                    var cacheCopy = new Dictionary<int, CacheItem>(_cache);
+                    cacheCopy = new Dictionary<int, CacheItem>(_cache);
+                }
+
+                if (cacheCopy != null)
+                {
                     string json = JsonSerializer.Serialize(cacheCopy, new JsonSerializerOptions { WriteIndented = true });
                     File.WriteAllText(CacheFile, json, Encoding.UTF8);
                 }
@@ -818,8 +867,8 @@ namespace SteamPluginManager
                 Logger.Log($"Cache cleared: removed {removedCount} expired/incomplete items, kept {_cache.Count} valid items");
             }
             
-            // Save cache to preserve remaining items
-            SaveCacheToFile();
+            // Save cache immediately to preserve remaining items
+            FlushCache();
         }
 
         public static int GetCacheSize()

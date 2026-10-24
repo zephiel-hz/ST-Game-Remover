@@ -1244,6 +1244,7 @@ namespace SteamPluginManager
         {
             IsBusy = true;
             var client = SharedHttpClient.Instance;
+            using var throttle = new SemaphoreSlim(3, 3);
             
             // Buat daftar task untuk game yang belum di-cache
             var updateTasks = new List<Task>();
@@ -1270,6 +1271,7 @@ namespace SteamPluginManager
                 // Buat task terpisah untuk fetch data lengkap (nama + genre + screenshot) hanya untuk game yang belum di-cache
                 var task = Task.Run(async () =>
                 {
+                    await throttle.WaitAsync();
                     try
                     {
                         string langParam = _currentLanguage == "zh" ? "schinese" : "english";
@@ -1401,6 +1403,10 @@ namespace SteamPluginManager
                         Log($"Failed to fetch data for {game.AppId}: {ex.Message}");
                         Dispatcher.Invoke(() => { game.Genre = "Error"; });
                     }
+                    finally
+                    {
+                        throttle.Release();
+                    }
                 });
                 
                 updateTasks.Add(task);
@@ -1408,6 +1414,9 @@ namespace SteamPluginManager
             
             // Tunggu semua task selesai
             await Task.WhenAll(updateTasks);
+
+            // Flush debounced cache writes immediately so fresh data is persisted
+            try { CacheManager.FlushCache(); } catch { }
             
             // Refresh ListView setelah semua nama diupdate
             ApplyFilterAndSort();

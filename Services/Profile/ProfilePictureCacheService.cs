@@ -291,6 +291,7 @@ namespace SteamPluginManager.Services.Profile
                 var bitmap = new BitmapImage();
                 bitmap.BeginInit();
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.DecodePixelWidth = 96;
                 bitmap.UriSource = new Uri(filePath, UriKind.Absolute);
                 bitmap.EndInit();
                 bitmap.Freeze(); // Makes it thread-safe for any UI thread binding
@@ -310,6 +311,7 @@ namespace SteamPluginManager.Services.Profile
                 var bitmap = new BitmapImage();
                 bitmap.BeginInit();
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.DecodePixelWidth = 96;
                 bitmap.StreamSource = ms;
                 bitmap.EndInit();
                 bitmap.Freeze(); // Makes it thread-safe for any UI thread binding

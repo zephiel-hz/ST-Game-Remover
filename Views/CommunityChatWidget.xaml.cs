@@ -220,6 +220,8 @@ namespace SteamPluginManager.Views
         private bool _isUpdatingMentionList;
         private string _pendingMentionQuery = string.Empty;
 
+        private DateTime _lastHeartbeatSent = DateTime.MinValue;
+
         public bool IsExpanded => ExpandedDrawer.Visibility == Visibility.Visible;
 
         public CommunityChatWidget()
@@ -303,10 +305,10 @@ namespace SteamPluginManager.Views
                 await ExecuteMentionSearchAsync(_pendingMentionQuery);
             };
 
-            // Setup presence refresh timer (every 4 seconds for fast 10s offline detection)
+            // Setup presence refresh timer (every 15 seconds)
             _presenceTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromSeconds(4)
+                Interval = TimeSpan.FromSeconds(15)
             };
             _presenceTimer.Tick += async (s, e) =>
             {
@@ -1509,10 +1511,17 @@ namespace SteamPluginManager.Views
         {
             try
             {
-                // 1. Send heartbeat for current user
-                if (!string.IsNullOrWhiteSpace(_currentDeviceId))
+                // 1. Send heartbeat for current user (throttled to every 20 seconds)
+                if (!string.IsNullOrWhiteSpace(_currentDeviceId) && (DateTime.UtcNow - _lastHeartbeatSent).TotalSeconds >= 20)
                 {
+                    _lastHeartbeatSent = DateTime.UtcNow;
                     _ = CommunityChatService.SendHeartbeatAsync(_currentDeviceId);
+                }
+
+                // If chat drawer is not open, skip querying user directory and updating UI
+                if (!IsExpanded)
+                {
+                    return;
                 }
 
                 // 2. Fetch all users directory (online + offline)
@@ -1571,17 +1580,27 @@ namespace SteamPluginManager.Views
                     .ThenBy(u => u.DisplayName, StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
-                // 6. Update Collections
-                _onlineUsersList.Clear();
-                foreach (var u in sortedOnline)
+                // 6. Update Collections with diff check to eliminate unnecessary layout passes
+                bool onlineChanged = _onlineUsersList.Count != sortedOnline.Count ||
+                    !_onlineUsersList.Select(u => (u.Id, u.DisplayName, u.Level, u.AvatarUrl)).SequenceEqual(sortedOnline.Select(u => (u.Id, u.DisplayName, u.Level, u.AvatarUrl)));
+                if (onlineChanged)
                 {
-                    _onlineUsersList.Add(u);
+                    _onlineUsersList.Clear();
+                    foreach (var u in sortedOnline)
+                    {
+                        _onlineUsersList.Add(u);
+                    }
                 }
 
-                _offlineUsersList.Clear();
-                foreach (var u in sortedOffline)
+                bool offlineChanged = _offlineUsersList.Count != sortedOffline.Count ||
+                    !_offlineUsersList.Select(u => (u.Id, u.DisplayName, u.Level, u.AvatarUrl)).SequenceEqual(sortedOffline.Select(u => (u.Id, u.DisplayName, u.Level, u.AvatarUrl)));
+                if (offlineChanged)
                 {
-                    _offlineUsersList.Add(u);
+                    _offlineUsersList.Clear();
+                    foreach (var u in sortedOffline)
+                    {
+                        _offlineUsersList.Add(u);
+                    }
                 }
 
                 // 7. Update UI headers & counters

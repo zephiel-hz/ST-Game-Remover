@@ -67,7 +67,7 @@ namespace SteamPluginManager
             {
                 try
                 {
-                    await Task.WhenAll(Task.Delay(1200), startupLicenseCheckTask);
+                    await Task.WhenAll(Task.Delay(350), startupLicenseCheckTask);
 
                     bool isLicenseVerified = await startupLicenseCheckTask;
                     var shell = new Views.MainShell(isLicenseVerified);
@@ -116,6 +116,12 @@ namespace SteamPluginManager
                 {
                     Services.API.CommunityChatService.SetUserOfflineAsync(deviceId).Wait(600);
                 }
+            }
+            catch { }
+
+            try
+            {
+                CacheManager.FlushCache();
             }
             catch { }
 

@@ -44,11 +44,21 @@ namespace SteamPluginManager
             try
             {
                 var processes = Process.GetProcessesByName("steam");
-                return processes.Any(p =>
+                try
                 {
-                    try { return !p.HasExited; }
-                    catch { return true; }
-                });
+                    return processes.Any(p =>
+                    {
+                        try { return !p.HasExited; }
+                        catch { return true; }
+                    });
+                }
+                finally
+                {
+                    foreach (var p in processes)
+                    {
+                        try { p.Dispose(); } catch { }
+                    }
+                }
             }
             catch
             {

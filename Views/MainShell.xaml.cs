@@ -675,7 +675,7 @@ namespace SteamPluginManager.Views
 
         private void InitializeSteamMonitor()
         {
-            _steamMonitorTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            _steamMonitorTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
             _steamMonitorTimer.Tick += (s, e) => UpdateSteamStatus();
             _steamMonitorTimer.Start();
             UpdateSteamStatus();
