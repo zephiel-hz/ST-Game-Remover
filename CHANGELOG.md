@@ -2,7 +2,7 @@
 
 ---
 
-## [3.1.1] - 2026-10-23
+## [3.1.1] - 2026-10-24
 
 ### Added
 * **System Tray Integration (Exit to Tray):** HZ Lua Manager now minimizes to the Windows System Tray when clicking the window close button (`✕`) instead of exiting immediately, keeping background services active.
