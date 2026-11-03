@@ -2,6 +2,13 @@
 
 ---
 
+## [3.1.5] - 2026-11-03
+
+### Changed
+* **Decoupled Custom Launch from Steam Client:** Removed automatic Steam background startup (`SteamHelper.LaunchSteam()`) when launching games configured with Custom Launch. Custom target executables and batch scripts now execute completely independently without forcing the Steam client to start up, allowing standalone and DRM-free games to run without Steam overhead.
+
+---
+
 ## [3.1.4] - 2026-11-03
 
 ### Performance & Optimizations
