@@ -161,10 +161,14 @@ namespace SteamPluginManager.Views
         // Static cache to prevent refetching data when navigating back
 
         private static List<BypassFile>? _cachedFiles = null;
+        private static bool _forceRefreshOnNextLoad = false;
 
         public static void InvalidateCache()
         {
             _cachedFiles = null;
+            _lastFetchTime = DateTime.MinValue;
+            _forceRefreshOnNextLoad = true;
+            SteamPluginManager.R2Config.InvalidateListCache();
         }
 
         private static DateTime _lastFetchTime = DateTime.MinValue;
@@ -845,7 +849,9 @@ namespace SteamPluginManager.Views
 
 
 
-                await LoadFilesFromSource();
+                bool forceRefresh = _forceRefreshOnNextLoad;
+                _forceRefreshOnNextLoad = false;
+                await LoadFilesFromSource(forceRefresh);
 
                 
 
@@ -1681,7 +1687,7 @@ namespace SteamPluginManager.Views
 
 
 
-        private async Task LoadFilesFromSource()
+        private async Task LoadFilesFromSource(bool forceRefresh = false)
 
         {
 
@@ -1697,7 +1703,7 @@ namespace SteamPluginManager.Views
 
                 // Check if we have valid cached data
 
-                bool hasValidCache = _cachedFiles != null && 
+                bool hasValidCache = !forceRefresh && _cachedFiles != null && 
 
                                    (DateTime.Now - _lastFetchTime) < _cacheDuration;
 
@@ -1755,7 +1761,7 @@ namespace SteamPluginManager.Views
 
                 // Ambil file list dari R2
 
-                var r2Files = await SteamPluginManager.R2Config.ListFilesAsync();
+                var r2Files = await SteamPluginManager.R2Config.ListFilesAsync(forceRefresh: forceRefresh);
 
                 // Ambil metadata dari Supabase
 
@@ -2357,7 +2363,7 @@ namespace SteamPluginManager.Views
 
                 _cachedFiles = null;
 
-                await LoadFilesFromSource();
+                await LoadFilesFromSource(forceRefresh: true);
 
             }
 

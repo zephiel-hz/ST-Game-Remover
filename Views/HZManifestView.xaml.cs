@@ -328,10 +328,18 @@ namespace SteamPluginManager.Views
             return null;
         }
 
+        private static bool _forceRefreshOnNextLoad = false;
+
         public static void InvalidateCache()
         {
             _cachedFiles = null;
             _lastFetchTime = DateTime.MinValue;
+            _forceRefreshOnNextLoad = true;
+            CacheManager.ClearHzmCache("hzm_manifest_data");
+            if (_activeManifestView != null)
+            {
+                _activeManifestView._forceRefreshOnLoad = true;
+            }
         }
 
         public static async Task RefreshActiveManifestViewAsync(bool forceRefresh = true)
@@ -413,10 +421,11 @@ namespace SteamPluginManager.Views
                 Allow18PlusContentPreferences.Allow18PlusContentChanged += Allow18PlusContentPreferences_Changed;
 
                 // Load files from Supabase - capture and consume force refresh exactly once
-                bool shouldForceRefresh = _forceRefreshOnLoad;
-                bool hasCachedData = (_cachedFiles != null && (DateTime.Now - _lastFetchTime) < _cacheDuration) ||
-                                     CacheManager.GetHzmCache("hzm_manifest_data") != null;
+                bool shouldForceRefresh = _forceRefreshOnLoad || _forceRefreshOnNextLoad;
                 _forceRefreshOnLoad = false;
+                _forceRefreshOnNextLoad = false;
+                bool hasCachedData = !shouldForceRefresh && ((_cachedFiles != null && (DateTime.Now - _lastFetchTime) < _cacheDuration) ||
+                                     CacheManager.GetHzmCache("hzm_manifest_data") != null);
 
                 // Show loading overlay only if fetching fresh data or displaying empty collection
                 var loadingOverlay = FindName("LoadingOverlay") as Grid;

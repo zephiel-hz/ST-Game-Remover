@@ -182,37 +182,18 @@ namespace SteamPluginManager.Views
                         installPath = parentPath;
                     }
 
-                    // Fallback safety check: Never demote an installed game to not installed if its files still exist on disk.
-                    // This protects against Custom Launch (non-Steam), OnlineFix, cloud save sync, or transient Steam scanner states.
-                    if (!isInstalled && game.IsInstalled)
+                    // Fallback check specifically for Custom Launch if config was enabled recently:
+                    // Only consider installed if the physical executable file exists. Never rely on bare residual directory presence!
+                    if (!isInstalled)
                     {
-                        if (!string.IsNullOrWhiteSpace(game.InstallationPath) && Directory.Exists(game.InstallationPath))
+                        var customCfg = CustomLaunchService.GetConfig(game.AppId);
+                        if (customCfg != null && customCfg.IsEnabled && !string.IsNullOrWhiteSpace(customCfg.ExecutablePath) && File.Exists(customCfg.ExecutablePath))
                         {
                             isInstalled = true;
-                            installPath = game.InstallationPath;
-                            installedMap[game.AppId] = installPath;
-                        }
-                        else
-                        {
-                            var customCfg = CustomLaunchService.GetConfig(game.AppId);
-                            if (customCfg != null && customCfg.IsEnabled && !string.IsNullOrWhiteSpace(customCfg.ExecutablePath) && File.Exists(customCfg.ExecutablePath))
-                            {
-                                isInstalled = true;
-                                installPath = !string.IsNullOrWhiteSpace(customCfg.WorkingDirectory) && Directory.Exists(customCfg.WorkingDirectory)
-                                    ? customCfg.WorkingDirectory
-                                    : Path.GetDirectoryName(customCfg.ExecutablePath);
-                                installedMap[game.AppId] = installPath ?? "";
-                            }
-                            else
-                            {
-                                string? directPath = SteamHelper.GetGameInstallationPath(game.AppId, game.Name);
-                                if (!string.IsNullOrWhiteSpace(directPath) && Directory.Exists(directPath))
-                                {
-                                    isInstalled = true;
-                                    installPath = directPath;
-                                    installedMap[game.AppId] = directPath;
-                                }
-                            }
+                            installPath = !string.IsNullOrWhiteSpace(customCfg.WorkingDirectory) && Directory.Exists(customCfg.WorkingDirectory)
+                                ? customCfg.WorkingDirectory
+                                : Path.GetDirectoryName(customCfg.ExecutablePath);
+                            installedMap[game.AppId] = installPath ?? "";
                         }
                     }
 

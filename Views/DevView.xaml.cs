@@ -574,6 +574,15 @@ namespace SteamPluginManager.Views
             );
 
             await LoadGamesAsync();
+
+            // Clear caches and notify views so purged manifest disappears immediately
+            CacheManager.ClearHzmCache("hzm_manifest_data");
+            SteamDataUpdater.InvalidateCache();
+            HZManifestView.InvalidateCache();
+            OnlineFixView.InvalidateCache();
+            GameBypassView.InvalidateCache();
+            DashboardView.InvalidateCache();
+            _ = DashboardView.RefreshNewestManifestsAsync();
         }
 
         #endregion
@@ -1476,6 +1485,8 @@ namespace SteamPluginManager.Views
                     await LoadStorageDataAsync();
 
                     // Auto-refresh views and caches so newly uploaded bypass/onlinefix appears immediately with real name
+                    B2Config.InvalidateListCache();
+                    R2Config.InvalidateListCache();
                     GameBypassView.InvalidateCache();
                     OnlineFixView.InvalidateCache();
                     DashboardView.InvalidateCache();
@@ -1602,6 +1613,14 @@ namespace SteamPluginManager.Views
                         LogConsole($"[DevConsole] Deleted '{item.Key}' from {providerName}.");
                         ModernMessageBox.ShowInformation($"File '{item.FileName}' has been deleted from {providerName}.", "File Deleted");
                         await LoadStorageDataAsync();
+
+                        // Auto-refresh views and list caches so deleted file immediately disappears
+                        B2Config.InvalidateListCache();
+                        R2Config.InvalidateListCache();
+                        GameBypassView.InvalidateCache();
+                        OnlineFixView.InvalidateCache();
+                        DashboardView.InvalidateCache();
+                        _ = DashboardView.RefreshNewestManifestsAsync();
                     }
                     else
                     {

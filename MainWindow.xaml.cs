@@ -1142,16 +1142,6 @@ namespace SteamPluginManager
                             installedMap[appId] = parentPath;
                         }
 
-                        if (installPath == null)
-                        {
-                            string? directPath = SteamHelper.GetGameInstallationPath(appId, initialName);
-                            if (!string.IsNullOrWhiteSpace(directPath) && Directory.Exists(directPath))
-                            {
-                                installPath = directPath;
-                                installedMap[appId] = directPath;
-                            }
-                        }
-
                         var gameEntry = new GameEntry
                         {
                             AppId = appId,

@@ -484,9 +484,9 @@ namespace SteamPluginManager.Views
 
                 var cardsTask = LoadNewestManifestCardsAsync(generation);
 
-                _bypassLoadingTask = LoadRecentBypassesAsync(generation);
+                _bypassLoadingTask = LoadRecentBypassesAsync(generation, forceRefresh: force);
 
-                _onlineFixLoadingTask = LoadRecentOnlineFixesAsync(generation);
+                _onlineFixLoadingTask = LoadRecentOnlineFixesAsync(generation, forceRefresh: force);
 
 
 
@@ -2537,7 +2537,7 @@ namespace SteamPluginManager.Views
 
 
 
-        private async Task<List<BypassFile>> FetchNewestBypassFilesAsync(int count)
+        private async Task<List<BypassFile>> FetchNewestBypassFilesAsync(int count, bool forceRefresh = false)
 
         {
 
@@ -2545,7 +2545,7 @@ namespace SteamPluginManager.Views
 
             {
 
-                var r2Files = await SteamPluginManager.R2Config.ListFilesAsync("gamebypass/");
+                var r2Files = await SteamPluginManager.R2Config.ListFilesAsync("gamebypass/", forceRefresh: forceRefresh);
 
                 if (r2Files == null || r2Files.Count == 0)
 
@@ -2767,7 +2767,7 @@ namespace SteamPluginManager.Views
 
 
 
-        private async Task<List<OnlineFixFile>> FetchNewestOnlineFixFilesAsync(int count)
+        private async Task<List<OnlineFixFile>> FetchNewestOnlineFixFilesAsync(int count, bool forceRefresh = false)
 
         {
 
@@ -2775,7 +2775,7 @@ namespace SteamPluginManager.Views
 
             {
 
-                var b2Files = await SteamPluginManager.B2Config.ListFilesAsync("onlinefix/");
+                var b2Files = await SteamPluginManager.B2Config.ListFilesAsync("onlinefix/", forceRefresh: forceRefresh);
 
                 if (b2Files == null || b2Files.Count == 0)
 
@@ -3045,7 +3045,7 @@ namespace SteamPluginManager.Views
 
 
 
-        private async Task LoadRecentBypassesAsync(long? generation = null)
+        private async Task LoadRecentBypassesAsync(long? generation = null, bool forceRefresh = false)
 
         {
 
@@ -3055,9 +3055,9 @@ namespace SteamPluginManager.Views
 
             {
 
-                Logger.Log($"[DashboardView] LoadRecentBypassesAsync started (gen {gen})");
+                Logger.Log($"[DashboardView] LoadRecentBypassesAsync started (gen {gen}, forceRefresh={forceRefresh})");
 
-                var bypasses = await FetchNewestBypassFilesAsync(18);
+                var bypasses = await FetchNewestBypassFilesAsync(18, forceRefresh: forceRefresh);
 
 
 
@@ -3111,7 +3111,7 @@ namespace SteamPluginManager.Views
 
 
 
-        private async Task LoadRecentOnlineFixesAsync(long? generation = null)
+        private async Task LoadRecentOnlineFixesAsync(long? generation = null, bool forceRefresh = false)
 
         {
 
@@ -3121,9 +3121,9 @@ namespace SteamPluginManager.Views
 
             {
 
-                Logger.Log($"[DashboardView] LoadRecentOnlineFixesAsync started (gen {gen})");
+                Logger.Log($"[DashboardView] LoadRecentOnlineFixesAsync started (gen {gen}, forceRefresh={forceRefresh})");
 
-                var fixes = await FetchNewestOnlineFixFilesAsync(18);
+                var fixes = await FetchNewestOnlineFixFilesAsync(18, forceRefresh: forceRefresh);
 
 
 

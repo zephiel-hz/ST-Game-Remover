@@ -2,6 +2,15 @@
 
 ---
 
+## [3.1.6] - 2026-11-03
+
+### Fixed
+* **Dev Manifest Purge Real-Time Synchronization:** Resolved an issue where manifests deleted via DevView's Purge tool remained visible in `HZManifestView` and `DashboardView`. The purge pipeline now automatically evicts the 24-hour disk cache (`hzmCache.json`), clears metadata caches in `SteamDataUpdater`, and forces immediate cache invalidation across `HZManifestView` and `DashboardView`.
+* **Online-Fix & GameBypass Cloud Catalog Synchronization:** Fixed an issue where newly added or deleted Online-Fix / GameBypass archives in DevView did not immediately reflect on `DashboardView`, `OnlineFixView`, or `GameBypassView`. Added automatic list cache invalidation for Backblaze B2 and Cloudflare R2 on upload/deletion, implemented `_forceRefreshOnNextLoad` tracking for views, and enabled force-refresh propagation through Dashboard background loading tasks.
+* **GameLibrary False Installation Detection for Residual Folders:** Fixed an issue where uninstalled Steam games with leftover residue folders in `steamapps/common/` were falsely detected as installed. Removed the ungrounded directory existence fallback from `GameLibraryView` and eliminated loose folder-name matching from `SteamHelper.GetGameInstallationPath`. Game installation status now strictly requires a valid Steam ACF manifest (`appmanifest_<appid>.acf`), an active Custom Launch configuration pointing to an existing executable, or tracked OnlineFix files containing verified game binaries.
+
+---
+
 ## [3.1.5] - 2026-11-03
 
 ### Changed

@@ -162,6 +162,8 @@ namespace SteamPluginManager.Views
 
 
 
+        private static bool _forceRefreshOnNextLoad = false;
+
         public static void InvalidateCache()
 
         {
@@ -169,6 +171,10 @@ namespace SteamPluginManager.Views
             _cachedFiles = null;
 
             _lastFetchTime = DateTime.MinValue;
+
+            _forceRefreshOnNextLoad = true;
+
+            SteamPluginManager.B2Config.InvalidateListCache();
 
         }
 
@@ -186,7 +192,7 @@ namespace SteamPluginManager.Views
 
             }
 
-            await LoadFilesFromSource();
+            await LoadFilesFromSource(forceRefresh);
 
         }
 
@@ -1276,7 +1282,7 @@ namespace SteamPluginManager.Views
 
 
 
-        private async Task LoadFilesFromSource()
+        private async Task LoadFilesFromSource(bool forceRefresh = false)
 
         {
 
@@ -1286,7 +1292,7 @@ namespace SteamPluginManager.Views
 
                 // Check if we have valid cached data
 
-                bool hasValidCache = _cachedFiles != null && 
+                bool hasValidCache = !forceRefresh && _cachedFiles != null && 
 
                                    (DateTime.Now - _lastFetchTime) < _cacheDuration;
 
@@ -1332,7 +1338,7 @@ namespace SteamPluginManager.Views
 
                 // Ambil file list dari Backblaze B2 (onlinefix/ folder)
 
-                var onlineFixFiles = await SteamPluginManager.B2Config.ListFilesAsync("onlinefix/");
+                var onlineFixFiles = await SteamPluginManager.B2Config.ListFilesAsync("onlinefix/", forceRefresh: forceRefresh);
 
 
 
@@ -1590,7 +1596,11 @@ namespace SteamPluginManager.Views
 
 
 
-                _ = LoadFilesFromSource();
+                bool forceRefresh = _forceRefreshOnNextLoad;
+
+                _forceRefreshOnNextLoad = false;
+
+                _ = LoadFilesFromSource(forceRefresh);
 
             }
 

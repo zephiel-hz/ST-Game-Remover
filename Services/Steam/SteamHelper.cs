@@ -968,7 +968,18 @@ namespace SteamPluginManager
                                 var rec = OnlineFixTrackerService.GetInstallRecord(ofAppId);
                                 if (rec != null && !string.IsNullOrWhiteSpace(rec.TargetFolder) && Directory.Exists(rec.TargetFolder))
                                 {
-                                    map[ofAppId] = rec.TargetFolder;
+                                    try
+                                    {
+                                        // Guard: only consider installed if target folder actually contains an executable
+                                        if (Directory.EnumerateFiles(rec.TargetFolder, "*.exe", SearchOption.AllDirectories).Any())
+                                        {
+                                            map[ofAppId] = rec.TargetFolder;
+                                        }
+                                    }
+                                    catch
+                                    {
+                                        map[ofAppId] = rec.TargetFolder;
+                                    }
                                 }
                             }
                         }
@@ -1064,33 +1075,8 @@ namespace SteamPluginManager
                     }
                 }
 
-                // 4. Check steamapps/common by folder name matching
-                if (!string.IsNullOrWhiteSpace(gameName))
-                {
-                    string cleanedName = gameName.Trim();
-                    foreach (var library in libraries)
-                    {
-                        string common = Path.Combine(library, "steamapps", "common");
-                        if (!Directory.Exists(common)) continue;
-
-                        // Exact folder match
-                        string exactFolder = Path.Combine(common, cleanedName);
-                        if (Directory.Exists(exactFolder))
-                        {
-                            Logger.Log($"[SteamHelper] Found installation folder by exact name '{cleanedName}': {exactFolder}");
-                            return exactFolder;
-                        }
-
-                        // Try without apostrophes/special characters
-                        string strippedName = cleanedName.Replace("'", "").Replace("’", "").Replace(":", "").Replace(" - ", " ");
-                        string strippedFolder = Path.Combine(common, strippedName);
-                        if (Directory.Exists(strippedFolder))
-                        {
-                            Logger.Log($"[SteamHelper] Found installation folder by stripped name '{strippedName}': {strippedFolder}");
-                            return strippedFolder;
-                        }
-                    }
-                }
+                // Note: Do NOT match unmanifested steamapps/common residual folders by folder name alone.
+                // Leftover residual folders from uninstalled games must never cause uninstalled games to be marked as installed.
             }
             catch (Exception ex)
             {
