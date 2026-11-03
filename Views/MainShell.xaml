@@ -114,9 +114,11 @@
     </Window.Resources>
 
     <Border x:Name="MainShellBorder" Margin="8" Background="{DynamicResource BackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="18" ClipToBounds="True" SizeChanged="MainShellBorder_SizeChanged">
+        <!-- PERF-8.1A Diagnostic: DropShadowEffect temporarily disabled to isolate root off-screen render target
         <Border.Effect>
             <DropShadowEffect Color="#000000" BlurRadius="32" ShadowDepth="12" Opacity="0.45"/>
         </Border.Effect>
+        -->
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="58"/>

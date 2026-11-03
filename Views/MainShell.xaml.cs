@@ -13,6 +13,7 @@ using System.Windows.Threading;
 using SteamPluginManager.Models;
 using SteamPluginManager.Services.API;
 using SteamPluginManager.Services.Profile;
+using SteamPluginManager.Services.Security;
 using SteamPluginManager.Services.SystemTray;
 
 namespace SteamPluginManager.Views
@@ -21,12 +22,11 @@ namespace SteamPluginManager.Views
     {
         private SystemTrayService? _systemTrayService;
         private bool _isExplicitExit = false;
-        private bool _isSidebarExpanded = true;
-        private bool _isMaximized = false;
         private bool _isTransitioning = false;
         private bool _isInspectorMaximized = false;
         private Point _mouseDownScreenPoint = new();
         private readonly bool? _startupLicenseVerified;
+        private int? _currentUserId;
 
         // View instance caching for instant (0 ms) tab switching without losing state or scroll position
         private readonly Dictionary<string, object> _viewCache = new(StringComparer.OrdinalIgnoreCase);
@@ -34,6 +34,8 @@ namespace SteamPluginManager.Views
         // System monitoring
         private DispatcherTimer? _steamMonitorTimer;
         private FileSystemWatcher? _unlockerWatcher;
+        private DispatcherTimer? _unlockerDebounceTimer;
+        private bool _isSyncingUnlockerToggle;
         private FileSystemWatcher? _configLuaWatcher;
         private FileSystemWatcher? _depotcacheWatcher;
         private DispatcherTimer? _libraryWatcherDebounceTimer;
@@ -93,7 +95,7 @@ namespace SteamPluginManager.Views
             {
                 _systemTrayService?.RemoveTrayIcon();
 
-                string deviceId = DashboardView.GetDeviceId();
+                string deviceId = DeviceIdentifier.GetDeviceId();
                 string? currentUsername = HeaderProfileName?.Text;
 
                 // 1. Broadcast user offline immediately to connected peers (<10ms)
@@ -128,6 +130,8 @@ namespace SteamPluginManager.Views
                 Topmost = true;
                 Topmost = false;
                 Focus();
+
+                UpdateUnlockerToggleState();
             }
             catch (Exception ex)
             {
@@ -165,11 +169,17 @@ namespace SteamPluginManager.Views
                 _notificationToastTimer?.Stop();
                 _steamMonitorTimer?.Stop();
                 _libraryWatcherDebounceTimer?.Stop();
+                _unlockerDebounceTimer?.Stop();
                 _unlockerWatcher?.Dispose();
                 _configLuaWatcher?.Dispose();
                 _depotcacheWatcher?.Dispose();
             }
             catch { }
+
+            if (_isExplicitExit || !SystemTrayPreferences.IsCloseToTrayEnabled())
+            {
+                try { Application.Current.Shutdown(); } catch { }
+            }
         }
 
         private void ThemeChanged_Handler(object? sender, EventArgs e)
@@ -299,16 +309,18 @@ namespace SteamPluginManager.Views
                 var profile = await DashboardView.LoadUserProfileForEditingAsync();
                 if (profile != null)
                 {
+                    _currentUserId = profile.Id;
                     GlobalSidebar?.SetAdminVisibility(profile.IsAdmin);
 
                     if (!string.IsNullOrWhiteSpace(profile.DisplayName))
                     {
                         System.Windows.Media.ImageSource? avatarImg = null;
+                        bool hasAvatarUrl = profile.Id.HasValue && !string.IsNullOrWhiteSpace(profile.AvatarUrl);
                         if (profile.Id.HasValue && !string.IsNullOrWhiteSpace(profile.AvatarUrl))
                         {
                             avatarImg = await Services.Profile.ProfilePictureCacheService.GetAvatarAsync(profile.Id.Value, profile.AvatarUrl);
                         }
-                        SetHeaderProfile(profile.DisplayName, avatarImg);
+                        SetHeaderProfile(profile.DisplayName, avatarImg, clearAvatar: !hasAvatarUrl);
                     }
                 }
             }
@@ -418,12 +430,7 @@ namespace SteamPluginManager.Views
         public void NavigateToSaweria()
         {
             TitleText.Text = "Saweria";
-            if (!_viewCache.TryGetValue("Saweria", out var view))
-            {
-                view = new SaweriaView();
-                _viewCache["Saweria"] = view;
-            }
-            TransitionToView(view);
+            TransitionToView(new SaweriaView());
             try { GlobalSidebar?.SetActiveMenu("Saweria"); } catch { }
         }
 
@@ -450,9 +457,19 @@ namespace SteamPluginManager.Views
                 view = hzManifestView;
                 _viewCache["HZManifest"] = view;
             }
-            else if (forceRefresh && view is HZManifestView mv)
+            else if (view is HZManifestView mv)
             {
-                _ = HZManifestView.RefreshActiveManifestViewAsync(true);
+                if (forceRefresh)
+                {
+                    if (ContentArea.Content == mv)
+                    {
+                        _ = mv.RefreshManifestDataAsync(forceRefresh: true);
+                    }
+                    else
+                    {
+                        mv.SetForceRefresh(true);
+                    }
+                }
             }
 
             TransitionToView(view);
@@ -462,7 +479,6 @@ namespace SteamPluginManager.Views
         public void NavigateToHZManifestWithSort(string sortOrder, bool forceRefresh = false)
         {
             TitleText.Text = "HZ Manifest";
-            bool isNew = false;
             if (!_viewCache.TryGetValue("HZManifest", out var view))
             {
                 var hzManifestView = new HZManifestView();
@@ -470,15 +486,21 @@ namespace SteamPluginManager.Views
                 hzManifestView.SetRequiresDeviceVerificationOnLoad(true);
                 view = hzManifestView;
                 _viewCache["HZManifest"] = view;
-                isNew = true;
             }
 
             if (view is HZManifestView mv)
             {
                 mv.SetSortOrder(sortOrder);
-                if (!isNew && forceRefresh)
+                if (forceRefresh)
                 {
-                    _ = HZManifestView.RefreshActiveManifestViewAsync(true);
+                    if (ContentArea.Content == mv)
+                    {
+                        _ = mv.RefreshManifestDataAsync(forceRefresh: true);
+                    }
+                    else
+                    {
+                        mv.SetForceRefresh(true);
+                    }
                 }
             }
 
@@ -488,12 +510,23 @@ namespace SteamPluginManager.Views
 
         public void NavigateToOnlineFix()
         {
+            NavigateToOnlineFixWithSort("NameAsc");
+        }
+
+        public void NavigateToOnlineFixWithSort(string sortOrder)
+        {
             TitleText.Text = "Online Fix";
             if (!_viewCache.TryGetValue("OnlineFix", out var view))
             {
                 view = new OnlineFixView();
                 _viewCache["OnlineFix"] = view;
             }
+
+            if (view is OnlineFixView ofView)
+            {
+                ofView.SetSortOrder(sortOrder);
+            }
+
             TransitionToView(view);
             try { GlobalSidebar?.SetActiveMenu("OnlineFix"); } catch { }
         }
@@ -523,12 +556,23 @@ namespace SteamPluginManager.Views
 
         public void NavigateToGameBypass()
         {
+            NavigateToGameBypassWithSort("NameAsc");
+        }
+
+        public void NavigateToGameBypassWithSort(string sortOrder)
+        {
             TitleText.Text = "Game Bypass";
             if (!_viewCache.TryGetValue("GameBypass", out var view))
             {
                 view = new GameBypassView();
                 _viewCache["GameBypass"] = view;
             }
+
+            if (view is GameBypassView gbView)
+            {
+                gbView.SetSortOrder(sortOrder);
+            }
+
             TransitionToView(view);
             try { GlobalSidebar?.SetActiveMenu("GameBypass"); } catch { }
         }
@@ -726,6 +770,17 @@ namespace SteamPluginManager.Views
                 if (string.IsNullOrWhiteSpace(steamPath) || !Directory.Exists(steamPath))
                     return;
 
+                _unlockerDebounceTimer?.Stop();
+                _unlockerDebounceTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(100)
+                };
+                _unlockerDebounceTimer.Tick += (_, _) =>
+                {
+                    _unlockerDebounceTimer.Stop();
+                    UpdateUnlockerToggleState();
+                };
+
                 _unlockerWatcher?.Dispose();
                 _unlockerWatcher = new FileSystemWatcher(steamPath)
                 {
@@ -734,10 +789,19 @@ namespace SteamPluginManager.Views
                     IncludeSubdirectories = false
                 };
 
-                _unlockerWatcher.Created += (_, _) => Dispatcher.BeginInvoke(new Action(UpdateUnlockerToggleState));
-                _unlockerWatcher.Deleted += (_, _) => Dispatcher.BeginInvoke(new Action(UpdateUnlockerToggleState));
-                _unlockerWatcher.Changed += (_, _) => Dispatcher.BeginInvoke(new Action(UpdateUnlockerToggleState));
-                _unlockerWatcher.Renamed += (_, _) => Dispatcher.BeginInvoke(new Action(UpdateUnlockerToggleState));
+                void TriggerDebouncedUpdate()
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _unlockerDebounceTimer.Stop();
+                        _unlockerDebounceTimer.Start();
+                    }));
+                }
+
+                _unlockerWatcher.Created += (_, _) => TriggerDebouncedUpdate();
+                _unlockerWatcher.Deleted += (_, _) => TriggerDebouncedUpdate();
+                _unlockerWatcher.Changed += (_, _) => TriggerDebouncedUpdate();
+                _unlockerWatcher.Renamed += (_, _) => TriggerDebouncedUpdate();
                 _unlockerWatcher.EnableRaisingEvents = true;
             }
             catch { }
@@ -766,7 +830,6 @@ namespace SteamPluginManager.Views
                     _libraryWatcherDebounceTimer.Stop();
                     Logger.Log("[LibraryWatcher] Lua/Manifest file changes detected on disk. Auto-refreshing library...");
                     WindowNavigator.RefreshGameList();
-                    RefreshGameLibrary();
                 };
 
                 Action triggerDebounce = () =>
@@ -840,21 +903,42 @@ namespace SteamPluginManager.Views
 
         private void UpdateUnlockerToggleState()
         {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(UpdateUnlockerToggleState));
+                return;
+            }
+
             try
             {
-                if (HeaderUnlockerToggle != null)
+                bool isEnabled = UnlockerRegistryHelper.IsUnlockerEnabled();
+
+                if (HeaderUnlockerToggle != null && HeaderUnlockerToggle.IsChecked != isEnabled)
                 {
-                    HeaderUnlockerToggle.IsChecked = UnlockerRegistryHelper.IsUnlockerEnabled();
+                    _isSyncingUnlockerToggle = true;
+                    try
+                    {
+                        HeaderUnlockerToggle.IsChecked = isEnabled;
+                    }
+                    finally
+                    {
+                        _isSyncingUnlockerToggle = false;
+                    }
                 }
+
+                GlobalSidebar?.SetUnlockerToggleState(isEnabled);
             }
             catch { }
         }
 
         private void HeaderUnlockerToggle_Checked(object sender, RoutedEventArgs e)
         {
+            if (_isSyncingUnlockerToggle) return;
+
             try
             {
                 UnlockerRegistryHelper.SetUnlockerEnabled(true);
+                GlobalSidebar?.SetUnlockerToggleState(true);
             }
             catch (Exception ex)
             {
@@ -864,9 +948,12 @@ namespace SteamPluginManager.Views
 
         private void HeaderUnlockerToggle_Unchecked(object sender, RoutedEventArgs e)
         {
+            if (_isSyncingUnlockerToggle) return;
+
             try
             {
                 UnlockerRegistryHelper.SetUnlockerEnabled(false);
+                GlobalSidebar?.SetUnlockerToggleState(false);
             }
             catch (Exception ex)
             {
@@ -911,7 +998,7 @@ namespace SteamPluginManager.Views
             await DashboardView.OpenProfileEditorAsync();
         }
 
-        public void SetHeaderProfile(string displayName, System.Windows.Media.ImageSource? avatarImage = null)
+        public void SetHeaderProfile(string displayName, System.Windows.Media.ImageSource? avatarImage = null, bool clearAvatar = false)
         {
             if (string.IsNullOrWhiteSpace(displayName)) return;
             Dispatcher.Invoke(() =>
@@ -926,11 +1013,25 @@ namespace SteamPluginManager.Views
                         HeaderAvatarImage.Visibility = Visibility.Visible;
                         if (HeaderAvatarText != null) HeaderAvatarText.Visibility = Visibility.Collapsed;
                     }
-                    else
+                    else if (clearAvatar)
                     {
                         HeaderAvatarImage.Source = null;
                         HeaderAvatarImage.Visibility = Visibility.Collapsed;
                         if (HeaderAvatarText != null) HeaderAvatarText.Visibility = Visibility.Visible;
+                    }
+                    else
+                    {
+                        // avatarImage == null && !clearAvatar: preserve existing avatar state
+                        if (HeaderAvatarImage.Source == null)
+                        {
+                            HeaderAvatarImage.Visibility = Visibility.Collapsed;
+                            if (HeaderAvatarText != null) HeaderAvatarText.Visibility = Visibility.Visible;
+                        }
+                        else
+                        {
+                            HeaderAvatarImage.Visibility = Visibility.Visible;
+                            if (HeaderAvatarText != null) HeaderAvatarText.Visibility = Visibility.Collapsed;
+                        }
                     }
                 }
             });
@@ -938,15 +1039,38 @@ namespace SteamPluginManager.Views
 
         private void HandleAvatarUpdated(int userId, System.Windows.Media.ImageSource? newAvatar)
         {
-            Dispatcher.Invoke(async () =>
+            Dispatcher.Invoke(() =>
             {
                 try
                 {
-                    var profile = await DashboardView.LoadUserProfileForEditingAsync();
-                    if (profile != null && profile.Id == userId)
+                    // If current user ID is already resolved and matches, update header immediately without redundant network query
+                    if (_currentUserId.HasValue)
                     {
-                        SetHeaderProfile(profile.DisplayName, newAvatar);
+                        if (_currentUserId.Value == userId)
+                        {
+                            string displayName = HeaderProfileName?.Text ?? "User";
+                            SetHeaderProfile(displayName, newAvatar, clearAvatar: newAvatar == null);
+                        }
+                        return;
                     }
+
+                    // Fallback when _currentUserId has not yet been resolved: verify profile ownership once
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var profile = await DashboardView.LoadUserProfileForEditingAsync();
+                            if (profile != null && profile.Id == userId)
+                            {
+                                Dispatcher.Invoke(() =>
+                                {
+                                    _currentUserId = profile.Id;
+                                    SetHeaderProfile(profile.DisplayName, newAvatar, clearAvatar: newAvatar == null);
+                                });
+                            }
+                        }
+                        catch { }
+                    });
                 }
                 catch { }
             });
@@ -1169,14 +1293,23 @@ namespace SteamPluginManager.Views
         {
             try
             {
-                if (sender is Border border)
+                if (sender is Border border && border.ActualWidth > 0 && border.ActualHeight > 0)
                 {
-                    border.Clip = new RectangleGeometry
+                    if (border.Clip is RectangleGeometry existing &&
+                        Math.Abs(existing.Rect.Width - border.ActualWidth) < 0.1 &&
+                        Math.Abs(existing.Rect.Height - border.ActualHeight) < 0.1)
+                    {
+                        return;
+                    }
+
+                    var geom = new RectangleGeometry
                     {
                         Rect = new Rect(0, 0, border.ActualWidth, border.ActualHeight),
                         RadiusX = 18,
                         RadiusY = 18
                     };
+                    geom.Freeze();
+                    border.Clip = geom;
                 }
             }
             catch { }
@@ -1213,13 +1346,11 @@ namespace SteamPluginManager.Views
             if (WindowState == WindowState.Normal)
             {
                 WindowState = WindowState.Maximized;
-                _isMaximized = true;
                 UpdateMaximizeButton();
             }
             else
             {
                 WindowState = WindowState.Normal;
-                _isMaximized = false;
                 UpdateMaximizeButton();
             }
         }
@@ -1289,7 +1420,6 @@ namespace SteamPluginManager.Views
                 else if (WindowState == WindowState.Maximized)
                 {
                     _mouseDownScreenPoint = e.GetPosition(this);
-                    _isSidebarExpanded = false;
                 }
             }
         }

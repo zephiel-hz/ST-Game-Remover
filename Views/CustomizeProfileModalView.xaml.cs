@@ -405,7 +405,7 @@ namespace SteamPluginManager.Views
                 var shell = WindowNavigator.GetMainShell();
                 if (shell != null)
                 {
-                    shell.SetHeaderProfile(newName, _editingProfile.AvatarImage);
+                    shell.SetHeaderProfile(newName, _editingProfile.AvatarImage, clearAvatar: _photoRemoved);
                     shell.GlobalSidebar?.SetProfile(newName, string.Empty, _editingProfile.AvatarImage);
                 }
 

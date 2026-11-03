@@ -3,6 +3,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:SteamPluginManager"
+             xmlns:views="clr-namespace:SteamPluginManager.Views"
              xmlns:helpers="clr-namespace:SteamPluginManager.Helpers"
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
              Background="{DynamicResource BackgroundBrush}"
@@ -13,6 +14,7 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
         <helpers:InstalledBadgeTextConverter x:Key="InstalledBadgeTextConverter"/>
+        <helpers:ThumbnailDecodeConverter x:Key="ThumbnailDecodeConverter"/>
         
         <!-- Modern Rounded Button Style -->
         <Style x:Key="RoundedButtonStyle" TargetType="Button">
@@ -240,6 +242,167 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Shared Game Card DataTemplate for Rows -->
+        <DataTemplate x:Key="GameCardTemplate">
+            <Border Style="{StaticResource GameCardStyle}" ClipToBounds="True"
+                    PreviewMouseLeftButtonDown="GameCard_PreviewMouseLeftButtonDown"
+                    PreviewMouseMove="GameCard_PreviewMouseMove"
+                    MouseLeave="GameCard_MouseLeave"
+                    MouseLeftButtonUp="GameCard_MouseLeftButtonUp"
+                    Unloaded="GameCard_Unloaded"
+                    Cursor="Hand" Height="270">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="155"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Image Banner & Badges -->
+                    <Border Grid.Row="0" Background="{DynamicResource BackgroundBrush}" CornerRadius="15,15,0,0" ClipToBounds="True">
+                        <Grid>
+                            <!-- Game Artwork -->
+                            <Image x:Name="CardImage" 
+                                   Source="{Binding ScreenshotUrl, Converter={StaticResource ThumbnailDecodeConverter}}" 
+                                   helpers:ThumbnailDecodeConverter.ClearOnFailure="True"
+                                   Stretch="UniformToFill" 
+                                   RenderOptions.BitmapScalingMode="Linear" 
+                                   HorizontalAlignment="Center" 
+                                   VerticalAlignment="Center">
+                                <Image.Style>
+                                    <Style TargetType="Image">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ScreenshotUrl}" Value="">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding ScreenshotUrl}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Source, RelativeSource={RelativeSource Self}}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Image.Style>
+                            </Image>
+
+                            <!-- Modern Placeholder fallback -->
+                            <Grid x:Name="Placeholder">
+                                <Grid.Style>
+                                    <Style TargetType="Grid">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ScreenshotUrl}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding ScreenshotUrl}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Source, ElementName=CardImage}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Grid.Style>
+                                <Border Background="{DynamicResource CardBackgroundBrush}">
+                                    <Grid>
+                                        <!-- Subtle background mesh -->
+                                        <TextBlock Text="&#xE7FC;" FontFamily="Segoe MDL2 Assets" FontSize="64" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource BorderBrush}" Opacity="0.3"/>
+                                        <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,16">
+                                            <TextBlock Text="STEAM GAME" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource MutedForegroundBrush}" HorizontalAlignment="Center" Opacity="0.6"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+
+                            <!-- Bottom Gradient Vignette for readability -->
+                            <Border VerticalAlignment="Bottom" Height="50">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#00000000" Offset="0"/>
+                                        <GradientStop Color="#B2000000" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+
+                            <!-- Top Left: Installed Badge -->
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10" CornerRadius="6" Padding="8,4" Background="#E610B981" Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVisibility}}">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="10" Foreground="White" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                    <TextBlock Foreground="White" FontWeight="Bold" FontSize="10" VerticalAlignment="Center">
+                                        <TextBlock.Text>
+                                            <MultiBinding Converter="{StaticResource InstalledBadgeTextConverter}">
+                                                <Binding Path="IsInstalled"/>
+                                                <Binding Path="InstallationPath"/>
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Top Right: Modern Squircle Selection CheckBox (Only visible in Selection Mode) -->
+                            <CheckBox Style="{StaticResource CardCheckBoxStyle}"
+                                      IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                      Visibility="{Binding ElementName=ThisLibraryControl, Path=IsSelectionMode, Converter={StaticResource BoolToVisibility}}"
+                                      HorizontalAlignment="Right" VerticalAlignment="Top" Margin="10"
+                                      Checked="ItemCheckBox_Changed" Unchecked="ItemCheckBox_Changed"/>
+
+                            <!-- Bottom Left: App ID Pill Tag -->
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="10,0,0,10" Background="#99000000" CornerRadius="5" Padding="6,2" BorderBrush="#33FFFFFF" BorderThickness="1">
+                                <TextBlock Text="{Binding AppId, StringFormat='AppID: {0}'}" FontSize="10" FontWeight="SemiBold" Foreground="#E2E8F0"/>
+                            </Border>
+                        </Grid>
+                    </Border>
+
+                    <!-- Card Info Content -->
+                    <Grid Grid.Row="1" Margin="14,10,14,12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Game Title -->
+                        <TextBlock Grid.Row="0" Text="{Binding Name}" FontWeight="Bold" FontSize="13" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,3"/>
+                        
+                        <!-- Genre -->
+                        <TextBlock Grid.Row="1" Text="{Binding Genre}" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" TextTrimming="CharacterEllipsis" Margin="0,0,0,6"/>
+
+                        <!-- Card Footer Row -->
+                        <Grid Grid.Row="3" VerticalAlignment="Bottom">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Status Dot & Label -->
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Ellipse Width="6" Height="6" VerticalAlignment="Center" Margin="0,0,6,0">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Fill" Value="{DynamicResource MutedForegroundBrush}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsInstalled}" Value="True">
+                                                    <Setter Property="Fill" Value="#10B981"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <TextBlock Text="{Binding InstallationStatus}" FontSize="10.5" Foreground="{DynamicResource MutedForegroundBrush}" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <!-- Lua / Config Icon Tag -->
+                            <Border Grid.Column="1" Background="{DynamicResource ButtonBackgroundBrush}" CornerRadius="4" Padding="5,2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                                <TextBlock Text="LUA" FontSize="9.5" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"/>
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Border>
+        </DataTemplate>
     </UserControl.Resources>
     
     <Grid Margin="14,12,14,14">
@@ -359,165 +522,58 @@
             </Grid>
         </Border>
 
-            <!-- Cards Grid Area -->
+            <!-- Cards Grid Area (Row-Virtualizing ListBox) -->
             <Grid Grid.Row="1">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" x:Name="CardsScrollViewer" Padding="0,0,8,0">
-                    <ItemsControl x:Name="GameCards" ItemsSource="{Binding Games}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <UniformGrid x:Name="CardGrid" IsItemsHost="True" Columns="3" HorizontalAlignment="Stretch" VerticalAlignment="Top"/>
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Style="{StaticResource GameCardStyle}" ClipToBounds="True"
-                                        PreviewMouseLeftButtonDown="GameCard_PreviewMouseLeftButtonDown"
-                                        PreviewMouseMove="GameCard_PreviewMouseMove"
-                                        MouseLeave="GameCard_MouseLeave"
-                                        MouseLeftButtonUp="GameCard_MouseLeftButtonUp"
-                                        Cursor="Hand" Height="270">
-                                    <Grid>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="155"/>
-                                            <RowDefinition Height="*"/>
-                                        </Grid.RowDefinitions>
-
-                                        <!-- Image Banner & Badges -->
-                                        <Border Grid.Row="0" Background="{DynamicResource BackgroundBrush}" CornerRadius="15,15,0,0" ClipToBounds="True">
-                                            <Grid>
-                                                <!-- Game Artwork -->
-                                                <Image x:Name="CardImage" Source="{Binding ScreenshotUrl}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                    <Image.Style>
-                                                        <Style TargetType="Image">
-                                                            <Setter Property="Visibility" Value="Visible"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding ScreenshotUrl}" Value="">
-                                                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding ScreenshotUrl}" Value="{x:Null}">
-                                                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Image.Style>
-                                                </Image>
-
-                                                <!-- Modern Placeholder fallback -->
-                                                <Grid x:Name="Placeholder">
-                                                    <Grid.Style>
-                                                        <Style TargetType="Grid">
-                                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding ScreenshotUrl}" Value="">
-                                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding ScreenshotUrl}" Value="{x:Null}">
-                                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Grid.Style>
-                                                    <Border Background="{DynamicResource CardBackgroundBrush}">
-                                                        <Grid>
-                                                            <!-- Subtle background mesh -->
-                                                            <TextBlock Text="&#xE7FC;" FontFamily="Segoe MDL2 Assets" FontSize="64" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource BorderBrush}" Opacity="0.3"/>
-                                                            <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,16">
-                                                                <TextBlock Text="STEAM GAME" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource MutedForegroundBrush}" HorizontalAlignment="Center" Opacity="0.6"/>
-                                                            </StackPanel>
-                                                        </Grid>
-                                                    </Border>
-                                                </Grid>
-
-                                                <!-- Bottom Gradient Vignette for readability -->
-                                                <Border VerticalAlignment="Bottom" Height="50">
-                                                    <Border.Background>
-                                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                                            <GradientStop Color="#00000000" Offset="0"/>
-                                                            <GradientStop Color="#B2000000" Offset="1"/>
-                                                        </LinearGradientBrush>
-                                                    </Border.Background>
-                                                </Border>
-
-                                                <!-- Top Left: Installed Badge -->
-                                                <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10" CornerRadius="6" Padding="8,4" Background="#E610B981" Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVisibility}}">
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <TextBlock Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="10" Foreground="White" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                                                        <TextBlock Foreground="White" FontWeight="Bold" FontSize="10" VerticalAlignment="Center">
-                                                            <TextBlock.Text>
-                                                                <MultiBinding Converter="{StaticResource InstalledBadgeTextConverter}">
-                                                                    <Binding Path="IsInstalled"/>
-                                                                    <Binding Path="InstallationPath"/>
-                                                                </MultiBinding>
-                                                            </TextBlock.Text>
-                                                        </TextBlock>
-                                                    </StackPanel>
-                                                </Border>
-
-                                                <!-- Top Right: Modern Squircle Selection CheckBox (Only visible in Selection Mode) -->
-                                                <CheckBox Style="{StaticResource CardCheckBoxStyle}"
-                                                          IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                                                          Visibility="{Binding ElementName=ThisLibraryControl, Path=IsSelectionMode, Converter={StaticResource BoolToVisibility}}"
-                                                          HorizontalAlignment="Right" VerticalAlignment="Top" Margin="10"
-                                                          Checked="ItemCheckBox_Changed" Unchecked="ItemCheckBox_Changed"/>
-
-                                                <!-- Bottom Left: App ID Pill Tag -->
-                                                <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="10,0,0,10" Background="#99000000" CornerRadius="5" Padding="6,2" BorderBrush="#33FFFFFF" BorderThickness="1">
-                                                    <TextBlock Text="{Binding AppId, StringFormat='AppID: {0}'}" FontSize="10" FontWeight="SemiBold" Foreground="#E2E8F0"/>
-                                                </Border>
-                                            </Grid>
-                                        </Border>
-
-                                        <!-- Card Info Content -->
-                                        <Grid Grid.Row="1" Margin="14,10,14,12">
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto"/>
-                                                <RowDefinition Height="Auto"/>
-                                                <RowDefinition Height="*"/>
-                                                <RowDefinition Height="Auto"/>
-                                            </Grid.RowDefinitions>
-
-                                            <!-- Game Title -->
-                                            <TextBlock Grid.Row="0" Text="{Binding Name}" FontWeight="Bold" FontSize="13" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,3"/>
-                                            
-                                            <!-- Genre -->
-                                            <TextBlock Grid.Row="1" Text="{Binding Genre}" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" TextTrimming="CharacterEllipsis" Margin="0,0,0,6"/>
-
-                                            <!-- Card Footer Row -->
-                                            <Grid Grid.Row="3" VerticalAlignment="Bottom">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-
-                                                <!-- Status Dot & Label -->
-                                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <Ellipse Width="6" Height="6" VerticalAlignment="Center" Margin="0,0,6,0">
-                                                        <Ellipse.Style>
-                                                            <Style TargetType="Ellipse">
-                                                                <Setter Property="Fill" Value="{DynamicResource MutedForegroundBrush}"/>
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsInstalled}" Value="True">
-                                                                        <Setter Property="Fill" Value="#10B981"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </Ellipse.Style>
-                                                    </Ellipse>
-                                                    <TextBlock Text="{Binding InstallationStatus}" FontSize="10.5" Foreground="{DynamicResource MutedForegroundBrush}" VerticalAlignment="Center"/>
-                                                </StackPanel>
-
-                                                <!-- Lua / Config Icon Tag -->
-                                                <Border Grid.Column="1" Background="{DynamicResource ButtonBackgroundBrush}" CornerRadius="4" Padding="5,2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
-                                                    <TextBlock Text="LUA" FontSize="9.5" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"/>
-                                                </Border>
-                                            </Grid>
-                                        </Grid>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
+                <ListBox x:Name="GameCards"
+                         ItemsSource="{Binding Rows, ElementName=ThisLibraryControl}"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Padding="0,0,14,0"
+                         Focusable="False"
+                         helpers:SmoothScrollViewerHelper.EnableSmoothScrolling="True"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ScrollViewer.CanContentScroll="False"
+                         ScrollViewer.ScrollChanged="GameCards_ScrollChanged">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Vertical"/>
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Focusable" Value="False"/>
+                            <Setter Property="IsHitTestVisible" Value="True"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <ContentPresenter HorizontalAlignment="Stretch"/>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="{x:Type views:GameRow}">
+                            <ItemsControl ItemsSource="{Binding Items}"
+                                          ItemTemplate="{StaticResource GameCardTemplate}"
+                                          Focusable="False">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Columns="{Binding ElementName=ThisLibraryControl, Path=ColumnCount}"
+                                                     HorizontalAlignment="Stretch"
+                                                     VerticalAlignment="Top"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
             </Grid>
 
             <!-- Modern Delete Progress Overlay (covers entire GameLibraryView) -->

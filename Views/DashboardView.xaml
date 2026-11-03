@@ -1,6 +1,7 @@
 <UserControl x:Class="SteamPluginManager.Views.DashboardView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:helpers="clr-namespace:SteamPluginManager.Helpers"
              Background="{DynamicResource BackgroundBrush}"
              Foreground="{DynamicResource ForegroundBrush}">
     <UserControl.Resources>
@@ -79,9 +80,42 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="RecentSegmentRadioButtonStyle" TargetType="RadioButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource MutedForegroundBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="14,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="tabBorder"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="tabBorder" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="tabBorder" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0">
+    <ScrollViewer x:Name="DashboardScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0"
+                  helpers:SmoothScrollViewerHelper.EnableSmoothScrolling="True"
+                  ScrollChanged="DashboardScrollViewer_ScrollChanged">
         <Grid Margin="24,20,24,24" MaxWidth="1280">
             <StackPanel>
                 <!-- Featured Most Downloaded Games Slider -->
@@ -105,13 +139,13 @@
                                HorizontalAlignment="Center"
                                VerticalAlignment="Top"
                                Opacity="1.0"
-                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                               RenderOptions.BitmapScalingMode="Linear"/>
                         <Image x:Name="SlideImageB"
                                Stretch="UniformToFill"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Top"
                                Opacity="0.0"
-                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                               RenderOptions.BitmapScalingMode="Linear"/>
 
                         <!-- Layer 2: Gradient Overlays (Soft and vibrant, matching GameLibraryDetailView) -->
                         <!-- Soft Left-to-right fade (protects title and badge readability on the left) -->
@@ -180,11 +214,7 @@
                                            TextWrapping="Wrap"
                                            MaxHeight="75"
                                            TextTrimming="CharacterEllipsis"
-                                           Margin="0,0,0,8">
-                                    <TextBlock.Effect>
-                                        <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.7" Color="Black"/>
-                                    </TextBlock.Effect>
-                                </TextBlock>
+                                           Margin="0,0,0,8"/>
 
                                 <!-- Description Snippet -->
                                 <TextBlock x:Name="SlideGameDescription"
@@ -199,9 +229,6 @@
 
                                 <!-- Action CTA Button -->
                                 <Border Background="{DynamicResource AccentBrush}" CornerRadius="10" Padding="18,10" HorizontalAlignment="Left">
-                                    <Border.Effect>
-                                        <DropShadowEffect Color="#3B82F6" BlurRadius="14" ShadowDepth="2" Opacity="0.45"/>
-                                    </Border.Effect>
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                         <TextBlock Text="View Manifest &amp; Download" FontSize="12" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center"/>
                                         <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="10" Foreground="White" Margin="8,1,0,0" VerticalAlignment="Center"/>
@@ -278,34 +305,63 @@
                     </Grid>
                 </Border>
 
-                <!-- Newest Manifest Cards Section -->
+                <!-- Recently Updated Section (Manifest, Bypass, OnlineFix) -->
                 <Border Style="{StaticResource PanelCard}">
                     <StackPanel>
                         <Grid Margin="0,0,0,16">
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="&#xE734;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="{DynamicResource AccentBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="Newest Manifest Entries" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                <TextBlock Text="&#xE823;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="{DynamicResource AccentBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Recently Updated" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center"/>
                             </StackPanel>
-                            <Button x:Name="SeeMoreManifestsButton"
+
+                            <!-- Segmented Tab Navigation -->
+                            <Border Background="{DynamicResource InputBackgroundBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="3"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton x:Name="TabManifestRadio"
+                                                 Content="Manifest"
+                                                 GroupName="RecentTabs"
+                                                 IsChecked="True"
+                                                 Checked="RecentTab_Checked"
+                                                 Style="{StaticResource RecentSegmentRadioButtonStyle}"/>
+                                    <RadioButton x:Name="TabBypassRadio"
+                                                 Content="Bypass"
+                                                 GroupName="RecentTabs"
+                                                 Checked="RecentTab_Checked"
+                                                 Style="{StaticResource RecentSegmentRadioButtonStyle}"/>
+                                    <RadioButton x:Name="TabOnlineFixRadio"
+                                                 Content="OnlineFix"
+                                                 GroupName="RecentTabs"
+                                                 Checked="RecentTab_Checked"
+                                                 Style="{StaticResource RecentSegmentRadioButtonStyle}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Button x:Name="SeeMoreRecentButton"
                                     Style="{StaticResource SeeMoreButtonStyle}"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Center"
-                                    Click="SeeMoreManifests_Click">
+                                    Click="SeeMoreRecent_Click">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="See more" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="SeeMoreRecentText" Text="See more" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
                                     <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="6,1,0,0" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
                         </Grid>
-                        
-                        <UniformGrid x:Name="NewestManifestCardsPanel"
+
+                        <UniformGrid x:Name="RecentCardsPanel"
                                      Rows="2"
                                      HorizontalAlignment="Stretch"
                                      Margin="0,4,0,0"
                                      SnapsToDevicePixels="True"/>
                         
-                        <TextBlock x:Name="NewestManifestPlaceholder" 
-                                   Text="Loading newest manifests..." 
+                        <TextBlock x:Name="RecentPlaceholder" 
+                                   Text="Loading recently updated..." 
                                    Foreground="{DynamicResource MutedForegroundBrush}" 
                                    FontSize="13"
                                    Margin="0,20,0,10" 

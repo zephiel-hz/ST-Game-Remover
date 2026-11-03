@@ -507,7 +507,8 @@ namespace SteamPluginManager
                 ["minimum_requirements"] = steamData.MinimumRequirements,
                 ["recommended_requirements"] = steamData.RecommendedRequirements,
                 ["storage_type"] = "folder",
-                ["folder_path"] = $"{appId}/"
+                ["folder_path"] = $"{appId}/",
+                ["created_at"] = DateTime.UtcNow.ToString("o")
             };
 
             string insertUrl = $"{supabaseUrl}/rest/v1/hzmanifest_files";

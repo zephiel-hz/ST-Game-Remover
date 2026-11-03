@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using SteamPluginManager.Services.Security;
 
 namespace SteamPluginManager
 {
@@ -39,6 +40,8 @@ namespace SteamPluginManager
         {
             base.OnStartup(e);
 
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
             _singleInstanceMutex = new Mutex(true, "Local\\HZLuaManagerSingleInstance", out bool createdNew);
             if (!createdNew)
             {
@@ -67,12 +70,22 @@ namespace SteamPluginManager
             {
                 try
                 {
-                    await Task.WhenAll(Task.Delay(350), startupLicenseCheckTask);
+                    await Task.WhenAll(Task.Delay(1100), startupLicenseCheckTask);
 
                     bool isLicenseVerified = await startupLicenseCheckTask;
                     var shell = new Views.MainShell(isLicenseVerified);
-                    shell.Show();
                     MainWindow = shell;
+
+                    // Ensure splash screen finishes and fades out completely before showing MainShell
+                    if (_splashWindow != null)
+                    {
+                        await _splashWindow.FadeOutAsync();
+                        _splashWindow = null;
+                    }
+
+                    shell.Show();
+                    shell.Activate();
+                    ShutdownMode = ShutdownMode.OnMainWindowClose;
 
                     _ = Task.Run(async () =>
                     {
@@ -89,13 +102,6 @@ namespace SteamPluginManager
                             try { Logger.Log($"App startup failed background tasks: {ex.Message}"); } catch { }
                         }
                     });
-
-                    if (_splashWindow != null)
-                    {
-                        await _splashWindow.FadeOutAsync();
-                        _splashWindow.Close();
-                        _splashWindow = null;
-                    }
                 }
                 catch (Exception ex)
                 {
@@ -111,7 +117,7 @@ namespace SteamPluginManager
         {
             try
             {
-                string deviceId = Views.DashboardView.GetDeviceId();
+                string deviceId = DeviceIdentifier.GetDeviceId();
                 if (!string.IsNullOrWhiteSpace(deviceId) && deviceId != "UNKNOWN")
                 {
                     Services.API.CommunityChatService.SetUserOfflineAsync(deviceId).Wait(600);
@@ -129,6 +135,12 @@ namespace SteamPluginManager
             {
                 _singleInstanceMutex?.ReleaseMutex();
                 _singleInstanceMutex?.Dispose();
+            }
+            catch { }
+
+            try
+            {
+                Helpers.WebViewHelper.TerminateAllTrackedProcesses();
             }
             catch { }
 

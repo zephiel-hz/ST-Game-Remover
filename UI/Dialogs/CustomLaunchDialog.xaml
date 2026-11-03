@@ -1,6 +1,7 @@
 <Window x:Class="SteamPluginManager.UI.Dialogs.CustomLaunchDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:helpers="clr-namespace:SteamPluginManager.Helpers"
         Title="Custom Launch Configuration"
         SizeToContent="Height"
         Width="640"
@@ -344,7 +345,8 @@
                 </Border>
 
                 <!-- MAIN BODY -->
-                <ScrollViewer Grid.Row="1" MaxHeight="520" VerticalScrollBarVisibility="Auto" Margin="20,16,20,10">
+                <ScrollViewer Grid.Row="1" MaxHeight="520" VerticalScrollBarVisibility="Auto" Margin="20,16,20,10"
+                              helpers:SmoothScrollViewerHelper.EnableSmoothScrolling="True">
                     <StackPanel>
                         <!-- Explanatory note -->
                         <Border Background="#1538BDF8" BorderBrush="#3038BDF8" BorderThickness="1" CornerRadius="10" Padding="12,10" Margin="0,0,0,16">

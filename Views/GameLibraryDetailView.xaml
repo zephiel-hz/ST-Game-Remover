@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:helpers="clr-namespace:SteamPluginManager.Helpers"
              mc:Ignorable="d"
              d:DesignHeight="850" d:DesignWidth="1200"
              Background="#121214"
@@ -196,7 +197,8 @@
             </Grid>
 
             <!-- Scrollable Launcher Content -->
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0"
+                          helpers:SmoothScrollViewerHelper.EnableSmoothScrolling="True">
                 <StackPanel>
                     <!-- HERO LAUNCHER HEADER SECTION -->
                     <Grid Margin="0,0,0,32">

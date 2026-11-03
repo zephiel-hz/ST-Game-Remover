@@ -33,6 +33,7 @@ namespace SteamPluginManager.Views
         private static readonly SolidColorBrush StageInactiveBorderBrush = new((Color)ColorConverter.ConvertFromString("#2D3748"));
         private static readonly SolidColorBrush StageMutedTextBrush = new((Color)ColorConverter.ConvertFromString("#94A3B8"));
         private static readonly SolidColorBrush StageWhiteBrush = new(Colors.White);
+        private static readonly SolidColorBrush StageFailedBrush = new((Color)ColorConverter.ConvertFromString("#EF4444"));
 
         public bool IsOpen { get; private set; }
 
@@ -144,10 +145,16 @@ namespace SteamPluginManager.Views
                     return;
                 }
 
+                SubmitRequestButton.IsEnabled = false;
+                CancelRequestButton.IsEnabled = false;
+                RequestValidationText.Visibility = Visibility.Collapsed;
+
                 var input = RequestUrlTextBox?.Text?.Trim() ?? string.Empty;
 
                 if (string.IsNullOrWhiteSpace(input))
                 {
+                    SubmitRequestButton.IsEnabled = true;
+                    CancelRequestButton.IsEnabled = true;
                     ShowRequestValidation("Please enter a Steam AppID or URL.");
                     return;
                 }
@@ -157,6 +164,8 @@ namespace SteamPluginManager.Views
                 Logger.Log($"[RequestGameModalView] Display name check: '{displayName}'");
                 if (string.IsNullOrWhiteSpace(displayName))
                 {
+                    SubmitRequestButton.IsEnabled = true;
+                    CancelRequestButton.IsEnabled = true;
                     ShowRequestValidation("Display name must be set before requesting a game. Please set your display name in the Dashboard.");
                     return;
                 }
@@ -181,6 +190,8 @@ namespace SteamPluginManager.Views
                     }
                     else
                     {
+                        SubmitRequestButton.IsEnabled = true;
+                        CancelRequestButton.IsEnabled = true;
                         ShowRequestValidation("Invalid input. Please enter a numeric Steam AppID (e.g. 730310) or a valid Steam Store / SteamDB URL.");
                         return;
                     }
@@ -189,13 +200,11 @@ namespace SteamPluginManager.Views
                 // Check if game already exists in-app
                 if (_isGameAvailableInApp != null && _isGameAvailableInApp(appId))
                 {
+                    SubmitRequestButton.IsEnabled = true;
+                    CancelRequestButton.IsEnabled = true;
                     ShowRequestValidation("Game already available in-app.");
                     return;
                 }
-
-                SubmitRequestButton.IsEnabled = false;
-                CancelRequestButton.IsEnabled = false;
-                RequestValidationText.Visibility = Visibility.Collapsed;
 
                 // Collapse guide card during progress to keep view focused on the live stages
                 if (RequestFlowGuideContent != null)
@@ -240,7 +249,6 @@ namespace SteamPluginManager.Views
 
                 // Stage 3: Search ManifestHub (executes directly with isDenuvo, no re-checking)
                 SetRequestStage(3, "Searching ManifestHub...");
-                string sourceName = "ManifestHub";
                 var downloadedFiles = await ManifestHubService.FindAndDownloadFilesAsync(appId, isDenuvo, status =>
                 {
                     Dispatcher.Invoke(() => SetRequestStage(3, status));
@@ -255,11 +263,6 @@ namespace SteamPluginManager.Views
                         appId,
                         isDenuvo,
                         status => Dispatcher.Invoke(() => SetRequestStage(3, status)));
-
-                    if (downloadedFiles != null && downloadedFiles.Count > 0)
-                    {
-                        sourceName = "Hubcap Manifest";
-                    }
                 }
 
                 // Stage 4: Deploy / Discord
@@ -331,8 +334,14 @@ namespace SteamPluginManager.Views
                             }
                         }
 
-                        // Mark all stages 1-5 as completed
-                        SetRequestStage(6, onlineFixFound ? "All completed! Manifest and Online-Fix are ready." : "Completed! Manifest is ready in catalog.");
+                        // Mark all stages 1-5 as completed (Stage 5 reflects whether online-fix was found)
+                        string finalMessage = onlineFixFound
+                            ? "All completed! Manifest and Online-Fix are ready."
+                            : (!string.IsNullOrEmpty(onlineFixDetail)
+                                ? $"Completed! {onlineFixDetail}"
+                                : "Completed! Manifest is ready in catalog.");
+
+                        SetRequestStage(6, finalMessage, onlineFixFound);
 
                         if (RequestProgressBar != null)
                         {
@@ -341,7 +350,10 @@ namespace SteamPluginManager.Views
                         }
 
                         // Auto-refresh views and caches immediately
+                        HZManifestView.InvalidateCache();
                         OnlineFixView.InvalidateCache();
+                        GameBypassView.InvalidateCache();
+                        DashboardView.InvalidateCache();
                         WindowNavigator.RefreshOnlineFixView();
                         _ = DashboardView.RefreshNewestManifestsAsync();
 
@@ -452,7 +464,7 @@ namespace SteamPluginManager.Views
             }
         }
 
-        private void SetRequestStage(int activeStage, string detailMessage)
+        private void SetRequestStage(int activeStage, string detailMessage, bool stage5Success = true)
         {
             try
             {
@@ -466,27 +478,50 @@ namespace SteamPluginManager.Views
                 var border = (Brush)FindResource("BorderBrush") ?? StageInactiveBorderBrush;
                 var inputBg = (Brush)FindResource("InputBackgroundBrush") ?? StageInactiveBgBrush;
                 var foreground = (Brush)FindResource("ForegroundBrush") ?? StageWhiteBrush;
+                var danger = (Brush)FindResource("DangerButtonBrush") ?? StageFailedBrush;
 
                 for (int i = 0; i < 5; i++)
                 {
                     int stageNum = i + 1;
                     if (stageNum < activeStage)
                     {
-                        // Completed stage
-                        if (circles[i] != null)
+                        if (stageNum == 5 && !stage5Success)
                         {
-                            circles[i].Background = StageCompletedBrush;
-                            circles[i].BorderBrush = StageCompletedBrush;
+                            // Online-Fix not found or failed -> show cross icon (✕)
+                            if (circles[i] != null)
+                            {
+                                circles[i].Background = danger;
+                                circles[i].BorderBrush = danger;
+                            }
+                            if (icons[i] != null)
+                            {
+                                icons[i].Text = "\u2715"; // Cross / Silang
+                                icons[i].Foreground = StageWhiteBrush;
+                            }
+                            if (labels[i] != null)
+                            {
+                                labels[i].Foreground = danger;
+                                labels[i].FontWeight = FontWeights.SemiBold;
+                            }
                         }
-                        if (icons[i] != null)
+                        else
                         {
-                            icons[i].Text = "\u2713"; // Checkmark
-                            icons[i].Foreground = StageWhiteBrush;
-                        }
-                        if (labels[i] != null)
-                        {
-                            labels[i].Foreground = foreground;
-                            labels[i].FontWeight = FontWeights.SemiBold;
+                            // Completed stage -> checkmark (✓)
+                            if (circles[i] != null)
+                            {
+                                circles[i].Background = StageCompletedBrush;
+                                circles[i].BorderBrush = StageCompletedBrush;
+                            }
+                            if (icons[i] != null)
+                            {
+                                icons[i].Text = "\u2713"; // Checkmark
+                                icons[i].Foreground = StageWhiteBrush;
+                            }
+                            if (labels[i] != null)
+                            {
+                                labels[i].Foreground = foreground;
+                                labels[i].FontWeight = FontWeights.SemiBold;
+                            }
                         }
                     }
                     else if (stageNum == activeStage)
@@ -951,7 +986,7 @@ namespace SteamPluginManager.Views
                     app_name = appName,
                     steam_url = steamUrl,
                     requester = requester,
-                    requester_id = GetRequesterUuid(GetDeviceId()).ToString(),
+                    requester_id = GetRequesterUuid(DeviceIdentifier.GetDeviceId()).ToString(),
                     webhook_url = webhookUrl,
                     discord_message_id = messageId
                 };
@@ -1015,18 +1050,6 @@ namespace SteamPluginManager.Views
 
         #region Hardware ID & Device UUID Helpers
 
-        private static string GetDeviceId()
-        {
-            try
-            {
-                return DeviceIdentifier.GetDeviceId();
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"[RequestGameModalView] [GetDeviceId] Error: {ex.Message}");
-                return "UNKNOWN";
-            }
-        }
 
         private static Guid GetRequesterUuid(string deviceId)
         {

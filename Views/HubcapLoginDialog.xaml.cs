@@ -21,7 +21,6 @@ namespace SteamPluginManager.Views
         private DispatcherTimer? _pollTimer;
         private DispatcherTimer? _safetyTimeoutTimer;
         private DateTime _lastDiscordLoginClickTime = DateTime.MinValue;
-        private bool _hasAttemptedKeyGeneration = false;
 
         public bool SilentMode
         {
@@ -38,6 +37,7 @@ namespace SteamPluginManager.Views
 
         public string? ExtractedApiKey { get; private set; }
         public bool UserCanceled { get; private set; } = true;
+        public bool InteractiveLoginShown { get; private set; } = false;
 
         public HubcapLoginDialog(bool silentMode = true, bool forceRegenerate = false, string? expiredKeyToAvoid = null)
         {
@@ -62,6 +62,11 @@ namespace SteamPluginManager.Views
                 _pollTimer = null;
                 _safetyTimeoutTimer?.Stop();
                 _safetyTimeoutTimer = null;
+                SteamPluginManager.Helpers.WebViewHelper.TerminateBrowserProcess(Browser);
+            };
+            Closed += (s, e) =>
+            {
+                SteamPluginManager.Helpers.WebViewHelper.TerminateBrowserProcess(Browser);
             };
         }
 
@@ -81,6 +86,7 @@ namespace SteamPluginManager.Views
 
                 var environment = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
                 await Browser.EnsureCoreWebView2Async(environment);
+                SteamPluginManager.Helpers.WebViewHelper.TrackBrowserProcess(Browser);
 
                 Browser.CoreWebView2.Settings.IsStatusBarEnabled = false;
                 Browser.CoreWebView2.Settings.AreDevToolsEnabled = false;
@@ -132,7 +138,9 @@ namespace SteamPluginManager.Views
 
         public void MakeVisible()
         {
+            if (!_isSilent) return;
             _isSilent = false;
+            InteractiveLoginShown = true;
             Dispatcher.Invoke(() =>
             {
                 WindowStartupLocation = WindowStartupLocation.CenterScreen;
@@ -141,7 +149,7 @@ namespace SteamPluginManager.Views
                 Opacity = 1;
                 ShowInTaskbar = true;
                 Activate();
-                Focus();
+                Browser?.Focus();
             });
         }
 
@@ -395,7 +403,10 @@ namespace SteamPluginManager.Views
                 // Scenario A: Discord Login page (credentials required) -> Reveal window
                 if (currentUrl.Contains("discord.com/login") || currentUrl.Contains("discord.com/register"))
                 {
-                    MakeVisible();
+                    if (_isSilent)
+                    {
+                        MakeVisible();
+                    }
                     return;
                 }
 
@@ -618,7 +629,6 @@ namespace SteamPluginManager.Views
                                 string action = actionEl.GetString() ?? "";
                                 if (action == "clicked_generate_button" || action == "clicked_modal_confirm" || action == "clicked_initial_generate")
                                 {
-                                    _hasAttemptedKeyGeneration = true;
                                     StatusText.Text = "Generating and extracting API key on Hubcap...";
                                 }
                             }

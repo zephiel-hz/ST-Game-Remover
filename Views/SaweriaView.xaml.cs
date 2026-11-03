@@ -14,6 +14,7 @@ namespace SteamPluginManager.Views
         {
             InitializeComponent();
             Loaded += SaweriaView_Loaded;
+            Unloaded += SaweriaView_Unloaded;
         }
 
         private async void SaweriaView_Loaded(object sender, RoutedEventArgs e)
@@ -32,6 +33,7 @@ namespace SteamPluginManager.Views
                     browserExecutableFolder: null,
                     userDataFolder: userDataFolder);
                 await SaweriaBrowser.EnsureCoreWebView2Async(environment);
+                SteamPluginManager.Helpers.WebViewHelper.TrackBrowserProcess(SaweriaBrowser);
                 SaweriaBrowser.NavigationStarting += SaweriaBrowser_NavigationStarting;
                 SaweriaBrowser.NavigationCompleted += SaweriaBrowser_NavigationCompleted;
                 SaweriaBrowser.CoreWebView2.HistoryChanged += CoreWebView2_HistoryChanged;
@@ -46,6 +48,25 @@ namespace SteamPluginManager.Views
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
             }
+        }
+
+        private void SaweriaView_Unloaded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (SaweriaBrowser != null)
+                {
+                    SaweriaBrowser.NavigationStarting -= SaweriaBrowser_NavigationStarting;
+                    SaweriaBrowser.NavigationCompleted -= SaweriaBrowser_NavigationCompleted;
+                    if (SaweriaBrowser.CoreWebView2 != null)
+                    {
+                        SaweriaBrowser.CoreWebView2.HistoryChanged -= CoreWebView2_HistoryChanged;
+                    }
+                }
+            }
+            catch { }
+
+            SteamPluginManager.Helpers.WebViewHelper.TerminateBrowserProcess(SaweriaBrowser);
         }
 
         private void SaweriaBrowser_NavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)

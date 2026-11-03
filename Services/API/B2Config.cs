@@ -7,6 +7,7 @@ using System.Net;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using SteamPluginManager.Services.Security;
 
 namespace SteamPluginManager
 {
@@ -22,36 +23,21 @@ namespace SteamPluginManager
         public static string B2Bucket => ServiceConfiguration.Current.BackblazeB2.Bucket;
         private static string B2Region => ServiceConfiguration.Current.BackblazeB2.Region;
 
-        // Helper untuk S3 signature v4
-        private static byte[] HmacSHA256(byte[] key, string data)
-        {
-            using var hmac = new HMACSHA256(key);
-            return hmac.ComputeHash(Encoding.UTF8.GetBytes(data));
-        }
-        private static byte[] HashSHA256(string data)
-        {
-            using var sha = SHA256.Create();
-            return sha.ComputeHash(Encoding.UTF8.GetBytes(data));
-        }
-        private static string ToHex(byte[] bytes)
-        {
-            var sb = new StringBuilder();
-            foreach (var b in bytes)
-                sb.Append(b.ToString("x2"));
-            return sb.ToString();
-        }
-        private static byte[] GetSignatureKey(string key, string dateStamp, string regionName, string serviceName)
-        {
-            var kDate = HmacSHA256(Encoding.UTF8.GetBytes("AWS4" + key), dateStamp);
-            var kRegion = HmacSHA256(kDate, regionName);
-            var kService = HmacSHA256(kRegion, serviceName);
-            var kSigning = HmacSHA256(kService, "aws4_request");
-            return kSigning;
-        }
 
         // List file di bucket B2 (private bucket, pakai signature)
-        public static async Task<List<B2FileInfo>> ListFilesAsync(string folderPrefix = "onlinefix/")
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (List<B2FileInfo> Files, DateTime Timestamp)> _listCache = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly TimeSpan ListCacheDuration = TimeSpan.FromMinutes(5);
+
+        public static void InvalidateListCache() => _listCache.Clear();
+
+        // List file di bucket B2 (private bucket, pakai signature)
+        public static async Task<List<B2FileInfo>> ListFilesAsync(string folderPrefix = "onlinefix/", bool forceRefresh = false)
         {
+            if (!forceRefresh && _listCache.TryGetValue(folderPrefix, out var cached) && (DateTime.UtcNow - cached.Timestamp) < ListCacheDuration)
+            {
+                return new List<B2FileInfo>(cached.Files);
+            }
+
             var files = new List<B2FileInfo>();
             var service = "s3";
             var region = !string.IsNullOrWhiteSpace(B2Region) ? B2Region : "us-east-005";
@@ -73,15 +59,15 @@ namespace SteamPluginManager
                     canonicalQueryString += $"&continuation-token={WebUtility.UrlEncode(continuationToken)}";
                 }
 
-                var payloadHash = ToHex(HashSHA256(""));
+                var payloadHash = AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HashSHA256(""));
                 var canonicalHeaders = $"host:{host}\nx-amz-content-sha256:{payloadHash}\nx-amz-date:{amzDate}\n";
                 var signedHeaders = "host;x-amz-content-sha256;x-amz-date";
                 var canonicalRequest = $"GET\n{canonicalUri}\n{canonicalQueryString}\n{canonicalHeaders}\n{signedHeaders}\n{payloadHash}";
                 var algorithm = "AWS4-HMAC-SHA256";
                 var credentialScope = $"{dateStamp}/{region}/{service}/aws4_request";
-                var stringToSign = $"{algorithm}\n{amzDate}\n{credentialScope}\n{ToHex(HashSHA256(canonicalRequest))}";
-                var signingKey = GetSignatureKey(B2SecretKey, dateStamp, region, service);
-                var signature = ToHex(HmacSHA256(signingKey, stringToSign));
+                var stringToSign = $"{algorithm}\n{amzDate}\n{credentialScope}\n{AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HashSHA256(canonicalRequest))}";
+                var signingKey = AwsSigV4Crypto.GetSignatureKey(B2SecretKey, dateStamp, region, service);
+                var signature = AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HmacSHA256(signingKey, stringToSign));
                 var authorizationHeader = $"{algorithm} Credential={B2AccessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
                 var url = $"{B2Endpoint}/{B2Bucket}?{canonicalQueryString}";
 
@@ -172,6 +158,7 @@ namespace SteamPluginManager
                 }
             } while (isTruncated);
 
+            _listCache[folderPrefix] = (new List<B2FileInfo>(files), DateTime.UtcNow);
             return files;
         }
 
@@ -203,9 +190,9 @@ namespace SteamPluginManager
             var canonicalRequest = $"PUT\n{canonicalUri}\n{canonicalQueryString}\n{canonicalHeaders}\n{signedHeaders}\n{payloadHash}";
             var algorithm = "AWS4-HMAC-SHA256";
             var credentialScope = $"{dateStamp}/{region}/{service}/aws4_request";
-            var stringToSign = $"{algorithm}\n{amzDate}\n{credentialScope}\n{ToHex(HashSHA256(canonicalRequest))}";
-            var signingKey = GetSignatureKey(B2SecretKey, dateStamp, region, service);
-            var signature = ToHex(HmacSHA256(signingKey, stringToSign));
+            var stringToSign = $"{algorithm}\n{amzDate}\n{credentialScope}\n{AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HashSHA256(canonicalRequest))}";
+            var signingKey = AwsSigV4Crypto.GetSignatureKey(B2SecretKey, dateStamp, region, service);
+            var signature = AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HmacSHA256(signingKey, stringToSign));
             var authorizationHeader = $"{algorithm} Credential={B2AccessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
 
             var url = $"{B2Endpoint}/{B2Bucket}/{remoteKey}";
@@ -239,6 +226,7 @@ namespace SteamPluginManager
                 throw new HttpRequestException($"B2 Upload failed with status {response.StatusCode}: {errorBody}");
             }
 
+            InvalidateListCache();
             return $"{B2Endpoint}/{B2Bucket}/{remoteKey}";
         }
 
@@ -247,7 +235,8 @@ namespace SteamPluginManager
             string key,
             string destinationFilePath,
             IProgress<int>? progress = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            Func<Task>? pauseCheck = null)
         {
             var service = "s3";
             var region = !string.IsNullOrWhiteSpace(B2Region) ? B2Region : "us-east-005";
@@ -257,15 +246,15 @@ namespace SteamPluginManager
             var dateStamp = now.ToString("yyyyMMdd");
             var canonicalUri = $"/{B2Bucket}/{key}";
             var canonicalQueryString = "";
-            var payloadHash = ToHex(HashSHA256(""));
+            var payloadHash = AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HashSHA256(""));
             var canonicalHeaders = $"host:{host}\nx-amz-content-sha256:{payloadHash}\nx-amz-date:{amzDate}\n";
             var signedHeaders = "host;x-amz-content-sha256;x-amz-date";
             var canonicalRequest = $"GET\n{canonicalUri}\n{canonicalQueryString}\n{canonicalHeaders}\n{signedHeaders}\n{payloadHash}";
             var algorithm = "AWS4-HMAC-SHA256";
             var credentialScope = $"{dateStamp}/{region}/{service}/aws4_request";
-            var stringToSign = $"{algorithm}\n{amzDate}\n{credentialScope}\n{ToHex(HashSHA256(canonicalRequest))}";
-            var signingKey = GetSignatureKey(B2SecretKey, dateStamp, region, service);
-            var signature = ToHex(HmacSHA256(signingKey, stringToSign));
+            var stringToSign = $"{algorithm}\n{amzDate}\n{credentialScope}\n{AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HashSHA256(canonicalRequest))}";
+            var signingKey = AwsSigV4Crypto.GetSignatureKey(B2SecretKey, dateStamp, region, service);
+            var signature = AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HmacSHA256(signingKey, stringToSign));
             var authorizationHeader = $"{algorithm} Credential={B2AccessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
             var url = $"{B2Endpoint}/{B2Bucket}/{key}";
             var client = SharedHttpClient.StorageInstance;
@@ -275,7 +264,7 @@ namespace SteamPluginManager
             req.Headers.TryAddWithoutValidation("Authorization", authorizationHeader);
             req.Headers.Add("x-amz-content-sha256", payloadHash);
 
-            var response = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            using var response = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 var err = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -283,37 +272,64 @@ namespace SteamPluginManager
             }
 
             var contentLength = response.Content.Headers.ContentLength ?? -1L;
-            var tempPath = destinationFilePath + ".tmp";
+            var tempPath = $"{destinationFilePath}.{Guid.NewGuid():N}.tmp";
             string? dir = Path.GetDirectoryName(destinationFilePath);
             if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
             {
                 Directory.CreateDirectory(dir);
             }
 
-            using (var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken))
-            using (var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
+            try
             {
-                var buffer = new byte[81920];
-                long totalRead = 0;
-                int read;
-                while ((read = await responseStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
+                using (var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken))
+                using (var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
                 {
-                    await fileStream.WriteAsync(buffer, 0, read, cancellationToken);
-                    totalRead += read;
-                    if (contentLength > 0 && progress != null)
+                    var buffer = new byte[81920];
+                    long totalRead = 0;
+                    int read;
+                    while ((read = await responseStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
                     {
-                        int percent = (int)((totalRead * 100L) / contentLength);
-                        progress.Report(percent);
+                        if (pauseCheck != null)
+                        {
+                            await pauseCheck();
+                        }
+
+                        await fileStream.WriteAsync(buffer, 0, read, cancellationToken);
+                        totalRead += read;
+                        if (contentLength > 0 && progress != null)
+                        {
+                            int percent = (int)((totalRead * 100L) / contentLength);
+                            if (percent < 100)
+                            {
+                                progress.Report(percent);
+                            }
+                        }
+                    }
+
+                    if (contentLength > 0 && totalRead != contentLength)
+                    {
+                        throw new IOException($"Download incomplete: received {totalRead} of {contentLength} bytes.");
                     }
                 }
-            }
 
-            if (File.Exists(destinationFilePath))
-            {
-                File.Delete(destinationFilePath);
+                File.Move(tempPath, destinationFilePath, overwrite: true);
+                progress?.Report(100);
             }
-            File.Move(tempPath, destinationFilePath);
-            progress?.Report(100);
+            catch
+            {
+                try
+                {
+                    if (File.Exists(tempPath))
+                    {
+                        File.Delete(tempPath);
+                    }
+                }
+                catch
+                {
+                    // Ignore cleanup failure of temporary file
+                }
+                throw;
+            }
         }
 
         // Download file dari B2
@@ -327,15 +343,15 @@ namespace SteamPluginManager
             var dateStamp = now.ToString("yyyyMMdd");
             var canonicalUri = $"/{B2Bucket}/{key}";
             var canonicalQueryString = "";
-            var payloadHash = ToHex(HashSHA256(""));
+            var payloadHash = AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HashSHA256(""));
             var canonicalHeaders = $"host:{host}\nx-amz-content-sha256:{payloadHash}\nx-amz-date:{amzDate}\n";
             var signedHeaders = "host;x-amz-content-sha256;x-amz-date";
             var canonicalRequest = $"GET\n{canonicalUri}\n{canonicalQueryString}\n{canonicalHeaders}\n{signedHeaders}\n{payloadHash}";
             var algorithm = "AWS4-HMAC-SHA256";
             var credentialScope = $"{dateStamp}/{region}/{service}/aws4_request";
-            var stringToSign = $"{algorithm}\n{amzDate}\n{credentialScope}\n{ToHex(HashSHA256(canonicalRequest))}";
-            var signingKey = GetSignatureKey(B2SecretKey, dateStamp, region, service);
-            var signature = ToHex(HmacSHA256(signingKey, stringToSign));
+            var stringToSign = $"{algorithm}\n{amzDate}\n{credentialScope}\n{AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HashSHA256(canonicalRequest))}";
+            var signingKey = AwsSigV4Crypto.GetSignatureKey(B2SecretKey, dateStamp, region, service);
+            var signature = AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HmacSHA256(signingKey, stringToSign));
             var authorizationHeader = $"{algorithm} Credential={B2AccessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
             var url = $"{B2Endpoint}/{B2Bucket}/{key}";
             var client = SharedHttpClient.StorageInstance;
@@ -404,9 +420,9 @@ namespace SteamPluginManager
             var canonicalRequest = $"PUT\n{canonicalUri}\n{canonicalQueryString}\n{canonicalHeaders}\n{signedHeaders}\n{payloadHash}";
             var algorithm = "AWS4-HMAC-SHA256";
             var credentialScope = $"{dateStamp}/{region}/{service}/aws4_request";
-            var stringToSign = $"{algorithm}\n{amzDate}\n{credentialScope}\n{ToHex(HashSHA256(canonicalRequest))}";
-            var signingKey = GetSignatureKey(B2SecretKey, dateStamp, region, service);
-            var signature = ToHex(HmacSHA256(signingKey, stringToSign));
+            var stringToSign = $"{algorithm}\n{amzDate}\n{credentialScope}\n{AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HashSHA256(canonicalRequest))}";
+            var signingKey = AwsSigV4Crypto.GetSignatureKey(B2SecretKey, dateStamp, region, service);
+            var signature = AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HmacSHA256(signingKey, stringToSign));
             var authorizationHeader = $"{algorithm} Credential={B2AccessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
             var url = $"{B2Endpoint}/{B2Bucket}/{key}";
             var client = SharedHttpClient.StorageInstance;
@@ -443,15 +459,15 @@ namespace SteamPluginManager
                 var dateStamp = now.ToString("yyyyMMdd");
                 var canonicalUri = $"/{B2Bucket}/{key}";
                 var canonicalQueryString = "";
-                var payloadHash = ToHex(HashSHA256(""));
+                var payloadHash = AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HashSHA256(""));
                 var canonicalHeaders = $"host:{host}\nx-amz-content-sha256:{payloadHash}\nx-amz-date:{amzDate}\n";
                 var signedHeaders = "host;x-amz-content-sha256;x-amz-date";
                 var canonicalRequest = $"DELETE\n{canonicalUri}\n{canonicalQueryString}\n{canonicalHeaders}\n{signedHeaders}\n{payloadHash}";
                 var algorithm = "AWS4-HMAC-SHA256";
                 var credentialScope = $"{dateStamp}/{region}/{service}/aws4_request";
-                var stringToSign = $"{algorithm}\n{amzDate}\n{credentialScope}\n{ToHex(HashSHA256(canonicalRequest))}";
-                var signingKey = GetSignatureKey(B2SecretKey, dateStamp, region, service);
-                var signature = ToHex(HmacSHA256(signingKey, stringToSign));
+                var stringToSign = $"{algorithm}\n{amzDate}\n{credentialScope}\n{AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HashSHA256(canonicalRequest))}";
+                var signingKey = AwsSigV4Crypto.GetSignatureKey(B2SecretKey, dateStamp, region, service);
+                var signature = AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HmacSHA256(signingKey, stringToSign));
                 var authorizationHeader = $"{algorithm} Credential={B2AccessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
                 var url = $"{B2Endpoint}/{B2Bucket}/{key}";
                 var client = SharedHttpClient.StorageInstance;
@@ -462,6 +478,10 @@ namespace SteamPluginManager
                 req.Headers.TryAddWithoutValidation("Authorization", authorizationHeader);
 
                 var response = await client.SendAsync(req, cancellationToken);
+                if (response.IsSuccessStatusCode)
+                {
+                    InvalidateListCache();
+                }
                 return response.IsSuccessStatusCode;
             }
             catch (Exception ex)

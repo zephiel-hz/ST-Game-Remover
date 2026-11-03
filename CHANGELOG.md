@@ -2,6 +2,65 @@
 
 ---
 
+## [3.1.4] - 2026-11-03
+
+### Performance & Optimizations
+* **Instant HZManifestView Loading:** Fixed an issue where entering `HZManifestView` triggered a full 6.5–8.5s Supabase table download on every navigation due to empty collection flags bypassing cache. The view now loads cached catalog data instantly (< 6ms) from memory and disk cache.
+* **Sub-Millisecond Supabase Metadata Cache (`SteamDataUpdater`):** Added thread-safe in-memory caching and disk-cache fallback for `GetAllRecordsAsync()`, reducing game metadata query times across Dashboard, GameBypass, and OnlineFix from 8,300–16,400ms down to ~6ms (a 2,700x speedup).
+* **Non-Blocking Dashboard Startup:** Converted `DashboardView` initial data load to only await the Featured Slider and the active Recent tab. Secondary tabs (Bypass and OnlineFix) now load concurrently in the background without blocking the UI.
+* **In-Memory Caching for Cloud Storage File Listings:** Added thread-safe in-memory caching to `B2Config.ListFilesAsync` and `R2Config.ListFilesAsync` with automatic cache invalidation upon upload or deletion, eliminating redundant S3 XML requests during tab switching.
+* **Steam Web API Strict Timeout:** Applied a 3-second timeout token to `SteamManifestHelper.GetGameInfoFromSteamAsync()` to prevent single rate-limited Steam API calls from blocking the UI thread.
+
+### Fixed
+* **Custom Launch Process Termination Hanging:** Replaced `Process.MainModule` lookups in `CustomLaunchService` with native Win32 `QueryFullProcessImageName` (`PROCESS_QUERY_LIMITED_INFORMATION`), eliminating multi-second kernel locks when stopping external/custom executables or 64-bit elevated games.
+* **UI Dispatcher Freeze on Stop Game:** Paused the 1-second game running monitor timer in `GameLibraryDetailView` during process termination to prevent Dispatcher thread collisions, and restored visual state immediately once processes exit.
+* **Custom Launch & OnlineFix Disappearing from Game Library:** Fixed an issue where returning to `GameLibraryView` after stopping an external game stripped installed status from Custom Launch and OnlineFix games. `SteamHelper.ScanInstalledGamesMapCore` now recognizes custom launch configs and onlinefix tracker records, and `GameLibraryView` includes a multi-layer disk verification guard so installed status is never wiped while game files physically exist.
+
+---
+
+## [3.1.3] - 2026-11-02
+
+### Added
+* **Centralized WebView2 Process Lifecycle Management (`WebViewHelper`):** Introduced a robust process lifecycle tracking helper that tracks active `BrowserProcessId` instances, cleanly disposes WPF WebView2 controls on close or unload, and guarantees termination of the `msedgewebview2.exe` process tree within 400ms.
+* **Global Browser Process Cleanup on Exit:** Integrated `WebViewHelper.TerminateAllTrackedProcesses()` into application shutdown (`App.OnExit`), ensuring zero orphan background browser processes remain after the application exits.
+
+### Changed
+* **On-Demand Loading for Saweria & Token Views:** Converted `SaweriaView` navigation in `MainShell` to on-demand instantiation instead of caching an idle browser instance permanently in memory, reducing background RAM usage.
+* **Lightweight Hubcap API Key Verification:** Optimized `IsApiKeyValidAsync()` to query the official Hubcap Manifest API endpoint (`/api/v1/lua/730`) with `ResponseHeadersRead`, determining authorization in ~100ms without reading the payload body.
+
+### Fixed
+* **WebView2 Lingering in Background:** Fixed an issue where `msedgewebview2.exe` child processes continued running silently in the background after requesting games or navigating away from browser-enabled views (`GenerateTokenView`, `SaweriaView`, `HubcapLoginDialog`). Handled `Unloaded` and `Closing` events to immediately terminate browser processes.
+* **Unnecessary Hubcap API Key Regeneration:** Fixed an issue where the Hubcap API key was repeatedly regenerated on every game request even when the existing key was still active. Replaced the misdirected web session DRM check with the real Hubcap API verification endpoint, allowing valid keys to be reused instantly without triggering login dialogs or WebView automation.
+* **Denuvo Check Key Regeneration Trigger:** Removed erroneous `forceRegenerate: true` invocations in `HubcapManifestService.GetDenuvoStatusAsync()`, enabling seamless fallback to Steam Store API and static database without triggering unnecessary key regeneration.
+* **Splash Screen Transition & Startup Force-Close:** Resolved a startup timing issue where `MainShell` could appear prematurely before the splash screen faded out, and fixed an application force-close bug on startup by managing WPF `ShutdownMode` transitions during initialization.
+* **Single-Click Lua Script & Manifest Removal:** Fixed an issue where removing a Lua script from `GameLibraryDetailView` required clicking 'Remove Lua' twice for the game to disappear from `GameLibraryView`. The unlocker cleanup now cleanly purges candidate Lua scripts from both config directories (`stplug-in` and `lua`) as well as associated manifests simultaneously, and immediately synchronizes the live UI collection.
+
+---
+
+## [3.1.2] - 2026-11-01
+
+### Added
+* **Enhanced Catalog Filtering & Sorting (GameBypass & Online-Fix):** Added comprehensive sorting options ("Name A-Z", "Name Z-A", "Newest First", and "Oldest First") in both GameBypassView and OnlineFixView. Controls are styled with a sleek modern appearance that matches HZManifestView.
+* **Smart Dashboard "See more" Navigation:** Clicking "See more >" from the Dashboard's "Recently Updated" section on any tab (Manifest, Bypass, or OnlineFix) now automatically navigates to that catalog pre-sorted by **Newest First** (`DateDesc`), ensuring immediate discovery of the latest files.
+* **Multi-Tier Title Resolution for Cloud Archives:** Newly uploaded Bypass and Online-Fix archives immediately resolve and display authentic Steam game titles on Dashboard cards via multi-tier lookup (local manifest catalog, active Steam metadata cache, and direct Steam Store API lookup) instead of displaying raw numeric AppIDs.
+* **Parallel Cloud Data Loading on Startup:** Online-Fix and Game Bypass archives now load concurrently alongside HZ Manifest entries on application startup, eliminating delay when switching between tabs.
+* **Proactive Cache Invalidation & Event Sync:** Added centralized `InvalidateCache()` triggers across DashboardView, HZManifestView, GameBypassView, and OnlineFixView to instantly refresh views whenever new manifests or archives are added or updated.
+
+### Changed
+* **Unified & Centered Dashboard Categories:** The "Recently Updated" category selector tabs (Manifest, Bypass, OnlineFix) are now neatly aligned and centered horizontally alongside the section title for a balanced, modern header presentation.
+* **Standardized Card Density Across Catalogs:** Standardized uniform card counts per row across `GameLibraryView`, `HZManifestView`, `GameBypassView`, and `OnlineFixView` for a consistent, harmonious visual grid layout across the entire application.
+* **Smooth UI Virtualization in Game Library:** Converted GameLibraryView scrolling to item-based logical scrolling with UI virtualization, eliminating choppy mouse wheel scrolling and providing buttery-smooth 60fps list navigation.
+* **Non-Blocking Background Image Decoding:** Enhanced image decoding across HZManifestView and DashboardView using background thread decoders with frozen bitmap objects (`DecodePixelWidth = 280`), eliminating UI Dispatcher micro-stutters and drastically reducing uncompressed bitmap memory footprint.
+
+### Fixed
+* **Instant Dashboard Manifest Synchronization:** Resolved an issue where newly added, requested, or replaced Lua manifests failed to appear on the Dashboard until cache expiration or app restart. Implemented static dirty-flag tracking, instant cache invalidation, and explicit UTC `created_at` timestamp updates for both database inserts and patches.
+* **Online-Fix Request Stage 5 Status Indicator:** Fixed an issue where Stage 5 in the Request Game modal displayed a misleading green checkmark even when Online-Fix resources were not found. It now correctly displays a distinctive red cross (`✕`) when Online-Fix resources are unavailable.
+* **HZManifestView Thumbnail Persistence:** Fixed an issue where game thumbnail covers would disappear after switching views and returning to HZManifestView.
+* **Newly Uploaded Bypass AppID Placeholder Display:** Fixed an issue where freshly uploaded Game Bypass files showed numeric AppID strings on Dashboard cards instead of their real game titles.
+* **Dashboard See More Sort Redirection:** Fixed an issue where clicking "See more >" on Bypass or OnlineFix tabs redirected with default "Name A-Z" sort instead of "Newest First".
+
+---
+
 ## [3.1.1] - 2026-10-24
 
 ### Added

@@ -435,6 +435,8 @@ namespace SteamPluginManager.Views
 
         private async void AddToLibrary_Click(object sender, RoutedEventArgs e)
         {
+            string? tempZip = null;
+            string? extractDir = null;
             try
             {
                 if (_currentFile == null)
@@ -508,7 +510,7 @@ namespace SteamPluginManager.Views
 
                 // Download file dari Backblaze B2
                 string r2Key = _currentFile.FileName;
-                string tempZip = Path.Combine(Path.GetTempPath(), $"onlinefix_{Guid.NewGuid()}.zip");
+                tempZip = Path.Combine(Path.GetTempPath(), $"onlinefix_{Guid.NewGuid()}.zip");
                 ShowLoadingState(true, "Downloading Online-Fix archive...", GetCurrentFileSizeDetail());
                 UpdateProgressStep(2);
                 try
@@ -538,11 +540,11 @@ namespace SteamPluginManager.Views
                         });
                     });
 
-                    byte[] zipBytes = await SteamPluginManager.B2Config.DownloadFileAsync(r2Key, progress);
-                    await File.WriteAllBytesAsync(tempZip, zipBytes);
+                    await SteamPluginManager.B2Config.DownloadFileToPathAsync(r2Key, tempZip, progress);
                 }
                 catch
                 {
+                    try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
                     ShowResultNotification(false, "✗ Download failed. Please check internet connection.");
                     await Task.Delay(1500);
                     ShowLoadingState(false);
@@ -556,9 +558,12 @@ namespace SteamPluginManager.Views
                 // Ekstrak file ZIP
                 ShowLoadingState(true, "Extracting files...", "Unpacking archive to temporary folder...");
                 UpdateProgressStep(3);
-                string extractDir = Path.Combine(Path.GetTempPath(), $"onlinefix_extract_{Guid.NewGuid()}");
+                extractDir = Path.Combine(Path.GetTempPath(), $"onlinefix_extract_{Guid.NewGuid()}");
                 Directory.CreateDirectory(extractDir);
                 System.IO.Compression.ZipFile.ExtractToDirectory(tempZip, extractDir);
+
+                // Temporary ZIP is no longer needed once extracted
+                try { File.Delete(tempZip); } catch { }
 
                 // Resolve effective content directory (in case archive has a single root wrapper directory)
                 string effectiveExtractDir = SteamPluginManager.Services.ResourcePipeline.OnlineFixResourceService.ResolveEffectiveContentDirectory(extractDir, _currentFile?.FileName, _currentFile?.Name);
@@ -635,6 +640,8 @@ namespace SteamPluginManager.Views
             finally
             {
                 _isActionInProgress = false;
+                try { if (!string.IsNullOrEmpty(tempZip) && File.Exists(tempZip)) File.Delete(tempZip); } catch { }
+                try { if (!string.IsNullOrEmpty(extractDir) && Directory.Exists(extractDir)) Directory.Delete(extractDir, true); } catch { }
                 if (FindName("AddToLibraryButton") is Button addBtn)
                 {
                     addBtn.IsEnabled = true;
@@ -813,41 +820,46 @@ namespace SteamPluginManager.Views
                             }
 
                             string tempZip = Path.Combine(Path.GetTempPath(), $"onlinefix_inspect_{Guid.NewGuid()}.zip");
-                            var progress = new Progress<int>(p =>
+                            string? inspectExtractDir = null;
+                            try
                             {
-                                Dispatcher.Invoke(() =>
+                                var progress = new Progress<int>(p =>
                                 {
-                                    if (modal != null)
+                                    Dispatcher.Invoke(() =>
                                     {
-                                        modal.SetProgress(p, 100, false);
-                                        modal.UpdateStatus("Downloading fix archive to inspect files...", $"{p}% complete");
-                                    }
+                                        if (modal != null)
+                                        {
+                                            modal.SetProgress(p, 100, false);
+                                            modal.UpdateStatus("Downloading fix archive to inspect files...", $"{p}% complete");
+                                        }
+                                    });
                                 });
-                            });
 
-                            byte[] zipBytes = await SteamPluginManager.B2Config.DownloadFileAsync(_currentFile.FileName, progress);
-                            await File.WriteAllBytesAsync(tempZip, zipBytes);
+                                await SteamPluginManager.B2Config.DownloadFileToPathAsync(_currentFile.FileName, tempZip, progress);
 
-                            string inspectExtractDir = Path.Combine(Path.GetTempPath(), $"onlinefix_inspect_ext_{Guid.NewGuid()}");
-                            Directory.CreateDirectory(inspectExtractDir);
-                            System.IO.Compression.ZipFile.ExtractToDirectory(tempZip, inspectExtractDir);
+                                inspectExtractDir = Path.Combine(Path.GetTempPath(), $"onlinefix_inspect_ext_{Guid.NewGuid()}");
+                                Directory.CreateDirectory(inspectExtractDir);
+                                System.IO.Compression.ZipFile.ExtractToDirectory(tempZip, inspectExtractDir);
 
-                            string effectiveInspectDir = SteamPluginManager.Services.ResourcePipeline.OnlineFixResourceService.ResolveEffectiveContentDirectory(inspectExtractDir, _currentFile?.FileName, _currentFile?.Name);
-                            targetFolder = FindBestTargetFolder(gameFolder!, effectiveInspectDir) ?? gameFolder!;
+                                string effectiveInspectDir = SteamPluginManager.Services.ResourcePipeline.OnlineFixResourceService.ResolveEffectiveContentDirectory(inspectExtractDir, _currentFile?.FileName, _currentFile?.Name);
+                                targetFolder = FindBestTargetFolder(gameFolder!, effectiveInspectDir) ?? gameFolder!;
 
-                            var extractedFiles = Directory.GetFiles(effectiveInspectDir, "*", SearchOption.AllDirectories);
-                            foreach (var f in extractedFiles)
-                            {
-                                string relPath = Path.GetRelativePath(effectiveInspectDir, f);
-                                string fullPath = Path.Combine(targetFolder!, relPath);
-                                if (File.Exists(fullPath))
+                                var extractedFiles = Directory.GetFiles(effectiveInspectDir, "*", SearchOption.AllDirectories);
+                                foreach (var f in extractedFiles)
                                 {
-                                    filesToDelete.Add(fullPath);
+                                    string relPath = Path.GetRelativePath(effectiveInspectDir, f);
+                                    string fullPath = Path.Combine(targetFolder!, relPath);
+                                    if (File.Exists(fullPath))
+                                    {
+                                        filesToDelete.Add(fullPath);
+                                    }
                                 }
                             }
-
-                            try { File.Delete(tempZip); } catch { }
-                            try { Directory.Delete(inspectExtractDir, true); } catch { }
+                            finally
+                            {
+                                try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
+                                try { if (!string.IsNullOrEmpty(inspectExtractDir) && Directory.Exists(inspectExtractDir)) Directory.Delete(inspectExtractDir, true); } catch { }
+                            }
                         }
                         catch (Exception ex)
                         {

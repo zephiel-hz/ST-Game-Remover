@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:helpers="clr-namespace:SteamPluginManager.Helpers"
              mc:Ignorable="d" 
              d:DesignHeight="900" d:DesignWidth="1200"
              Background="{DynamicResource BackgroundBrush}"
@@ -1632,7 +1633,8 @@
 
                     <!-- RIGHT PANEL: Tutorial Form Editor -->
                     <Border Grid.Column="2" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="18">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      helpers:SmoothScrollViewerHelper.EnableSmoothScrolling="True">
                             <StackPanel>
                                 <!-- Form Header -->
                                 <Grid Margin="0,0,0,16">

@@ -18,6 +18,11 @@ namespace SteamPluginManager
 
         private static readonly HttpClient _client = new HttpClient();
 
+        private static List<Record>? _cachedRecords;
+        private static DateTime _lastFetchTime = DateTime.MinValue;
+        private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(30);
+        private static readonly System.Threading.SemaphoreSlim _recordsLock = new(1, 1);
+
         public class GameInfo
         {
             public string Name { get; set; }
@@ -35,6 +40,12 @@ namespace SteamPluginManager
             public string Name { get; set; }
             public string? Description { get; set; }
             public string? Genre { get; set; }
+        }
+
+        public static void InvalidateCache()
+        {
+            _cachedRecords = null;
+            _lastFetchTime = DateTime.MinValue;
         }
 
         /// <summary>
@@ -92,30 +103,73 @@ namespace SteamPluginManager
         }
 
         /// <summary>
-        /// Get all records from Supabase table
+        /// Get all records from Supabase table, with in-memory and disk cache fallback for sub-millisecond retrieval.
         /// </summary>
-        public static async Task<List<Record>> GetAllRecordsAsync()
+        public static async Task<List<Record>> GetAllRecordsAsync(bool forceRefresh = false)
         {
+            if (!forceRefresh && _cachedRecords != null && (DateTime.UtcNow - _lastFetchTime) < CacheDuration)
+            {
+                return _cachedRecords;
+            }
+
+            await _recordsLock.WaitAsync();
             try
             {
-                // Fetch all fields needed for metadata display
-                var url = $"{SUPABASE_URL}/rest/v1/hzmanifest_files?select=id,app_id,file_name,name,description,genre";
-                var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.Add("apikey", SERVICE_ROLE_KEY);
+                if (!forceRefresh && _cachedRecords != null && (DateTime.UtcNow - _lastFetchTime) < CacheDuration)
+                {
+                    return _cachedRecords;
+                }
 
-                var response = await _client.SendAsync(request);
+                // Check local disk cache (CacheManager's hzm_manifest_data) first for instant retrieval
+                if (!forceRefresh)
+                {
+                    try
+                    {
+                        var diskJson = CacheManager.GetHzmCache("hzm_manifest_data");
+                        if (!string.IsNullOrWhiteSpace(diskJson))
+                        {
+                            var diskRecords = JsonSerializer.Deserialize<List<Record>>(diskJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                            if (diskRecords != null && diskRecords.Count > 0)
+                            {
+                                _cachedRecords = diskRecords;
+                                _lastFetchTime = DateTime.UtcNow;
+                                return _cachedRecords;
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                // Fetch from Supabase via SharedHttpClient
+                var url = $"{SUPABASE_URL}/rest/v1/hzmanifest_files?select=id,app_id,file_name,name,description,genre";
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Add("apikey", SERVICE_ROLE_KEY);
+                request.Headers.Add("Authorization", $"Bearer {SERVICE_ROLE_KEY}");
+
+                var client = SharedHttpClient.Instance;
+                var response = await client.SendAsync(request);
                 if (response.IsSuccessStatusCode)
                 {
                     var content = await response.Content.ReadAsStringAsync();
-                    return JsonSerializer.Deserialize<List<Record>>(content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    var records = JsonSerializer.Deserialize<List<Record>>(content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (records != null && records.Count > 0)
+                    {
+                        _cachedRecords = records;
+                        _lastFetchTime = DateTime.UtcNow;
+                        return _cachedRecords;
+                    }
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[ERROR] GetAllRecordsAsync: {ex.Message}");
             }
+            finally
+            {
+                _recordsLock.Release();
+            }
 
-            return new List<Record>();
+            return _cachedRecords ?? new List<Record>();
         }
 
         /// <summary>
@@ -137,6 +191,10 @@ namespace SteamPluginManager
 
                 var response = await _client.SendAsync(request);
                 Console.WriteLine($"  [PATCH] ID {recordId}: Status {(int)response.StatusCode}");
+                if (response.IsSuccessStatusCode)
+                {
+                    InvalidateCache();
+                }
                 return response.IsSuccessStatusCode;
             }
             catch (Exception ex)

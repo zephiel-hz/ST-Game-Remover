@@ -1,10 +1,9 @@
 using System;
-using System.ComponentModel;
 using System.Text.Json.Serialization;
 
 namespace SteamPluginManager.Models
 {
-    public class DLCItem : INotifyPropertyChanged
+    public class DLCItem
     {
         [JsonPropertyName("dlc_app_id")]
         public int AppId { get; set; }
@@ -17,7 +16,5 @@ namespace SteamPluginManager.Models
 
         [JsonPropertyName("dlc_fetch_date")]
         public DateTime FetchDate { get; set; }
-
-        public event PropertyChangedEventHandler? PropertyChanged;
     }
 }

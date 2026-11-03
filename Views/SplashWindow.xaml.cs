@@ -12,7 +12,7 @@ namespace SteamPluginManager.Views
     {
         private readonly DispatcherTimer _progressTimer;
         private readonly Stopwatch _progressStopwatch = new();
-        private const double ProgressRampDurationMs = 1600;
+        private const double ProgressRampDurationMs = 1100;
 
         public SplashWindow()
         {
@@ -65,14 +65,19 @@ namespace SteamPluginManager.Views
             _progressStopwatch.Stop();
             SplashProgress.Value = 100;
 
-            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(260));
-            fadeOut.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut };
+            var tcs = new TaskCompletionSource<bool>();
+            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(250))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeOut.Completed += (s, e) => tcs.TrySetResult(true);
+
             await Dispatcher.InvokeAsync(() =>
             {
                 BeginAnimation(OpacityProperty, fadeOut);
             });
 
-            await Task.Delay(120);
+            await Task.WhenAny(tcs.Task, Task.Delay(300));
             Close();
         }
     }

@@ -53,6 +53,17 @@ namespace SteamPluginManager
             return read;
         }
 
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            int read = await _innerStream.ReadAsync(buffer, cancellationToken);
+            if (read > 0)
+            {
+                _totalSent += read;
+                _reportProgress(_totalSent);
+            }
+            return read;
+        }
+
         public override long Seek(long offset, SeekOrigin origin) => _innerStream.Seek(offset, origin);
         public override void SetLength(long value) => _innerStream.SetLength(value);
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();

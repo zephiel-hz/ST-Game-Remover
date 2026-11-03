@@ -18,6 +18,7 @@ namespace SteamPluginManager.Views
         {
             InitializeComponent();
             Loaded += GenerateTokenView_Loaded;
+            Unloaded += GenerateTokenView_Unloaded;
         }
 
         private async void GenerateTokenView_Loaded(object sender, RoutedEventArgs e)
@@ -51,6 +52,7 @@ namespace SteamPluginManager.Views
 
                 // Initialize webview
                 await GenerateTokenBrowser.EnsureCoreWebView2Async(_environment);
+                SteamPluginManager.Helpers.WebViewHelper.TrackBrowserProcess(GenerateTokenBrowser);
                 await AddHideLovableBadgeScriptAsync();
                 HookWebViewEvents(GenerateTokenBrowser);
                 GenerateTokenBrowser.Source = new Uri(TokenGeneratorUrl);
@@ -82,6 +84,31 @@ namespace SteamPluginManager.Views
             Dispatcher.BeginInvoke(UpdateNavigationButtons);
         }
 
+
+        private void GenerateTokenView_Unloaded(object sender, RoutedEventArgs e)
+        {
+            UnhookWebViewEvents(GenerateTokenBrowser);
+            SteamPluginManager.Helpers.WebViewHelper.TerminateBrowserProcess(GenerateTokenBrowser);
+        }
+
+        private void UnhookWebViewEvents(WebView2? webView)
+        {
+            if (webView == null) return;
+            try
+            {
+                webView.NavigationStarting -= GenerateTokenBrowser_NavigationStarting;
+                webView.NavigationCompleted -= GenerateTokenBrowser_NavigationCompleted;
+                if (webView.CoreWebView2 != null)
+                {
+                    webView.CoreWebView2.HistoryChanged -= CoreWebView2_HistoryChanged;
+                    webView.CoreWebView2.WebMessageReceived -= CoreWebView2_WebMessageReceived;
+                    webView.CoreWebView2.NewWindowRequested -= CoreWebView2_NewWindowRequested;
+                    webView.CoreWebView2.ProcessFailed -= CoreWebView2_ProcessFailed;
+                    webView.CoreWebView2.NavigationCompleted -= CoreWebView2_NavigationCompletedForScript;
+                }
+            }
+            catch { }
+        }
 
         private void UpdateNavigationButtons()
         {

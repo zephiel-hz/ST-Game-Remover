@@ -11,7 +11,10 @@ using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using System.Windows.Media;
 using SteamPluginManager;
+using SteamPluginManager.Services.Security;
+using SteamPluginManager.Services.Steam;
 
 namespace SteamPluginManager.Views
 {
@@ -19,31 +22,40 @@ namespace SteamPluginManager.Views
     {
         private MainWindow? _mainWindow;
         private string _lastSearchTerm = "";
-        private const double MIN_CARD_WIDTH = 240;
+        private const double MIN_CARD_WIDTH = 230;
+        private ScrollViewer? _cardsScrollViewer;
         private bool _isInitialized = false;
         private bool _isUpdatingSearchBox = false; // Flag to prevent race conditions
+        private bool _isUpdatingSelectionBatch = false; // Flag to prevent cascading UI refreshes during batch selection
         private string _selectedCategory = "All";
         private ICollectionView? _collectionView; // For sorted view
-        private const int SaltSize = 16;
+        private List<GameEntry> _lastFilteredGames = new();
+        private int _projectedColumnCount = 0;
+        private List<GameEntry>? _lastProjectedItems;
+
+        public static readonly DependencyProperty ColumnCountProperty =
+            DependencyProperty.Register(
+                nameof(ColumnCount),
+                typeof(int),
+                typeof(GameLibraryView),
+                new PropertyMetadata(3));
+
+        public int ColumnCount
+        {
+            get => (int)GetValue(ColumnCountProperty);
+            set => SetValue(ColumnCountProperty, value);
+        }
+
+        public ObservableCollection<GameRow> Rows { get; } = new ObservableCollection<GameRow>();
 
         // Long-press / Hold gesture for selection mode
         private readonly System.Windows.Threading.DispatcherTimer _holdTimer = new System.Windows.Threading.DispatcherTimer();
         private System.Windows.Threading.DispatcherTimer? _collectionChangedDebounceTimer;
+        private System.Windows.Threading.DispatcherTimer? _searchDebounceTimer;
         private GameEntry? _holdTargetGame;
         private Border? _holdTargetBorder;
         private Point _holdStartPoint;
         private bool _isHoldTriggered;
-
-        private static string GetBackupPassword()
-        {
-            var password = Environment.GetEnvironmentVariable("SPM_BACKUP_PASSWORD");
-            if (string.IsNullOrWhiteSpace(password))
-            {
-                throw new InvalidOperationException("Environment variable 'SPM_BACKUP_PASSWORD' is not set.");
-            }
-
-            return password;
-        }
 
         public static readonly DependencyProperty IsSelectionModeProperty =
             DependencyProperty.Register(
@@ -85,8 +97,10 @@ namespace SteamPluginManager.Views
 
         private void GameLibraryView_Unloaded(object sender, RoutedEventArgs e)
         {
-            _holdTimer.Stop();
+            CancelHoldGesture();
             _collectionChangedDebounceTimer?.Stop();
+            _searchDebounceTimer?.Stop();
+            _cardsScrollViewer = null;
             // Unsubscribe from language change event to prevent memory leak
             App.LanguageChanged -= LanguageChanged_Handler;
             
@@ -110,11 +124,11 @@ namespace SteamPluginManager.Views
                 await _mainWindow.RefreshGameListAsync();
             }
             
-            // Re-check installation status using instant RAM map
-            RefreshInstallationStatus();
+            // Re-check installation status off the UI thread
+            await RefreshInstallationStatusAsync();
 
             // Then refresh view and respect current filter (All / Installed / NotInstalled)
-            if (_collectionView != null)
+            if (_mainWindow != null)
             {
                 ApplyCollectionFilters();
                 UpdateInfoPanel();
@@ -131,16 +145,36 @@ namespace SteamPluginManager.Views
             _ = RefreshAsync();
         }
 
+        private long _installStatusGeneration;
+
         private void RefreshInstallationStatus()
         {
+            _ = RefreshInstallationStatusAsync();
+        }
+
+        private async Task RefreshInstallationStatusAsync(bool forceRefresh = false, System.Threading.CancellationToken ct = default)
+        {
+            long generation = System.Threading.Interlocked.Increment(ref _installStatusGeneration);
+
             try
             {
                 if (_mainWindow?.Games == null) return;
 
-                var installedMap = SteamHelper.GetInstalledGamesMap();
+                var installedMap = await SteamHelper.GetInstalledGamesMapAsync(forceRefresh, ct);
 
+                // Generation guard: discard if a newer scan or refresh was started
+                if (generation != System.Threading.Volatile.Read(ref _installStatusGeneration))
+                {
+                    Logger.Log($"[GameLibraryView] Discarding superseded installation status scan (generation {generation} vs current {_installStatusGeneration})");
+                    return;
+                }
+
+                bool anyChanged = false;
                 foreach (var game in _mainWindow.Games)
                 {
+                    if (generation != System.Threading.Volatile.Read(ref _installStatusGeneration))
+                        return;
+
                     bool isInstalled = installedMap.TryGetValue(game.AppId, out string? installPath);
                     if (!isInstalled && game.ParentAppId.HasValue && installedMap.TryGetValue(game.ParentAppId.Value, out var parentPath))
                     {
@@ -148,17 +182,62 @@ namespace SteamPluginManager.Views
                         installPath = parentPath;
                     }
 
+                    // Fallback safety check: Never demote an installed game to not installed if its files still exist on disk.
+                    // This protects against Custom Launch (non-Steam), OnlineFix, cloud save sync, or transient Steam scanner states.
+                    if (!isInstalled && game.IsInstalled)
+                    {
+                        if (!string.IsNullOrWhiteSpace(game.InstallationPath) && Directory.Exists(game.InstallationPath))
+                        {
+                            isInstalled = true;
+                            installPath = game.InstallationPath;
+                            installedMap[game.AppId] = installPath;
+                        }
+                        else
+                        {
+                            var customCfg = CustomLaunchService.GetConfig(game.AppId);
+                            if (customCfg != null && customCfg.IsEnabled && !string.IsNullOrWhiteSpace(customCfg.ExecutablePath) && File.Exists(customCfg.ExecutablePath))
+                            {
+                                isInstalled = true;
+                                installPath = !string.IsNullOrWhiteSpace(customCfg.WorkingDirectory) && Directory.Exists(customCfg.WorkingDirectory)
+                                    ? customCfg.WorkingDirectory
+                                    : Path.GetDirectoryName(customCfg.ExecutablePath);
+                                installedMap[game.AppId] = installPath ?? "";
+                            }
+                            else
+                            {
+                                string? directPath = SteamHelper.GetGameInstallationPath(game.AppId, game.Name);
+                                if (!string.IsNullOrWhiteSpace(directPath) && Directory.Exists(directPath))
+                                {
+                                    isInstalled = true;
+                                    installPath = directPath;
+                                    installedMap[game.AppId] = directPath;
+                                }
+                            }
+                        }
+                    }
+
                     if (game.IsInstalled != isInstalled || game.InstallationPath != installPath)
                     {
                         game.IsInstalled = isInstalled;
                         game.InstallationPath = installPath;
+                        anyChanged = true;
                         Logger.Log($"[GameLibraryView] Updated IsInstalled status for {game.Name} (AppID: {game.AppId}): {game.IsInstalled}");
                     }
                 }
+
+                if (anyChanged)
+                {
+                    ApplyCollectionFilters();
+                    UpdateInfoPanel();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Graceful cancellation
             }
             catch (Exception ex)
             {
-                Logger.Log($"[GameLibraryView] Error in RefreshInstallationStatus: {ex.Message}");
+                Logger.Log($"[GameLibraryView] Error in RefreshInstallationStatusAsync: {ex.Message}");
             }
         }
 
@@ -172,15 +251,14 @@ namespace SteamPluginManager.Views
                     _mainWindow = mainWindow;
                     Logger.Log($"[GameLibraryView] LoadGameLibrary: DataContext retrieved, Games count: {_mainWindow.Games.Count}");
                     
+                    _ = RefreshInstallationStatusAsync();
+                    UpdateGridColumns();
                     SetupCollectionView();
                     
                     // Subscribe to games collection changes for real-time updates (prevent duplicate subscriptions)
                     _mainWindow.Games.CollectionChanged -= Games_CollectionChanged;
                     _mainWindow.Games.CollectionChanged += Games_CollectionChanged;
                     Logger.Log("[GameLibraryView] Subscribed to Games.CollectionChanged event");
-                    
-                    UpdateInfoPanel();
-                    UpdateGridColumns();
                     
                     // Initialize SearchBox placeholder only on first initial load
                     if (SearchBox != null && !_isInitialized)
@@ -199,13 +277,13 @@ namespace SteamPluginManager.Views
                     RefreshLanguageUI();
                     
                     // Final verification
-                    if (GameCards?.ItemsSource == _collectionView)
+                    if (GameCards?.ItemsSource == Rows)
                     {
-                        Logger.Log("[GameLibraryView] ✓ VERIFIED: GameCards.ItemsSource is correctly set to CollectionView");
+                        Logger.Log("[GameLibraryView] ✓ VERIFIED: GameCards.ItemsSource is correctly set to Rows");
                     }
                     else
                     {
-                        Logger.Log($"[GameLibraryView] ⚠ WARNING: GameCards.ItemsSource verification failed. GameCards={GameCards}, ItemsSource={GameCards?.ItemsSource}, CollectionView={_collectionView}");
+                        Logger.Log($"[GameLibraryView] ⚠ WARNING: GameCards.ItemsSource verification failed. GameCards={GameCards}, ItemsSource={GameCards?.ItemsSource}, Rows={Rows}");
                     }
                     
                     Logger.Log("[GameLibraryView] LoadGameLibrary complete with real-time monitoring enabled");
@@ -241,6 +319,7 @@ namespace SteamPluginManager.Views
                     _collectionChangedDebounceTimer.Tick += (s, args) =>
                     {
                         _collectionChangedDebounceTimer.Stop();
+                        ApplyCollectionFilters();
                         UpdateInfoPanel();
                         UpdateGridColumns();
                     };
@@ -257,15 +336,15 @@ namespace SteamPluginManager.Views
 
         private void EnsureItemsSourceIsSet()
         {
-            if (GameCards == null || _collectionView == null) return;
+            if (GameCards == null) return;
             
             try
             {
-                // Check if ItemsSource is correctly pointing to CollectionView
-                if (GameCards.ItemsSource != _collectionView)
+                // In row-based virtualization, GameCards binds to Rows
+                if (GameCards.ItemsSource != Rows)
                 {
-                    Logger.Log("[GameLibraryView] Fixing ItemsSource: Re-setting GameCards.ItemsSource to CollectionView");
-                    GameCards.ItemsSource = _collectionView;
+                    Logger.Log("[GameLibraryView] Fixing ItemsSource: Re-setting GameCards.ItemsSource to Rows");
+                    GameCards.ItemsSource = Rows;
                 }
             }
             catch (Exception ex)
@@ -280,25 +359,23 @@ namespace SteamPluginManager.Views
 
             try
             {
-                // Create CollectionViewSource with sorting
-                var collectionViewSource = new CollectionViewSource();
-                collectionViewSource.Source = _mainWindow.Games;
-                
-                // Add sorting by Name (A-Z)
-                collectionViewSource.SortDescriptions.Add(new SortDescription("Name", ListSortDirection.Ascending));
-                
-                _collectionView = collectionViewSource.View;
-                
-                // Set ItemsSource to sorted view - CRITICAL: This ensures real-time updates work
+                // Set ItemsSource to Rows - CRITICAL: This ensures row-based virtualization works
                 if (GameCards != null)
                 {
-                    GameCards.ItemsSource = _collectionView;
-                    Logger.Log("[GameLibraryView] ✓ GameCards.ItemsSource set to CollectionView with sorting");
+                    GameCards.ItemsSource = Rows;
+                    Logger.Log("[GameLibraryView] ✓ GameCards.ItemsSource set to Rows projection");
                 }
                 else
                 {
                     Logger.Log("[GameLibraryView] WARNING: GameCards is NULL during SetupCollectionView - will retry on next refresh");
                 }
+
+                // Also initialize _collectionView as default view for backward compatibility
+                try
+                {
+                    _collectionView = CollectionViewSource.GetDefaultView(_mainWindow.Games);
+                }
+                catch { }
 
                 // Apply active filters immediately (Category and Search)
                 ApplyCollectionFilters();
@@ -323,22 +400,9 @@ namespace SteamPluginManager.Views
                 // First ensure ItemsSource is set
                 EnsureItemsSourceIsSet();
                 
-                if (_collectionView != null)
-                {
-                    _collectionView.Refresh();
-                    UpdateInfoPanel();
-                    
-                    Logger.Log("[GameLibraryView] ✓ Collection view refreshed successfully");
-                }
-                else
-                {
-                    Logger.Log("[GameLibraryView] WARNING: _collectionView is NULL - attempting to re-setup");
-                    if (_mainWindow != null)
-                    {
-                        SetupCollectionView();
-                        UpdateInfoPanel();
-                    }
-                }
+                ApplyCollectionFilters();
+                
+                Logger.Log("[GameLibraryView] ✓ Collection view refreshed successfully");
             }
             catch (Exception ex)
             {
@@ -394,30 +458,52 @@ namespace SteamPluginManager.Views
             }
         }
 
+        private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            if (parent == null) return null;
+            int count = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T typedChild)
+                    return typedChild;
+                var result = FindVisualChild<T>(child);
+                if (result != null)
+                    return result;
+            }
+            return null;
+        }
+
         private void UpdateGridColumns()
         {
             try
             {
-                if (CardsScrollViewer == null) return;
-
                 // Get available width
-                double availableWidth = CardsScrollViewer.ActualWidth;
-                if (availableWidth <= 0) availableWidth = 800; // Default fallback
+                var scrollViewer = _cardsScrollViewer ??= FindVisualChild<ScrollViewer>(GameCards);
+                double availableWidth = scrollViewer != null && scrollViewer.ViewportWidth > 0
+                    ? scrollViewer.ViewportWidth
+                    : (GameCards?.ActualWidth > 0 ? GameCards.ActualWidth : (ActualWidth > 0 ? ActualWidth - 28 : 0));
+                if (availableWidth <= 0)
+                    return;
 
-                // Account for margins and padding
-                availableWidth -= 40; // Margins and padding
+                const double cardMarginRight = 14;
+                const double targetCardWidth = 230;
+                const double rightClearance = 36;
+                double usableWidth = Math.Max(targetCardWidth + cardMarginRight, availableWidth - rightClearance);
+
+
+
+
 
                 // Calculate columns based on available width and minimum card width
-                int columns = Math.Max(1, (int)(availableWidth / MIN_CARD_WIDTH));
+                int columns = Math.Max(1, (int)(usableWidth / (targetCardWidth + cardMarginRight)));
 
-                // Find CardGrid and update columns
-                if (GameCards.ItemsPanel != null)
+                bool columnCountChanged = columns != ColumnCount;
+                ColumnCount = columns;
+
+                if (columnCountChanged)
                 {
-                    var panel = GameCards.FindName("CardGrid") as UniformGrid;
-                    if (panel != null)
-                    {
-                        panel.Columns = columns;
-                    }
+                    UpdateRowsProjection();
                 }
             }
             catch (Exception ex)
@@ -431,9 +517,17 @@ namespace SteamPluginManager.Views
         {
             if (_mainWindow != null)
             {
-                foreach (var game in _mainWindow.Games)
+                _isUpdatingSelectionBatch = true;
+                try
                 {
-                    game.IsSelected = true;
+                    foreach (var game in _mainWindow.Games)
+                    {
+                        game.IsSelected = true;
+                    }
+                }
+                finally
+                {
+                    _isUpdatingSelectionBatch = false;
                 }
             }
 
@@ -441,8 +535,10 @@ namespace SteamPluginManager.Views
             {
                 IsSelectionMode = true;
             }
-
-            UpdateInfoPanel();
+            else
+            {
+                UpdateInfoPanel();
+            }
         }
 
         private async void Refresh_Click(object sender, RoutedEventArgs e)
@@ -502,12 +598,20 @@ namespace SteamPluginManager.Views
         {
             if (_mainWindow != null)
             {
-                foreach (var game in _mainWindow.Games)
+                _isUpdatingSelectionBatch = true;
+                try
                 {
-                    game.IsSelected = false;
+                    foreach (var game in _mainWindow.Games)
+                    {
+                        game.IsSelected = false;
+                    }
                 }
+                finally
+                {
+                    _isUpdatingSelectionBatch = false;
+                }
+
                 IsSelectionMode = false;
-                UpdateInfoPanel();
                 UpdateActivityLog("Cleared all selections");
             }
         }
@@ -559,7 +663,7 @@ namespace SteamPluginManager.Views
                     }
 
                     // Encrypt the memory stream to the file
-                    EncryptStream(memoryStream, saveFileDialog.FileName);
+                    BackupCryptoService.EncryptStream(memoryStream, saveFileDialog.FileName);
                 }
 
                 ModernMessageBox.Show(
@@ -577,68 +681,11 @@ namespace SteamPluginManager.Views
             }
         }
 
-        private MemoryStream EncryptStream(MemoryStream inStream, string outputFile)
-        {
-            byte[] salt = new byte[SaltSize];
-            using (var rng = RandomNumberGenerator.Create())
-            {
-                rng.GetBytes(salt);
-            }
-
-            using (var aes = Aes.Create())
-            {
-                aes.KeySize = 256;
-                aes.GenerateIV();
-                var key = new Rfc2898DeriveBytes(GetBackupPassword(), salt, 10000, HashAlgorithmName.SHA256).GetBytes(aes.KeySize / 8);
-                aes.Key = key;
-
-                using (var outStream = new FileStream(outputFile, FileMode.Create))
-                {
-                    outStream.Write(salt, 0, salt.Length);
-                    outStream.Write(aes.IV, 0, aes.IV.Length);
-                    using (var cryptoStream = new CryptoStream(outStream, aes.CreateEncryptor(), CryptoStreamMode.Write))
-                    {
-                        inStream.Position = 0;
-                        inStream.CopyTo(cryptoStream);
-                    }
-                }
-            }
-            return inStream;
-        }
-
-        private MemoryStream DecryptStream(string inputFile)
-        {
-            var memoryStream = new MemoryStream();
-            using (var inStream = new FileStream(inputFile, FileMode.Open, FileAccess.Read, FileShare.Read))
-            {
-                byte[] salt = new byte[SaltSize];
-                inStream.Read(salt, 0, salt.Length);
-
-                using (var aes = Aes.Create())
-                {
-                    aes.KeySize = 256;
-                    byte[] iv = new byte[aes.IV.Length];
-                    inStream.Read(iv, 0, iv.Length);
-                    aes.IV = iv;
-
-                    var key = new Rfc2898DeriveBytes(GetBackupPassword(), salt, 10000, HashAlgorithmName.SHA256).GetBytes(aes.KeySize / 8);
-                    aes.Key = key;
-
-                    using (var cryptoStream = new CryptoStream(inStream, aes.CreateDecryptor(), CryptoStreamMode.Read))
-                    {
-                        cryptoStream.CopyTo(memoryStream);
-                    }
-                }
-            }
-            memoryStream.Position = 0;
-            return memoryStream;
-        }
-
         private bool ProcessBackupFile(string backupFilePath, string pluginPath, string luaPath, string depotCachePath, string depotCachePathOld)
         {
             try
             {
-                using (var memoryStream = DecryptStream(backupFilePath))
+                using (var memoryStream = BackupCryptoService.DecryptStream(backupFilePath))
                 {
                     int luaFiles = 0;
                     int manifestFiles = 0;
@@ -772,7 +819,7 @@ namespace SteamPluginManager.Views
                 
                 // Refresh GameLibraryView UI after delete completes while respecting active filter
                 Logger.Log("[GameLibraryView] Auto-refreshing library view after delete");
-                RefreshInstallationStatus();
+                await RefreshInstallationStatusAsync();
                 ApplyCollectionFilters();
                 UpdateInfoPanel();
                 UpdateGridColumns();
@@ -798,63 +845,70 @@ namespace SteamPluginManager.Views
             if (_isUpdatingSearchBox)
                 return;
 
-            if (sender is TextBox textBox && _mainWindow != null && _collectionView != null)
+            if (sender is TextBox textBox && _mainWindow != null)
             {
-                string searchTerm = textBox.Text?.Trim() ?? "";
-                _lastSearchTerm = searchTerm;
+                string text = textBox.Text?.Trim() ?? "";
+                if (text == "Search games..." || text == "Search games by title or genre...")
+                {
+                    text = "";
+                }
+                _lastSearchTerm = text;
 
-                if (string.IsNullOrWhiteSpace(searchTerm))
+                if (_searchDebounceTimer == null)
                 {
-                    Logger.Log("[SearchBox] Showing all games");
-                }
-                else
-                {
-                    Logger.Log($"[SearchBox] Filtered games for term: {searchTerm}");
+                    _searchDebounceTimer = new System.Windows.Threading.DispatcherTimer(
+                        System.Windows.Threading.DispatcherPriority.Normal,
+                        Dispatcher)
+                    {
+                        Interval = TimeSpan.FromMilliseconds(250)
+                    };
+                    _searchDebounceTimer.Tick += (s, args) =>
+                    {
+                        _searchDebounceTimer.Stop();
+                        ExecuteSearchFilter();
+                    };
                 }
 
-                ApplyCollectionFilters();
-                
-                try
-                {
-                    UpdateInfoPanel();
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log($"[SearchBox] Error updating info panel: {ex.Message}");
-                }
+                _searchDebounceTimer.Stop();
+                _searchDebounceTimer.Start();
             }
+        }
+
+        private void ExecuteSearchFilter()
+        {
+            if (_mainWindow == null) return;
+
+            if (string.IsNullOrWhiteSpace(_lastSearchTerm))
+            {
+                Logger.Log("[SearchBox] Showing all games");
+            }
+            else
+            {
+                Logger.Log($"[SearchBox] Filtered games for term: {_lastSearchTerm}");
+            }
+
+            ApplyCollectionFilters();
         }
 
         private void SearchBox_GotFocus(object sender, RoutedEventArgs e)
         {
             if (sender is TextBox textBox)
             {
-                try
+                if (textBox.Text == "Search games..." || textBox.Text == "Search games by title or genre...")
                 {
-                    _isUpdatingSearchBox = true;
-                    
-                    // If text is the placeholder, clear it
-                    if (textBox.Text == "Search games...")
+                    try
                     {
+                        _isUpdatingSearchBox = true;
                         textBox.Text = "";
                         Logger.Log("[SearchBox] GotFocus - cleared placeholder");
                     }
-                    
-                    // Ensure we can see the text being typed
-                    textBox.Foreground = (System.Windows.Media.Brush)Application.Current.Resources["ForegroundBrush"];
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log($"[SearchBox] Error in GotFocus: {ex.Message}");
-                }
-                finally
-                {
-                    _isUpdatingSearchBox = false;
-                    
-                    // NOW trigger TextChanged manually since we cleared the text above
-                    if (string.IsNullOrWhiteSpace((sender as TextBox)?.Text))
+                    catch (Exception ex)
                     {
-                        SearchBox_TextChanged(sender, new TextChangedEventArgs(TextBox.TextChangedEvent, UndoAction.None));
+                        Logger.Log($"[SearchBox] Error in GotFocus: {ex.Message}");
+                    }
+                    finally
+                    {
+                        _isUpdatingSearchBox = false;
                     }
                 }
                 textBox.Foreground = (System.Windows.Media.Brush)Application.Current.Resources["ForegroundBrush"];
@@ -863,13 +917,12 @@ namespace SteamPluginManager.Views
 
         private void SearchBox_LostFocus(object sender, RoutedEventArgs e)
         {
-            if (sender is TextBox textBox && string.IsNullOrWhiteSpace(textBox.Text))
+            if (sender is TextBox textBox && (textBox.Text == "Search games..." || textBox.Text == "Search games by title or genre..."))
             {
                 try
                 {
                     _isUpdatingSearchBox = true;
-                    textBox.Text = "Search games...";
-                    Logger.Log("[SearchBox] LostFocus - restored placeholder");
+                    textBox.Text = "";
                 }
                 catch (Exception ex)
                 {
@@ -888,13 +941,14 @@ namespace SteamPluginManager.Views
             if (sender is ComboBox combo && combo.SelectedItem is ComboBoxItem item && item.Tag is string tag)
             {
                 _selectedCategory = tag;
+                Logger.Log($"[CategoryFilter] Selected category changed to: {tag}");
                 ApplyCollectionFilters();
             }
         }
 
         private void ApplyCollectionFilters()
         {
-            if (_collectionView == null) return;
+            if (_mainWindow?.Games == null) return;
 
             // Ensure _selectedCategory is always in sync with CategoryFilterComboBox
             if (CategoryFilterComboBox?.SelectedItem is ComboBoxItem item && item.Tag is string tag)
@@ -904,13 +958,20 @@ namespace SteamPluginManager.Views
 
             try
             {
-                _collectionView.Filter = (obj) =>
+                string effectiveSearch = _lastSearchTerm;
+                if (effectiveSearch == "Search games..." || effectiveSearch == "Search games by title or genre...")
                 {
-                    if (obj is GameEntry game)
+                    effectiveSearch = "";
+                }
+
+                var filtered = _mainWindow.Games
+                    .Where(game =>
                     {
-                        bool matchesSearch = string.IsNullOrWhiteSpace(_lastSearchTerm) ||
-                                             game.Name.Contains(_lastSearchTerm, StringComparison.OrdinalIgnoreCase) ||
-                                             (game.Genre?.Contains(_lastSearchTerm, StringComparison.OrdinalIgnoreCase) ?? false);
+                        if (game == null) return false;
+
+                        bool matchesSearch = string.IsNullOrWhiteSpace(effectiveSearch) ||
+                                             (!string.IsNullOrEmpty(game.Name) && game.Name.Contains(effectiveSearch, StringComparison.OrdinalIgnoreCase)) ||
+                                             (!string.IsNullOrEmpty(game.Genre) && game.Genre.Contains(effectiveSearch, StringComparison.OrdinalIgnoreCase));
 
                         bool matchesCategory = _selectedCategory switch
                         {
@@ -920,14 +981,23 @@ namespace SteamPluginManager.Views
                         };
 
                         return matchesSearch && matchesCategory;
-                    }
-                    return false;
-                };
-                _collectionView.Refresh();
+                    })
+                    .OrderBy(game => game.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                Logger.Log($"[GameLibraryView] Filter applied: Category={_selectedCategory}, Search='{effectiveSearch}', Matches={filtered.Count}/{_mainWindow.Games.Count}");
+
+                _lastFilteredGames = filtered;
+                UpdateRowsProjection();
+
+                if (Rows.Count > 0 && GameCards != null)
+                {
+                    GameCards.ScrollIntoView(Rows[0]);
+                }
             }
             catch (Exception ex)
             {
-                Logger.Log($"[GameLibraryView] Error applying collection filters: {ex.Message}");
+                Logger.Log($"[GameLibraryView] Error applying collection filters: {ex.Message}\n{ex.StackTrace}");
             }
 
             try
@@ -946,13 +1016,52 @@ namespace SteamPluginManager.Views
             WindowNavigator.NavigateToDashboard();
         }
 
+        private void CancelHoldGesture()
+        {
+            if (_holdTimer.IsEnabled)
+            {
+                _holdTimer.Stop();
+            }
+            _holdTargetGame = null;
+            _holdTargetBorder = null;
+            _isHoldTriggered = false;
+        }
+
+        private void GameCards_ScrollChanged(object sender, ScrollChangedEventArgs e)
+        {
+            if (e.ViewportWidthChange != 0)
+            {
+                UpdateGridColumns();
+            }
+
+            if (e.VerticalChange != 0)
+            {
+                CancelHoldGesture();
+            }
+        }
+
+        private void GameCard_Unloaded(object sender, RoutedEventArgs e)
+        {
+            if (ReferenceEquals(sender, _holdTargetBorder))
+            {
+                CancelHoldGesture();
+            }
+        }
+
         private void HoldTimer_Tick(object? sender, EventArgs e)
         {
             _holdTimer.Stop();
-            _isHoldTriggered = true;
 
-            if (_holdTargetGame != null)
+            // Guard against recycled containers: verify that border is still loaded and still represents the target game
+            if (_holdTargetBorder != null && _holdTargetGame != null)
             {
+                if (!ReferenceEquals(_holdTargetBorder.DataContext, _holdTargetGame) || !_holdTargetBorder.IsLoaded)
+                {
+                    CancelHoldGesture();
+                    return;
+                }
+
+                _isHoldTriggered = true;
                 _holdTargetGame.IsSelected = true;
                 if (!IsSelectionMode)
                 {
@@ -989,30 +1098,24 @@ namespace SteamPluginManager.Views
                 if (Math.Abs(diff.X) > 8 || Math.Abs(diff.Y) > 8)
                 {
                     // User moved/dragged mouse away, cancel hold
-                    _holdTimer.Stop();
+                    CancelHoldGesture();
                 }
             }
         }
 
         private void GameCard_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
         {
-            if (_holdTimer.IsEnabled)
-            {
-                _holdTimer.Stop();
-            }
+            CancelHoldGesture();
         }
 
         private void GameCard_MouseLeftButtonUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            if (_holdTimer.IsEnabled)
-            {
-                _holdTimer.Stop();
-            }
+            bool holdTriggered = _isHoldTriggered;
+            CancelHoldGesture();
 
-            if (_isHoldTriggered)
+            if (holdTriggered)
             {
                 // Hold gesture completed and activated selection mode, suppress regular click
-                _isHoldTriggered = false;
                 e.Handled = true;
                 return;
             }
@@ -1033,18 +1136,7 @@ namespace SteamPluginManager.Views
 
         private void ItemCheckBox_Changed(object sender, RoutedEventArgs e)
         {
-            // If we're currently showing a filtered CollectionView, just refresh it to preserve the filter
-            if (_collectionView != null && GameCards.ItemsSource == _collectionView)
-            {
-                _collectionView.Refresh();
-                Logger.Log("[ItemCheckBox_Changed] CollectionView refreshed (filter preserved)");
-            }
-            // Otherwise ensure ItemsSource is set to CollectionView
-            else if (_mainWindow != null && GameCards.ItemsSource != _collectionView)
-            {
-                GameCards.ItemsSource = _collectionView;
-                Logger.Log("[ItemCheckBox_Changed] ItemsSource reset to CollectionView");
-            }
+            if (_isUpdatingSelectionBatch) return;
             UpdateInfoPanel();
         }
 
@@ -1581,6 +1673,92 @@ namespace SteamPluginManager.Views
                 return false;
             }
         }
+
+        private void UpdateRowsProjection()
+        {
+            if (_mainWindow?.Games == null)
+            {
+                if (Rows.Count > 0)
+                {
+                    CancelHoldGesture();
+                    Rows.Clear();
+                    _lastProjectedItems = null;
+                    _projectedColumnCount = 0;
+                }
+                return;
+            }
+
+            try
+            {
+                var currentFiltered = _lastFilteredGames;
+
+                if (ColumnCount == _projectedColumnCount && !HasSequenceChanged(currentFiltered))
+                {
+                    return;
+                }
+
+                CancelHoldGesture();
+
+                int columns = Math.Max(1, ColumnCount);
+                int totalCount = currentFiltered.Count;
+                int rowIndex = 0;
+                var newRows = new List<GameRow>((totalCount + columns - 1) / columns);
+
+                for (int i = 0; i < totalCount; i += columns)
+                {
+                    int count = Math.Min(columns, totalCount - i);
+                    var rowItems = new GameEntry[count];
+                    for (int j = 0; j < count; j++)
+                    {
+                        rowItems[j] = currentFiltered[i + j];
+                    }
+                    newRows.Add(new GameRow(rowIndex++, rowItems, columns));
+                }
+
+                Rows.Clear();
+                foreach (var row in newRows)
+                {
+                    Rows.Add(row);
+                }
+
+                _projectedColumnCount = ColumnCount;
+                _lastProjectedItems = currentFiltered;
+                Logger.Log($"[GameLibraryView] Rows projection updated: {Rows.Count} rows ({totalCount} games, {columns} cols)");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[GameLibraryView] Error updating rows projection: {ex.Message}");
+            }
+        }
+
+        private bool HasSequenceChanged(IReadOnlyList<GameEntry> currentFiltered)
+        {
+            if (_lastProjectedItems == null || _lastProjectedItems.Count != currentFiltered.Count)
+                return true;
+
+            for (int i = 0; i < currentFiltered.Count; i++)
+            {
+                if (!ReferenceEquals(_lastProjectedItems[i], currentFiltered[i]))
+                    return true;
+            }
+            return false;
+        }
+    }
+
+    public sealed class GameRow
+    {
+        public int RowIndex { get; }
+        public IReadOnlyList<GameEntry> Items { get; }
+        public int Columns { get; }
+
+        public GameRow(int rowIndex, IReadOnlyList<GameEntry> items, int columns = 3)
+        {
+            RowIndex = rowIndex;
+            Items = items ?? Array.Empty<GameEntry>();
+            Columns = columns;
+        }
+
+        public override string ToString() => $"GameRow {RowIndex} ({Items.Count} items, {Columns} cols)";
     }
 }
 

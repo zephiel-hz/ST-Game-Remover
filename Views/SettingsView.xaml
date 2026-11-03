@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:helpers="clr-namespace:SteamPluginManager.Helpers"
              mc:Ignorable="d" 
              d:DesignHeight="700" d:DesignWidth="950"
              Background="{DynamicResource BackgroundBrush}"
@@ -123,9 +124,6 @@
                                     HorizontalAlignment="Left"
                                     VerticalAlignment="Center"
                                     Margin="4,0,0,0">
-                                <Border.Effect>
-                                    <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.3" Color="#000000" Direction="270"/>
-                                </Border.Effect>
                                 <Border.RenderTransform>
                                     <TranslateTransform x:Name="ThumbTranslateTransform" X="0"/>
                                 </Border.RenderTransform>
@@ -354,7 +352,8 @@
 
         <!-- Main Content Area -->
         <Grid DockPanel.Dock="Top">
-            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,6,0">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,6,0"
+                          helpers:SmoothScrollViewerHelper.EnableSmoothScrolling="True">
                 <Grid HorizontalAlignment="Stretch" MaxWidth="1100">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -824,7 +823,7 @@
                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                             <TextBlock Text="CHANGELOG &amp; RELEASE NOTES" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}"/>
                                             <Border Background="{DynamicResource ButtonBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
-                                                <TextBlock x:Name="SettingsCurrentVersionBadge" Text="v3.1.1" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
+                                                <TextBlock x:Name="SettingsCurrentVersionBadge" Text="v3.1.3" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
                                             </Border>
                                         </StackPanel>
                                         <TextBlock Text="View full release notes, new features, and changes across all versions." FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
@@ -877,7 +876,7 @@
                         <StackPanel>
                             <TextBlock x:Name="SteamtoolsOverlayText" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource ForegroundBrush}" Margin="0,0,0,8" Text="Installing Steamtools..."/>
                             <TextBlock x:Name="SteamtoolsOverlayStatus" FontSize="12" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,0,14" TextWrapping="Wrap" Text="Initializing..."/>
-                            <ProgressBar x:Name="SteamtoolsOverlayProgress" Height="4" Background="{DynamicResource ButtonBackgroundBrush}" Foreground="{DynamicResource SuccessButtonBrush}" BorderThickness="0" Margin="0,0,0,16" IsIndeterminate="True"/>
+                            <ProgressBar x:Name="SteamtoolsOverlayProgress" Height="4" Background="{DynamicResource ButtonBackgroundBrush}" Foreground="{DynamicResource SuccessButtonBrush}" BorderThickness="0" Margin="0,0,0,16" IsIndeterminate="False"/>
                             
                             <StackPanel x:Name="SteamtoolsStepsPanel">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
@@ -1038,7 +1037,7 @@
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                         <TextBlock Text="Release Notes &amp; Changelog" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource ForegroundBrush}"/>
                                         <Border Background="{DynamicResource ButtonBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="7,2" Margin="10,0,0,0" VerticalAlignment="Center">
-                                            <TextBlock x:Name="ChangelogModalVersionText" Text="v3.1.1" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"/>
+                                            <TextBlock x:Name="ChangelogModalVersionText" Text="v3.1.3" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"/>
                                         </Border>
                                     </StackPanel>
                                     <TextBlock Text="Complete version history and detailed change documentation" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,3,0,0"/>
@@ -1085,7 +1084,7 @@
                                                  TextChanged="ChangelogSearchTextBox_TextChanged"/>
                                         <TextBlock Grid.Column="1"
                                                    x:Name="ChangelogSearchPlaceholder"
-                                                   Text="Filter by version or keyword (e.g. 3.1.1, avatar, backup)..."
+                                                   Text="Filter by version or keyword (e.g. 3.1.3, avatar, backup)..."
                                                    Foreground="{DynamicResource MutedForegroundBrush}"
                                                    FontSize="12"
                                                    VerticalAlignment="Center"
@@ -1129,7 +1128,8 @@
 
                         <!-- Markdown Changelog Content Host -->
                         <Border Grid.Row="2" Background="#080C14" Padding="20,14">
-                            <ScrollViewer x:Name="ChangelogScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0">
+                            <ScrollViewer x:Name="ChangelogScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0"
+                                          helpers:SmoothScrollViewerHelper.EnableSmoothScrolling="True">
                                 <ContentControl x:Name="ChangelogContentHost"/>
                             </ScrollViewer>
                         </Border>
@@ -1139,7 +1139,7 @@
                             <Grid>
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <TextBlock Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="{DynamicResource AccentBrush}" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                    <TextBlock x:Name="ChangelogVersionCountText" Text="Full version history from v1.0.6 to v3.1.1" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="ChangelogVersionCountText" Text="Full version history from v1.0.6 to v3.1.3" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" VerticalAlignment="Center"/>
                                 </StackPanel>
 
                                 <Button HorizontalAlignment="Right"

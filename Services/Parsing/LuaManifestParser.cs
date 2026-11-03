@@ -8,15 +8,9 @@ namespace SteamPluginManager.Services.Parsing
     public static class LuaManifestParser
     {
         private static readonly Regex DlcSectionHeaderRegex = new(@"^\s*--\s*DLCS\s+(WITHOUT|WITH)\s+DEDICATED\s+DEPOTS", RegexOptions.IgnoreCase | RegexOptions.Multiline);
-        private static readonly Regex AddAppIdRegex = new(@"addappid\s*\(\s*(\d+)(?:\s*,[^)]*)*\)", RegexOptions.IgnoreCase);
         private static readonly Regex AddAppIdWithNameRegex = new(@"addappid\s*\(\s*(\d+)(?:\s*,[^)]*)*\)\s*(?:--\s*(.+))?", RegexOptions.IgnoreCase);
 
         public sealed record DlcEntry(int AppId, string Name);
-
-        public static List<int> ExtractDlcAppIds(string luaContent)
-        {
-            return ExtractDlcEntries(luaContent).Select(entry => entry.AppId).ToList();
-        }
 
         public static List<DlcEntry> ExtractDlcEntries(string luaContent)
         {

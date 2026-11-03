@@ -75,7 +75,7 @@ namespace SteamPluginManager.Views
                 // Display masked Device Hardware ID
                 try
                 {
-                    string id = GetDeviceId();
+                    string id = DeviceIdentifier.GetDeviceId();
                     if (!string.IsNullOrWhiteSpace(id) && id != "UNKNOWN")
                     {
                         string masked = id.Length > 12 ? $"{id.Substring(0, 4)}...{id.Substring(id.Length - 4)}" : id;
@@ -201,11 +201,12 @@ namespace SteamPluginManager.Views
                 Logger.Log($"[VerifyTokenView] Verifying token: {token.Substring(0, Math.Min(20, token.Length))}...");
 
                 // Get device ID
-                string deviceId = GetDeviceId();
+                string deviceId = DeviceIdentifier.GetDeviceId();
                 Logger.Log($"[VerifyTokenView] Device ID: {deviceId}");
 
                 // Call Supabase to verify token
                 VerificationResult verification = await VerifyTokenAsync(token, deviceId);
+                DashboardView.InvalidateDeviceTokenCache();
 
                 if (verification.IsBlocked)
                 {
@@ -278,21 +279,6 @@ namespace SteamPluginManager.Views
                 StatusMessage.Foreground = (System.Windows.Media.Brush)TryFindResource("DangerButtonBrush");
                 StatusMessage.Text = $"Error: {ex.Message}";
                 Logger.Log($"[VerifyTokenView] Error: {ex.Message}");
-            }
-        }
-
-        private string GetDeviceId()
-        {
-            try
-            {
-                string deviceId = DeviceIdentifier.GetDeviceId();
-                Logger.Log($"[VerifyTokenView] Resolved stable device ID: {deviceId}");
-                return deviceId;
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"[VerifyTokenView] Error getting device ID: {ex.Message}");
-                return "UNKNOWN";
             }
         }
 

@@ -867,7 +867,8 @@
 
                             <ScrollViewer x:Name="MessagesScrollViewer"
                                           VerticalScrollBarVisibility="Auto"
-                                          HorizontalScrollBarVisibility="Disabled">
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          helpers:SmoothScrollViewerHelper.EnableSmoothScrolling="True">
                                 <ItemsControl x:Name="MessagesItemsControl"
                                               ItemTemplate="{StaticResource ChatMessageTemplate}"/>
                             </ScrollViewer>
@@ -884,7 +885,8 @@
                                    VerticalAlignment="Center"
                                    Visibility="Collapsed"/>
 
-                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      helpers:SmoothScrollViewerHelper.EnableSmoothScrolling="True">
                             <StackPanel Margin="0,0,0,10">
                                 <!-- ONLINE CATEGORY HEADER -->
                                 <Border x:Name="OnlineSectionHeader"

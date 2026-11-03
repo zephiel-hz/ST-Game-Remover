@@ -208,6 +208,10 @@ namespace SteamPluginManager.Views
                 {
                     LogConsole($"[DevConsole] Replaced Lua & Manifest files for AppID {dialog.TargetAppId} ({dialog.ReplacedFilesCount} files, {SupabaseStorageService.FormatSize(dialog.ReplacedTotalBytes)}).");
                     await LoadGamesAsync();
+
+                    DashboardView.InvalidateCache();
+                    HZManifestView.InvalidateCache();
+                    _ = DashboardView.RefreshNewestManifestsAsync();
                 }
             }
             catch (Exception ex)
@@ -247,6 +251,10 @@ namespace SteamPluginManager.Views
                 {
                     LogConsole($"[DevConsole] Replaced Lua & Manifest files for AppID {dialog.TargetAppId} ({dialog.ReplacedFilesCount} files, {SupabaseStorageService.FormatSize(dialog.ReplacedTotalBytes)}).");
                     await LoadGamesAsync();
+
+                    DashboardView.InvalidateCache();
+                    HZManifestView.InvalidateCache();
+                    _ = DashboardView.RefreshNewestManifestsAsync();
                 }
             }
             catch (Exception ex)
@@ -1466,6 +1474,12 @@ namespace SteamPluginManager.Views
                 {
                     LogConsole($"[DevConsole] Archive uploaded: '{dialog.UploadedKey}' to {dialog.UploadedStorageType}. Reloading storage...");
                     await LoadStorageDataAsync();
+
+                    // Auto-refresh views and caches so newly uploaded bypass/onlinefix appears immediately with real name
+                    GameBypassView.InvalidateCache();
+                    OnlineFixView.InvalidateCache();
+                    DashboardView.InvalidateCache();
+                    _ = DashboardView.RefreshNewestManifestsAsync();
                 }
             }
             catch (Exception ex)
@@ -2345,9 +2359,8 @@ namespace SteamPluginManager.Views
         };
     }
 
-    public class DevStorageFileItem : INotifyPropertyChanged
+    public class DevStorageFileItem
     {
-        public event PropertyChangedEventHandler? PropertyChanged;
 
         public string Key { get; set; } = string.Empty;
         public string FileName { get; set; } = string.Empty;

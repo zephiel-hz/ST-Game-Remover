@@ -19,12 +19,19 @@ namespace SteamPluginManager
             }
         }
 
+        public static void NavigateToOnlineFixWithSort(string sortOrder)
+        {
+            if (_mainShellInstance != null)
+            {
+                _mainShellInstance.NavigateToOnlineFixWithSort(sortOrder);
+            }
+        }
+
         public static void RefreshOnlineFixView()
         {
             _mainShellInstance?.RefreshOnlineFixView();
         }
         private static MainWindow? _mainWindowInstance;
-        private static Dashboard? _dashboardInstance;
         private static MainShell? _mainShellInstance;
 
         // New single-window navigation methods
@@ -119,7 +126,7 @@ namespace SteamPluginManager
 
         public static void NavigateToHZManifest()
         {
-            NavigateToHZManifest(forceRefresh: true);
+            NavigateToHZManifest(forceRefresh: false);
         }
 
         public static void NavigateToHZManifest(bool forceRefresh)
@@ -198,6 +205,14 @@ namespace SteamPluginManager
             }
         }
 
+        public static void NavigateToGameBypassWithSort(string sortOrder)
+        {
+            if (_mainShellInstance != null)
+            {
+                _mainShellInstance.NavigateToGameBypassWithSort(sortOrder);
+            }
+        }
+
         public static void RestartSteam()
         {
             _mainShellInstance?.RestartSteam();
@@ -234,36 +249,15 @@ namespace SteamPluginManager
         }
 
         /// <summary>
-        /// Buka Dashboard dan tutup MainWindow jika ada (Legacy support)
+        /// Buka Dashboard via MainShell
         /// </summary>
         public static void OpenDashboard()
         {
-            if (_mainShellInstance != null)
-            {
-                NavigateToDashboard();
-                return;
-            }
-
-            if (_dashboardInstance == null || !_dashboardInstance.IsVisible)
-            {
-                _dashboardInstance = new Dashboard();
-                _dashboardInstance.Show();
-            }
-            else
-            {
-                _dashboardInstance.Activate();
-                _dashboardInstance.Focus();
-            }
-
-            // Tutup MainWindow jika ada
-            if (_mainWindowInstance != null && _mainWindowInstance.IsVisible)
-            {
-                _mainWindowInstance.Hide();
-            }
+            NavigateToDashboard();
         }
 
         /// <summary>
-        /// Buka MainWindow dan tutup Dashboard jika ada (Legacy support)
+        /// Buka MainWindow via MainShell atau fallback
         /// </summary>
         public static void OpenMainWindow()
         {
@@ -283,33 +277,6 @@ namespace SteamPluginManager
                 _mainWindowInstance.Activate();
                 _mainWindowInstance.Focus();
             }
-
-            // Tutup Dashboard jika ada
-            if (_dashboardInstance != null && _dashboardInstance.IsVisible)
-            {
-                _dashboardInstance.Hide();
-            }
-        }
-
-        /// <summary>
-        /// Toggle antara Dashboard dan MainWindow (Legacy support)
-        /// </summary>
-        public static void ToggleWindow()
-        {
-            if (_mainShellInstance != null)
-            {
-                // Will add toggle logic if needed
-                return;
-            }
-
-            if (_dashboardInstance != null && _dashboardInstance.IsVisible)
-            {
-                OpenMainWindow();
-            }
-            else
-            {
-                OpenDashboard();
-            }
         }
 
         public static void RegisterMainWindow(MainWindow window)
@@ -326,10 +293,8 @@ namespace SteamPluginManager
 
         public static void RefreshGameList()
         {
-            if (_mainWindowInstance != null)
-            {
-                _mainWindowInstance.RefreshGameList();
-            }
+            var mw = GetMainWindow();
+            mw?.RefreshGameList();
         }
 
         public static void RefreshGameLibraryView()
@@ -338,20 +303,6 @@ namespace SteamPluginManager
             {
                 _mainShellInstance.RefreshGameLibrary();
             }
-        }
-
-        public static void RegisterDashboard(Dashboard window)
-        {
-            _dashboardInstance = window;
-        }
-
-        public static Views.DashboardView GetDashboardView()
-        {
-            if (_dashboardInstance != null && _dashboardInstance.Content is Views.DashboardView dashboardView)
-            {
-                return dashboardView;
-            }
-            return null;
         }
     }
 }

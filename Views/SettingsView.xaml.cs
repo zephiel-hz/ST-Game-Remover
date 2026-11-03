@@ -20,7 +20,6 @@ namespace SteamPluginManager.Views
         private bool _isInitialized = false;
         private bool _isLoadingSettings = false;
         private bool _isSteamtoolsInstalled = false;
-        private string? _steamtoolsPath = null;
         private SteamtoolsOverlayWindow? _overlayWindow = null;
         private string? _steamtoolsLatestReleaseHtmlUrl = null;
         private string? _steamtoolsLatestVersion = null;
@@ -265,7 +264,6 @@ namespace SteamPluginManager.Views
                     Logger.Log($"[Steamtools] DLL check error: {ex.Message}");
                 }
 
-                _steamtoolsPath = null;
                 _isSteamtoolsInstalled = false;
                 Logger.Log("[Steamtools] Not installed");
                 return false;
@@ -273,7 +271,6 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"[Steamtools] Exception during detection: {ex.Message}");
-                _steamtoolsPath = null;
                 _isSteamtoolsInstalled = false;
                 return false;
             }

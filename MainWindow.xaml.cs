@@ -21,6 +21,7 @@ using System.IO.Compression;
 using System.Threading;
 using Microsoft.Win32;
 using System.Windows.Media.Effects;
+using SteamPluginManager.Services.Security;
 using SteamPluginManager.Services.Steam;
 
 namespace SteamPluginManager
@@ -29,18 +30,6 @@ namespace SteamPluginManager
     {
         private bool _isPendingRestoreDrag;
         private Point _mouseDownScreenPoint;
-        private const int SaltSize = 16;
-
-        private static string GetBackupPassword()
-        {
-            var password = Environment.GetEnvironmentVariable("SPM_BACKUP_PASSWORD");
-            if (string.IsNullOrWhiteSpace(password))
-            {
-                throw new InvalidOperationException("Environment variable 'SPM_BACKUP_PASSWORD' is not set.");
-            }
-
-            return password;
-        }
         
         // Fields to store original effects for performance optimization
         private Effect? _gameListBorderEffect;
@@ -93,35 +82,6 @@ namespace SteamPluginManager
                 }
             }
         }
-        private void EncryptStream(MemoryStream inStream, string outputFile)
-        {
-            byte[] salt = new byte[SaltSize];
-            using (var rng = RandomNumberGenerator.Create())
-            {
-                rng.GetBytes(salt);
-            }
-
-            using (var aes = Aes.Create())
-            {
-                aes.KeySize = 256;
-                aes.GenerateIV();
-                var key = new Rfc2898DeriveBytes(GetBackupPassword(), salt, 10000, HashAlgorithmName.SHA256).GetBytes(aes.KeySize / 8);
-                aes.Key = key;
-
-                using (var outStream = new FileStream(outputFile, FileMode.Create))
-                {
-                    outStream.Write(salt, 0, salt.Length);
-                    outStream.Write(aes.IV, 0, aes.IV.Length);
-                    using (var cryptoStream = new CryptoStream(outStream, aes.CreateEncryptor(), CryptoStreamMode.Write))
-                    {
-                        inStream.Position = 0;
-                        inStream.CopyTo(cryptoStream);
-                    }
-                }
-            }
-        }
-
-
         private static bool IsClickOnCheckbox(DependencyObject source)
         {
             DependencyObject? current = source;
@@ -239,7 +199,6 @@ namespace SteamPluginManager
             }
         }
 
-        private bool _isSidebarExpanded = true;
         private string _currentView = "Library";
         private string _currentPageTitle = "Game Library";
 
@@ -297,7 +256,7 @@ namespace SteamPluginManager
                 // Get language preference (saved or detected from Windows)
                 _currentLanguage = GetLanguagePreference();
 
-                steamPath = DetectSteamPath();
+                steamPath = SteamHelper.GetSteamPath() ?? @"C:\Program Files (x86)\Steam";
             Log($"Steam path: {steamPath}");
 
             // Subscribe to SearchBox events safely
@@ -989,38 +948,6 @@ namespace SteamPluginManager
             this.Title = newTitle;
         }
 
-        // ================= Steam Path =================
-        private string DetectSteamPath()
-        {
-            try
-            {
-                using var key = Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam");
-                if (key != null)
-                {
-                    var path = key.GetValue("SteamPath") as string;
-                    if (!string.IsNullOrEmpty(path)) return path.Replace('/', '\\');
-                }
-            }
-            catch { }
-            return @"C:\Program Files (x86)\Steam";
-        }
-
-        // Public static method to get Steam path (accessible from other classes)
-        public static string GetSteamPath()
-        {
-            try
-            {
-                using var key = Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam");
-                if (key != null)
-                {
-                    var path = key.GetValue("SteamPath") as string;
-                    if (!string.IsNullOrEmpty(path)) return path.Replace('/', '\\');
-                }
-            }
-            catch { }
-            return @"C:\Program Files (x86)\Steam";
-        }
-
         // ================= Manifest Processing =================
         private int ProcessManifestFile(string luaFilePath)
         {
@@ -1077,6 +1004,10 @@ namespace SteamPluginManager
             return 0;
         }
 
+        private readonly object _refreshLock = new();
+        private Task? _activeRefreshTask;
+        private bool _needsFollowUpRefresh;
+
         // ================= Game Loading =================
         // ================= Game Loading =================
         public void RefreshGameList()
@@ -1084,105 +1015,58 @@ namespace SteamPluginManager
             _ = RefreshGameListAsync();
         }
 
-        public async Task RefreshGameListAsync()
+        public Task RefreshGameListAsync()
+        {
+            lock (_refreshLock)
+            {
+                if (_activeRefreshTask != null && !_activeRefreshTask.IsCompleted)
+                {
+                    _needsFollowUpRefresh = true;
+                    Log("[RefreshGameList] Refresh already in progress; coalesced follow-up scheduled.");
+                    return _activeRefreshTask;
+                }
+
+                _activeRefreshTask = ExecuteRefreshLoopAsync();
+                return _activeRefreshTask;
+            }
+        }
+
+        private async Task ExecuteRefreshLoopAsync()
         {
             Log($"[RefreshGameList] START - Current Games collection: {Games?.Count ?? 0} items");
-            
+
             if (Games == null)
             {
                 Log("[RefreshGameList] ERROR: Games collection is null");
                 return;
             }
-            
+
             IsBusy = true;
 
             try
             {
-                string currentSteamPath = steamPath;
-                string currentLang = _currentLanguage;
-
-                // Offload all heavy directory scanning & batch manifest reading to background thread
-                var loadedEntries = await Task.Run(() =>
+                while (true)
                 {
-                    var entries = new List<GameEntry>();
-                    string pluginPath = System.IO.Path.Combine(currentSteamPath, "config", "stplug-in");
-                    string luaPath = System.IO.Path.Combine(currentSteamPath, "config", "lua");
-
-                    if (!Directory.Exists(pluginPath) && !Directory.Exists(luaPath))
+                    lock (_refreshLock)
                     {
-                        return entries;
+                        _needsFollowUpRefresh = false;
                     }
 
-                    var luaFilesDictionary = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    if (Directory.Exists(pluginPath))
+                    await ExecuteSingleRefreshPassAsync();
+
+                    _ = UpdateGameNamesAsync();
+                    UpdateStatus();
+
+                    lock (_refreshLock)
                     {
-                        foreach (var file in Directory.GetFiles(pluginPath, "*.lua"))
+                        if (!_needsFollowUpRefresh)
                         {
-                            string fileName = Path.GetFileName(file);
-                            luaFilesDictionary[fileName] = file;
+                            _activeRefreshTask = null;
+                            break;
                         }
+                        Log("[RefreshGameList] Executing coalesced follow-up refresh pass...");
                     }
-                    if (Directory.Exists(luaPath))
-                    {
-                        foreach (var file in Directory.GetFiles(luaPath, "*.lua"))
-                        {
-                            string fileName = Path.GetFileName(file);
-                            if (!luaFilesDictionary.ContainsKey(fileName))
-                                luaFilesDictionary[fileName] = file;
-                        }
-                    }
-
-                    // Fast batch scan of installed Steam games across all libraries in one pass
-                    var installedMap = SteamHelper.GetInstalledGamesMap();
-
-                    foreach (var kvp in luaFilesDictionary)
-                    {
-                        string file = kvp.Value;
-                        if (!File.Exists(file)) continue;
-
-                        string fileName = System.IO.Path.GetFileNameWithoutExtension(file);
-                        if (int.TryParse(fileName, out int appId))
-                        {
-                            string? cachedName = CacheManager.GetGameName(appId, currentLang);
-                            string initialName = cachedName ?? $"Game {appId}";
-                            string? installPath = installedMap.TryGetValue(appId, out var path) ? path : null;
-                            int? parentAppId = SteamHelper.GetParentAppIdFromLuaFile(file);
-
-                            // Fallback: if not mapped directly, check if the parent application is installed
-                            if (installPath == null && parentAppId.HasValue && installedMap.TryGetValue(parentAppId.Value, out var parentPath))
-                            {
-                                installPath = parentPath;
-                                installedMap[appId] = parentPath;
-                            }
-
-                            var gameEntry = new GameEntry
-                            {
-                                AppId = appId,
-                                ParentAppId = parentAppId,
-                                Name = initialName,
-                                FilePath = file,
-                                Genre = CacheManager.GetGameGenre(appId, currentLang) ?? "Loading...",
-                                IsSelected = false,
-                                IsInstalled = installPath != null,
-                                InstallationPath = installPath,
-                                ScreenshotUrl = CacheManager.GetGameScreenshotUrl(appId)
-                            };
-
-                            entries.Add(gameEntry);
-                        }
-                    }
-
-                    return entries;
-                });
-
-                // Synchronize collection with zero UI flicker and no redundant item recreation
-                SyncGamesCollection(loadedEntries);
-
-                ApplyFilterAndSort();
-                Log($"[RefreshGameList] COMPLETE - Synced Total: {Games.Count} game(s). Cache: {CacheManager.GetCacheSize()} items");
-
-                _ = UpdateGameNamesAsync();
-                UpdateStatus();
+                }
             }
             catch (Exception ex)
             {
@@ -1190,8 +1074,109 @@ namespace SteamPluginManager
             }
             finally
             {
+                lock (_refreshLock)
+                {
+                    _activeRefreshTask = null;
+                    _needsFollowUpRefresh = false;
+                }
                 IsBusy = false;
             }
+        }
+
+        private async Task ExecuteSingleRefreshPassAsync()
+        {
+            string currentSteamPath = steamPath;
+            string currentLang = _currentLanguage;
+
+            // Offload all heavy directory scanning & batch manifest reading to background thread
+            var loadedEntries = await Task.Run(() =>
+            {
+                var entries = new List<GameEntry>();
+                string pluginPath = System.IO.Path.Combine(currentSteamPath, "config", "stplug-in");
+                string luaPath = System.IO.Path.Combine(currentSteamPath, "config", "lua");
+
+                if (!Directory.Exists(pluginPath) && !Directory.Exists(luaPath))
+                {
+                    return entries;
+                }
+
+                var luaFilesDictionary = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                if (Directory.Exists(pluginPath))
+                {
+                    foreach (var file in Directory.GetFiles(pluginPath, "*.lua"))
+                    {
+                        string fileName = Path.GetFileName(file);
+                        luaFilesDictionary[fileName] = file;
+                    }
+                }
+                if (Directory.Exists(luaPath))
+                {
+                    foreach (var file in Directory.GetFiles(luaPath, "*.lua"))
+                    {
+                        string fileName = Path.GetFileName(file);
+                        if (!luaFilesDictionary.ContainsKey(fileName))
+                            luaFilesDictionary[fileName] = file;
+                    }
+                }
+
+                // Fast batch scan of installed Steam games across all libraries in one pass
+                var installedMap = SteamHelper.GetInstalledGamesMap();
+
+                foreach (var kvp in luaFilesDictionary)
+                {
+                    string file = kvp.Value;
+                    if (!File.Exists(file)) continue;
+
+                    string fileName = System.IO.Path.GetFileNameWithoutExtension(file);
+                    if (int.TryParse(fileName, out int appId))
+                    {
+                        string? cachedName = CacheManager.GetGameName(appId, currentLang);
+                        string initialName = cachedName ?? $"Game {appId}";
+                        string? installPath = installedMap.TryGetValue(appId, out var path) ? path : null;
+                        int? parentAppId = SteamHelper.GetParentAppIdFromLuaFile(file);
+
+                        // Fallback: if not mapped directly, check if the parent application is installed
+                        if (installPath == null && parentAppId.HasValue && installedMap.TryGetValue(parentAppId.Value, out var parentPath))
+                        {
+                            installPath = parentPath;
+                            installedMap[appId] = parentPath;
+                        }
+
+                        if (installPath == null)
+                        {
+                            string? directPath = SteamHelper.GetGameInstallationPath(appId, initialName);
+                            if (!string.IsNullOrWhiteSpace(directPath) && Directory.Exists(directPath))
+                            {
+                                installPath = directPath;
+                                installedMap[appId] = directPath;
+                            }
+                        }
+
+                        var gameEntry = new GameEntry
+                        {
+                            AppId = appId,
+                            ParentAppId = parentAppId,
+                            Name = initialName,
+                            FilePath = file,
+                            Genre = CacheManager.GetGameGenre(appId, currentLang) ?? "Loading...",
+                            IsSelected = false,
+                            IsInstalled = installPath != null,
+                            InstallationPath = installPath,
+                            ScreenshotUrl = CacheManager.GetGameScreenshotUrl(appId)
+                        };
+
+                        entries.Add(gameEntry);
+                    }
+                }
+
+                return entries;
+            });
+
+            // Synchronize collection with zero UI flicker and no redundant item recreation
+            SyncGamesCollection(loadedEntries);
+
+            ApplyFilterAndSort();
+            Log($"[RefreshGameList] COMPLETE - Synced Total: {Games.Count} game(s). Cache: {CacheManager.GetCacheSize()} items");
         }
 
         private void SyncGamesCollection(List<GameEntry> freshEntries)
@@ -1420,11 +1405,6 @@ namespace SteamPluginManager
             
             // Refresh ListView setelah semua nama diupdate
             ApplyFilterAndSort();
-            
-            // Force a final sort to ensure proper alphabetical ordering
-            Dispatcher.Invoke(() => {
-                ApplyFilterAndSort();
-            });
             
             Log($"Game names updated. Cache: {CacheManager.GetCacheSize()} items");
             IsBusy = false;
@@ -2133,6 +2113,9 @@ namespace SteamPluginManager
 
                 Log($"Total: Triggered uninstall for {totalUninstallTriggered} app(s), deleted {totalLuaDeleted} Lua file(s), {totalManifestsDeleted} manifest file(s), and {totalFoldersDeleted} installation folder(s)");
                 
+                // Invalidate installed games map cache so the following RefreshGameListAsync performs a fresh authoritative scan
+                SteamHelper.InvalidateInstalledGamesMapCache();
+
                 // Refresh game list after deletion asynchronously
                 await RefreshGameListAsync();
                 UpdateStatus();
@@ -2186,7 +2169,7 @@ namespace SteamPluginManager
                     }
 
                     // Encrypt the memory stream to the file
-                    EncryptStream(memoryStream, saveFileDialog.FileName);
+                    BackupCryptoService.EncryptStream(memoryStream, saveFileDialog.FileName);
                 }
 
                 Log(GetLocalizedString("Log.BackupSuccess", selected.Count, System.IO.Path.GetFileName(saveFileDialog.FileName)));
@@ -2211,7 +2194,7 @@ namespace SteamPluginManager
 
             try
             {
-                using (var memoryStream = DecryptStream(openFileDialog.FileName))
+                using (var memoryStream = BackupCryptoService.DecryptStream(openFileDialog.FileName))
                 {
                     string stplugInPath = System.IO.Path.Combine(steamPath, "config", "stplug-in");
                     string depotCachePath = System.IO.Path.Combine(steamPath, "depotcache");
@@ -2250,33 +2233,6 @@ namespace SteamPluginManager
             }
         }
 
-        private MemoryStream DecryptStream(string inputFile)
-        {
-            var memoryStream = new MemoryStream();
-            using (var inStream = new FileStream(inputFile, FileMode.Open))
-            {
-                byte[] salt = new byte[SaltSize];
-                inStream.Read(salt, 0, salt.Length);
-
-                using (var aes = Aes.Create())
-                {
-                    aes.KeySize = 256;
-                    byte[] iv = new byte[aes.IV.Length];
-                    inStream.Read(iv, 0, iv.Length);
-                    aes.IV = iv;
-
-                    var key = new Rfc2898DeriveBytes(GetBackupPassword(), salt, 10000, HashAlgorithmName.SHA256).GetBytes(aes.KeySize / 8);
-                    aes.Key = key;
-
-                    using (var cryptoStream = new CryptoStream(inStream, aes.CreateDecryptor(), CryptoStreamMode.Read))
-                    {
-                        cryptoStream.CopyTo(memoryStream);
-                    }
-                }
-            }
-            memoryStream.Position = 0;
-            return memoryStream;
-        }
         private IEnumerable<string> GetManifestsForLuaFile(string luaFilePath)
         {
             var manifests = new List<string>();
@@ -2350,9 +2306,7 @@ namespace SteamPluginManager
         {
             try
             {
-                var settingsWindow = new SettingsWindow();
-                settingsWindow.Owner = this;
-                settingsWindow.ShowDialog();
+                WindowNavigator.NavigateToSettings();
             }
             catch (Exception ex)
             {

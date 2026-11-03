@@ -182,8 +182,9 @@ namespace SteamPluginManager
             try
             {
                 var client = SharedHttpClient.Instance;
-                string url = $"{SupabaseUrl}/rest/v1/hzmanifest_files?select=*&order=created_at.desc&limit={count}";
+                string url = $"{SupabaseUrl}/rest/v1/hzmanifest_files?select=*&order=created_at.desc.nullslast,id.desc&limit={count}";
                 using var request = CreateAuthenticatedRequest(HttpMethod.Get, url);
+                request.Headers.CacheControl = new System.Net.Http.Headers.CacheControlHeaderValue { NoCache = true };
                 request.Headers.Add("Prefer", "count=exact");
 
                 var response = await client.SendAsync(request);

@@ -9,7 +9,7 @@ namespace SteamPluginManager.Views
 {
     public partial class Sidebar : UserControl
     {
-        private FileSystemWatcher? _unlockerFileWatcher;
+        private bool _isSyncingUnlockerToggle;
 
         public Sidebar()
         {
@@ -20,7 +20,6 @@ namespace SteamPluginManager.Views
         private void Sidebar_Loaded(object sender, RoutedEventArgs e)
         {
             Loaded -= Sidebar_Loaded;
-            StartUnlockerFileWatcher();
             LoadUnlockerToggleState();
         }
 
@@ -91,6 +90,8 @@ namespace SteamPluginManager.Views
 
         private void UnlockerToggle_Checked(object sender, RoutedEventArgs e)
         {
+            if (_isSyncingUnlockerToggle) return;
+
             try
             {
                 bool isEnabled = UnlockerToggle?.IsChecked ?? false;
@@ -104,50 +105,36 @@ namespace SteamPluginManager.Views
 
         private void LoadUnlockerToggleState()
         {
+            SetUnlockerToggleState(UnlockerRegistryHelper.IsUnlockerEnabled());
+        }
+
+        public void SetUnlockerToggleState(bool isEnabled)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(() => SetUnlockerToggleState(isEnabled)));
+                return;
+            }
+
             try
             {
-                if (UnlockerToggle != null)
+                if (UnlockerToggle != null && UnlockerToggle.IsChecked != isEnabled)
                 {
-                    UnlockerToggle.IsChecked = UnlockerRegistryHelper.IsUnlockerEnabled();
+                    _isSyncingUnlockerToggle = true;
+                    try
+                    {
+                        UnlockerToggle.IsChecked = isEnabled;
+                    }
+                    finally
+                    {
+                        _isSyncingUnlockerToggle = false;
+                    }
                 }
             }
             catch (Exception ex)
             {
-                Logger.Log($"[Sidebar] Failed to load unlocker toggle state: {ex.Message}");
+                Logger.Log($"[Sidebar] Failed to set unlocker toggle state: {ex.Message}");
             }
-        }
-
-        private void StartUnlockerFileWatcher()
-        {
-            try
-            {
-                string? steamPath = SteamHelper.GetSteamPath();
-                if (string.IsNullOrWhiteSpace(steamPath) || !Directory.Exists(steamPath))
-                    return;
-
-                _unlockerFileWatcher?.Dispose();
-                _unlockerFileWatcher = new FileSystemWatcher(steamPath)
-                {
-                    Filter = "OpenSteamTool.dll*",
-                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime | NotifyFilters.LastWrite,
-                    IncludeSubdirectories = false
-                };
-
-                _unlockerFileWatcher.Created += (_, _) => RefreshUnlockerToggleState();
-                _unlockerFileWatcher.Deleted += (_, _) => RefreshUnlockerToggleState();
-                _unlockerFileWatcher.Changed += (_, _) => RefreshUnlockerToggleState();
-                _unlockerFileWatcher.Renamed += (_, _) => RefreshUnlockerToggleState();
-                _unlockerFileWatcher.EnableRaisingEvents = true;
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"[Sidebar] Failed to start unlocker file watcher: {ex.Message}");
-            }
-        }
-
-        private void RefreshUnlockerToggleState()
-        {
-            Dispatcher.BeginInvoke(new Action(LoadUnlockerToggleState));
         }
 
         private void CheckUpdates_Click(object sender, RoutedEventArgs e)

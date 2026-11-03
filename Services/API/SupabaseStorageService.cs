@@ -173,7 +173,8 @@ namespace SteamPluginManager.Services.API
                     ["storage_type"] = "folder",
                     ["folder_path"] = $"{appId}/",
                     ["file_name"] = $"{appId}.lua",
-                    ["url"] = $"{supabaseUrl}/storage/v1/object/public/{bucketName}/{appId}/{appId}.lua"
+                    ["url"] = $"{supabaseUrl}/storage/v1/object/public/{bucketName}/{appId}/{appId}.lua",
+                    ["created_at"] = DateTime.UtcNow.ToString("o")
                 };
 
                 string updateUrl = $"{supabaseUrl}/rest/v1/hzmanifest_files?app_id=eq.{appId}";

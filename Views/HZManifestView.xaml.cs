@@ -127,11 +127,11 @@ namespace SteamPluginManager.Views
 
         [JsonPropertyName("created_at")]
         public DateTime? CreatedAt { get; set; }
-        
+
         private string? _thumbnailPath = null;
         [JsonPropertyName("thumbnail_path")]
-        public string? ThumbnailPath 
-        { 
+        public string? ThumbnailPath
+        {
             get => string.IsNullOrWhiteSpace(_thumbnailPath) ? null : _thumbnailPath;
             set
             {
@@ -143,7 +143,7 @@ namespace SteamPluginManager.Views
                 }
             }
         }
-        
+
         private bool _isSelected = false;
         public bool IsSelected
         {
@@ -157,8 +157,8 @@ namespace SteamPluginManager.Views
                 }
             }
         }
-        
-        public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
+
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
     }
 
     public class CategoryFilterItem
@@ -180,22 +180,21 @@ namespace SteamPluginManager.Views
         // Property yang di-expose untuk binding - ini yang ItemsControl bind ke
         public ObservableCollection<ManifestFile> Files { get; set; }
         public ObservableCollection<ManifestFile> NewManifestFiles { get; } = new();
-        
+
         // CollectionViewSource untuk search filtering
         private System.ComponentModel.ICollectionView _filesView;
-        
+
         private readonly HttpClient _httpClient = new();
         private readonly HashSet<string> _thumbnailLoadRequestedKeys = new(StringComparer.OrdinalIgnoreCase);
-        private readonly HashSet<string> _thumbnailLoadCompletedKeys = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _thumbnailLoadFailedKeys = new(StringComparer.OrdinalIgnoreCase);
         private System.Windows.Threading.DispatcherTimer? _thumbnailLoadDebounceTimer;
         private const int MIN_VISIBLE_THUMBNAILS_PER_PASS = 24;
-        
+
         // Cache folder untuk Steam thumbnails
         private readonly string _thumbnailCacheFolder = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "SteamPluginManager", "ThumbnailCache");
-        
+
         // Pagination fields
         private int _currentPage = 0;
         private int _pageSize = 50;
@@ -219,17 +218,23 @@ namespace SteamPluginManager.Views
         private bool _forceRefreshOnLoad = true; // Default to true for backward compatibility
         private bool _requiresDeviceVerificationOnLoad = false;
         private bool _hasRestoredScrollPosition = false;
-        
+
+        // Concurrency & single-flight refresh guards
+        private readonly object _refreshLock = new();
+        private Task<bool>? _inFlightLoadTask;
+        private bool _inFlightIsForceRefresh;
+        private long _inFlightGeneration = 0;
+        private long _refreshGeneration = 0;
+
         // Debounce timer for SizeChanged to prevent multiple rapid refreshes during window state transitions
         private System.Windows.Threading.DispatcherTimer? _sizeChangeDebounceTimer;
         // Debounce timer for search text box to eliminate UI stutter while typing
         private System.Windows.Threading.DispatcherTimer? _searchDebounceTimer;
-        private const double MIN_CARD_WIDTH = 220;
+        private const double MIN_CARD_WIDTH = 230;
         private const int ROWS_PER_PAGE = 10;
         // Runtime reference to the generated WrapPanel from the ItemsControl template
         private WrapPanel? CardPanel;
         // Auto-paging state
-        private bool _isLoadingPage = false;
         private const double AUTO_PAGING_THRESHOLD = 200; // px from bottom to trigger load
 
         private static HZManifestView? _activeManifestView;
@@ -246,33 +251,33 @@ namespace SteamPluginManager.Views
                 LogDebug($"InitializeComponent error: {ex.GetType().Name} - {ex.Message}");
                 // Continue anyway - UI might be partially loaded
             }
-            
+
             // Initialize the collection FIRST
             Files = new ObservableCollection<ManifestFile>();
             LogDebug("Files collection initialized");
-            
+
             // Set DataContext FIRST before anything else so bindings establish
             DataContext = this;
             LogDebug("DataContext set");
 
             // Restore the last known page when returning from detail
             _currentPage = Math.Max(0, _cachedPage);
-            
+
             // Setup ICollectionView untuk search filtering
             _filesView = CollectionViewSource.GetDefaultView(Files);
             _filesView.Filter = FileFilterPredicate;
             LogDebug("ICollectionView setup completed for search filtering");
-            
+
             // Initialize thumbnail cache folder
             Directory.CreateDirectory(_thumbnailCacheFolder);
             LogDebug($"Thumbnail cache folder initialized: {_thumbnailCacheFolder}");
-            
+
             // Note: Auto-refresh timer disabled - refresh happens when view is loaded instead
             // SetupAutoRefreshTimer();
-            
+
             // Check requests timer disabled - webhook cleanup is handled by Discord bot now
             LogDebug("HZManifestView constructor completed");
-            
+
             _activeManifestView = this;
 
             Loaded += HZManifestView_Loaded;
@@ -294,10 +299,9 @@ namespace SteamPluginManager.Views
                 }
                 catch { }
             };
-            
-            // Subscribe to 18+ content setting changes to refresh display
-            Allow18PlusContentPreferences.Allow18PlusContentChanged += Allow18PlusContentPreferences_Changed;
-            
+
+            // 18+ content setting change subscription is managed in Loaded and Unloaded
+
             LogDebug("HZManifestView constructor completed");
         }
 
@@ -324,11 +328,22 @@ namespace SteamPluginManager.Views
             return null;
         }
 
+        public static void InvalidateCache()
+        {
+            _cachedFiles = null;
+            _lastFetchTime = DateTime.MinValue;
+        }
+
         public static async Task RefreshActiveManifestViewAsync(bool forceRefresh = true)
         {
             if (_activeManifestView != null)
             {
                 await _activeManifestView.RefreshManifestDataAsync(forceRefresh);
+            }
+            else
+            {
+                _cachedFiles = null;
+                _lastFetchTime = DateTime.MinValue;
             }
         }
 
@@ -336,9 +351,13 @@ namespace SteamPluginManager.Views
         {
             try
             {
-                CacheManager.ClearHzmCache();
-                LogDebug("HZM cache cleared for hot reload.");
-                await LoadFilesFromSupabase(forceRefresh: true);
+                _forceRefreshOnLoad = false;
+                if (forceRefresh)
+                {
+                    _thumbnailLoadFailedKeys.Clear();
+                    _thumbnailLoadRequestedKeys.Clear();
+                }
+                await LoadFilesFromSupabase(forceRefresh: forceRefresh);
             }
             catch (Exception ex)
             {
@@ -386,21 +405,28 @@ namespace SteamPluginManager.Views
 
         private async void HZManifestView_Loaded(object sender, RoutedEventArgs e)
         {
+            _activeManifestView = this;
             try
             {
-                // Wait for any view transition animation to complete (fade animation duration)
-                // This prevents layout changes during the transition, which causes glitches
-                await Task.Delay(200);
-                
-                // Show loading overlay
+                // Subscribe idempotently to 18+ content setting changes
+                Allow18PlusContentPreferences.Allow18PlusContentChanged -= Allow18PlusContentPreferences_Changed;
+                Allow18PlusContentPreferences.Allow18PlusContentChanged += Allow18PlusContentPreferences_Changed;
+
+                // Load files from Supabase - capture and consume force refresh exactly once
+                bool shouldForceRefresh = _forceRefreshOnLoad;
+                bool hasCachedData = (_cachedFiles != null && (DateTime.Now - _lastFetchTime) < _cacheDuration) ||
+                                     CacheManager.GetHzmCache("hzm_manifest_data") != null;
+                _forceRefreshOnLoad = false;
+
+                // Show loading overlay only if fetching fresh data or displaying empty collection
                 var loadingOverlay = FindName("LoadingOverlay") as Grid;
-                if (loadingOverlay != null)
-                {
-                    loadingOverlay.Visibility = Visibility.Visible;
-                    StartContinuousLoadingAnimation();
-                    UpdateLoadingStatus("Loading...");
-                }
-                
+                    if (loadingOverlay != null && (shouldForceRefresh || !hasCachedData))
+                    {
+                        loadingOverlay.Visibility = Visibility.Visible;
+                        StartContinuousLoadingAnimation();
+                        UpdateLoadingStatus("Loading...");
+                    }
+
                 if (_requiresDeviceVerificationOnLoad)
                 {
                     LogDebug("[HZManifestView_Loaded] Checking device token verification...");
@@ -417,16 +443,17 @@ namespace SteamPluginManager.Views
                     }
 
                     LogDebug("[HZManifestView_Loaded] Device token verified, proceeding with manifest load");
+                    _requiresDeviceVerificationOnLoad = false;
                 }
                 else
                 {
                     LogDebug("[HZManifestView_Loaded] Skipping device token verification because HZManifest was not explicitly requested for gated access.");
                 }
-                
+
                 var debugInfo = FindName("DebugInfo") as TextBlock;
                 if (debugInfo != null)
                     debugInfo.Text = $"DEBUG: Files count before load = {Files.Count}";
-                
+
                 // Register text elements for localization
                 RegisterTextElements();
                 HideManifestNotificationBanner();
@@ -445,23 +472,27 @@ namespace SteamPluginManager.Views
                     }
                 }
 
-                // Load files from Supabase - force refresh based on navigation source
-                bool shouldForceRefresh = _forceRefreshOnLoad || _cachedFiles == null || (DateTime.Now - _lastFetchTime) >= _cacheDuration;
-                LogDebug($"[HZManifestView_Loaded] Force refresh from navigation: {_forceRefreshOnLoad}, Cache status: {_cachedFiles?.Count ?? 0} items, age: {(DateTime.Now - _lastFetchTime).TotalMinutes:F1} min, final force refresh: {shouldForceRefresh}");
+                LogDebug($"[HZManifestView_Loaded] Force refresh: {shouldForceRefresh}, Cache status: {_cachedFiles?.Count ?? 0} items, age: {(DateTime.Now - _lastFetchTime).TotalMinutes:F1} min");
                 await LoadFilesFromSupabase(forceRefresh: shouldForceRefresh);
-                
+
+                if (!IsLoaded)
+                {
+                    LogDebug("[HZManifestView_Loaded] View unloaded during load, aborting post-load UI setup");
+                    return;
+                }
+
                 if (debugInfo != null)
                     debugInfo.Text = $"DEBUG: Files count after load = {Files.Count}";
-                
+
                 // Setup lazy loading untuk thumbnails (tidak load semuanya)
                 // Ini akan load thumbnail hanya saat user scroll/view
                 SetupLazyThumbnailLoading();
 
                 // Setup category tabs after data is loaded
                 SetupCategoryTabs();
-                
+
                 LogDebug($"HZManifestView_Loaded completed. Files in collection: {Files.Count}");
-                
+
                 // Hide loading overlay
                 if (loadingOverlay != null)
                 {
@@ -476,11 +507,11 @@ namespace SteamPluginManager.Views
             {
                 ShowError($"Error loading manifest view: {ex.Message}");
                 Logger.Log($"[HZManifestView] Error: {ex.Message}");
-                
+
                 var debugInfo = FindName("DebugInfo") as TextBlock;
                 if (debugInfo != null)
                     debugInfo.Text = $"ERROR: {ex.Message}";
-                
+
                 // Hide loading overlay on error
                 var loadingOverlay = FindName("LoadingOverlay") as Grid;
                 if (loadingOverlay != null)
@@ -532,8 +563,11 @@ namespace SteamPluginManager.Views
 
         private async void AutoRefreshTimer_Tick(object? sender, EventArgs e)
         {
-            if (_isCheckingForNewManifests)
-                return;
+            lock (_refreshLock)
+            {
+                if (_isCheckingForNewManifests || (_inFlightLoadTask != null && !_inFlightLoadTask.IsCompleted && _inFlightGeneration == _refreshGeneration))
+                    return;
+            }
 
             _isCheckingForNewManifests = true;
             try
@@ -554,6 +588,11 @@ namespace SteamPluginManager.Views
         {
             try
             {
+                lock (_refreshLock)
+                {
+                    if (!IsLoaded || (_inFlightLoadTask != null && !_inFlightLoadTask.IsCompleted && _inFlightGeneration == _refreshGeneration))
+                        return;
+                }
                 // Lightweight query: check the top 10 newest manifests and total count
                 string url = $"{SupabaseConfig.SupabaseUrl}/rest/v1/hzmanifest_files?select=id,name,app_id,file_name,created_at&order=id.desc&limit=10";
                 using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -615,8 +654,9 @@ namespace SteamPluginManager.Views
                 {
                     LogDebug($"[AUTO-DETECTION] New manifest(s) detected! New items count: {newDetectedItems.Count}, Remote total: {remoteCount}, Local total: {_allFiles.Count}");
 
-                    // Clear cache and silently reload from Supabase
-                    CacheManager.ClearHzmCache();
+                    InvalidateCache();
+                    DashboardView.InvalidateCache();
+                    _ = DashboardView.RefreshNewestManifestsAsync();
                     await LoadFilesFromSupabase(forceRefresh: true);
 
                     // Show notification banner for newly detected items
@@ -634,12 +674,18 @@ namespace SteamPluginManager.Views
 
         private void HZManifestView_Unloaded(object sender, RoutedEventArgs e)
         {
-            if (_activeManifestView == this)
+            if (ReferenceEquals(_activeManifestView, this))
                 _activeManifestView = null;
             try
             {
                 LogDebug("[HZManifestView_Unloaded] View unloaded");
-                
+
+                // Invalidate any in-flight loads so they do not touch UI
+                lock (_refreshLock)
+                {
+                    Interlocked.Increment(ref _refreshGeneration);
+                }
+
                 // Clean up auto-detection timer
                 StopAutoRefreshTimer();
 
@@ -652,7 +698,7 @@ namespace SteamPluginManager.Views
 
                 _manifestNotificationTimer?.Stop();
                 _manifestNotificationTimer = null;
-                
+
                 // Unsubscribe from 18+ content setting changes to prevent memory leak
                 Allow18PlusContentPreferences.Allow18PlusContentChanged -= Allow18PlusContentPreferences_Changed;
             }
@@ -739,7 +785,7 @@ namespace SteamPluginManager.Views
                 {
                     // Genre Utama (Top-Level Genres)
                     "Action",
-                    "Indie", 
+                    "Indie",
                     "Adventure",
                     "RPG",
                     "Simulation",
@@ -780,7 +826,7 @@ namespace SteamPluginManager.Views
                 foreach (var category in sortedCategories)
                 {
                     var count = _allFiles.Count(f => GenreMatchesCategory(f.Genre, category));
-                    
+
                     if (count > 0) // Only add categories that have files
                     {
                         _categoryFilterItems.Add(new CategoryFilterItem
@@ -844,7 +890,7 @@ namespace SteamPluginManager.Views
                 foreach (var category in sortedCategories)
                 {
                     var count = _allFiles.Count(f => GenreMatchesCategory(f.Genre, category));
-                    
+
                     if (count > 0) // Only create buttons for categories that have files
                     {
                         var displayText = category.Length > 16 ? category.Substring(0, 14) + "..." : category;
@@ -1045,7 +1091,7 @@ namespace SteamPluginManager.Views
                 // Handle truncated category names
                 if (category.EndsWith("..."))
                 {
-                    var fullCategory = _categoryButtons.FirstOrDefault(kvp => 
+                    var fullCategory = _categoryButtons.FirstOrDefault(kvp =>
                         kvp.Value == button && kvp.Key.Length > 12 && kvp.Key.StartsWith(category.Substring(0, category.Length - 3))).Key;
                     if (!string.IsNullOrEmpty(fullCategory))
                         category = fullCategory;
@@ -1108,99 +1154,157 @@ namespace SteamPluginManager.Views
 
         private async Task LoadFilesFromSupabase(bool forceRefresh = false)
         {
+            Task<bool> taskToAwait;
+            lock (_refreshLock)
+            {
+                if (_inFlightLoadTask != null && !_inFlightLoadTask.IsCompleted && _inFlightGeneration == _refreshGeneration)
+                {
+                    if (!forceRefresh || _inFlightIsForceRefresh)
+                    {
+                        LogDebug($"[CONCURRENCY] Joining existing in-flight fetch (gen={_inFlightGeneration}, forceRefresh={_inFlightIsForceRefresh})");
+                        taskToAwait = _inFlightLoadTask;
+                        goto AwaitSection;
+                    }
+                }
+
+                long gen = unchecked(++_refreshGeneration);
+                _inFlightGeneration = gen;
+                _inFlightIsForceRefresh = forceRefresh;
+                taskToAwait = StartLoadTask(forceRefresh, gen);
+                _inFlightLoadTask = taskToAwait;
+            }
+
+        AwaitSection:
             try
             {
-                LogDebug("=== HZManifestView.LoadFilesFromSupabase STARTED ===");
+                await taskToAwait;
+            }
+            catch (Exception ex)
+            {
+                LogDebug($"[CONCURRENCY] LoadFilesFromSupabase error: {ex.Message}");
+            }
+        }
+
+        private Task<bool> StartLoadTask(bool forceRefresh, long generation)
+        {
+            var task = ExecuteLoadFilesFromSupabaseAsync(forceRefresh, generation);
+            _ = task.ContinueWith(t =>
+            {
+                lock (_refreshLock)
+                {
+                    if (ReferenceEquals(_inFlightLoadTask, task))
+                    {
+                        _inFlightLoadTask = null;
+                        _inFlightIsForceRefresh = false;
+                        _inFlightGeneration = 0;
+                    }
+                }
+            }, TaskScheduler.Default);
+            return task;
+        }
+
+        private async Task<bool> ExecuteLoadFilesFromSupabaseAsync(bool forceRefresh, long generation)
+        {
+            try
+            {
+                LogDebug($"=== HZManifestView.LoadFilesFromSupabase STARTED (gen {generation}, forceRefresh={forceRefresh}) ===");
                 if (forceRefresh)
                     LogDebug("**FORCE REFRESH MODE - Cache will be bypassed**");
                 LogDebug($"Files before load: {Files.Count} items");
-                
+
                 var debugInfo = FindName("DebugInfo") as TextBlock;
                 var loadingStatusText = FindName("LoadingStatusText") as TextBlock;
-                
-                if (loadingStatusText != null)
-                    loadingStatusText.Text = "Fetching data from database...";
-                if (debugInfo != null)
-                    debugInfo.Text = "DEBUG: Fetching from Supabase...";
+
+                // Lifecycle & generation guard
+                if (!IsLoaded || generation != Volatile.Read(ref _refreshGeneration))
+                {
+                    LogDebug($"[CONCURRENCY] Aborting load: view unloaded or superseded (gen {generation}, current {_refreshGeneration}, IsLoaded={IsLoaded})");
+                    return false;
+                }
 
                 // Check if we have valid cached data and not forcing refresh
-                bool hasValidCache = _cachedFiles != null && 
+                bool hasValidCache = _cachedFiles != null &&
                                    (DateTime.Now - _lastFetchTime) < _cacheDuration &&
                                    !forceRefresh;
 
                 if (hasValidCache)
                 {
                     LogDebug("✓ Using cached HZManifest data to avoid refetching");
+
+                    if (!IsLoaded || generation != Volatile.Read(ref _refreshGeneration))
+                        return false;
+
                     // Load from cache and reapply current sort/filter before display
                     _allFiles.Clear();
-                    _allFiles.AddRange(_cachedFiles);
-                    _currentPage = Math.Max(0, Math.Min(_cachedPage, (int)Math.Ceiling((double)_cachedFiles.Count / _pageSize) - 1));
+                    _allFiles.AddRange(_cachedFiles!);
+                    _currentPage = Math.Max(0, Math.Min(_cachedPage, (int)Math.Ceiling((double)_cachedFiles!.Count / _pageSize) - 1));
                     DisplayCurrentPage();
-                    
+
                     if (debugInfo != null)
                         debugInfo.Text = $"DEBUG: Loaded {Files.Count} files from cache ✓";
-                    
-                    // Update status
+
                     if (loadingStatusText != null)
                         loadingStatusText.Text = "Loading thumbnails...";
-                    
-                    // Setup thumbnail loading
-                    SetupLazyThumbnailLoading();
 
-                    // Ensure category chips are populated
+                    SetupLazyThumbnailLoading();
                     SetupCategoryTabs();
-                    
+
                     LogDebug($"Final result: {Files.Count} files loaded from cache");
-                    
                     LogDebug("=== HZManifestView.LoadFilesFromSupabase COMPLETED (FROM CACHE) ===");
-                    return;
+                    return true;
                 }
 
+                if (loadingStatusText != null)
+                    loadingStatusText.Text = "Fetching data from database...";
+                if (debugInfo != null)
+                    debugInfo.Text = "DEBUG: Fetching from Supabase...";
+
                 LogDebug("Attempting to fetch from Supabase...");
-                bool success = await FetchStorageFiles(forceRefresh);
-                
+                bool success = await FetchStorageFiles(forceRefresh, generation);
+
+                // Lifecycle & generation guard AFTER network fetch
+                if (!IsLoaded || generation != Volatile.Read(ref _refreshGeneration))
+                {
+                    LogDebug($"[CONCURRENCY] Discarding fetch result: view unloaded or superseded (gen {generation}, current {_refreshGeneration}, IsLoaded={IsLoaded})");
+                    return false;
+                }
+
                 if (success && Files.Count > 0)
                 {
                     LogDebug($"✓ Successfully fetched {Files.Count} files from Supabase!");
-                    
-                    // Check if there are new manifests since last seen count
+
                     await NotifyIfNewManifestDataAsync(Files.Count);
-                    
+
                     // Cache the fetched data
                     _cachedFiles = new List<ManifestFile>(_allFiles);
                     _cachedPage = _currentPage;
                     _lastFetchTime = DateTime.Now;
                     LogDebug("✓ Data cached for future use");
 
-                    // Setup category chips
                     SetupCategoryTabs();
-                    
+
                     if (debugInfo != null)
                         debugInfo.Text = $"DEBUG: Loaded {Files.Count} files from Supabase ✓";
-                    
-                    // Update status
+
                     if (loadingStatusText != null)
                         loadingStatusText.Text = "Loading thumbnails...";
-                    
-                    // Setup thumbnail loading untuk files that were just loaded
+
                     LogDebug("Setting up thumbnail loading for newly loaded files...");
                     SetupLazyThumbnailLoading();
+
+                    LogDebug($"Final result: {Files.Count} files ready to display");
+                    LogDebug("=== HZManifestView.LoadFilesFromSupabase COMPLETED ===");
+                    return true;
                 }
                 else
                 {
                     LogDebug("⚠️  Supabase fetch failed or returned 0 items");
                     LogDebug($"Files currently in collection: {Files.Count}");
-                    
+
                     if (debugInfo != null)
                         debugInfo.Text = $"DEBUG: No data loaded (waiting for Supabase)";
+                    return false;
                 }
-                
-                if (loadingStatusText != null)
-                    loadingStatusText.Text = "Preparing display...";
-                
-                LogDebug($"Final result: {Files.Count} files ready to display");
-                
-                LogDebug("=== HZManifestView.LoadFilesFromSupabase COMPLETED ===");
             }
             catch (Exception ex)
             {
@@ -1208,14 +1312,15 @@ namespace SteamPluginManager.Views
                 LogDebug($"Type: {ex.GetType().Name}");
                 LogDebug($"Message: {ex.Message}");
                 LogDebug($"Stack:\n{ex.StackTrace}");
-                
+
                 var loadingStatusText = FindName("LoadingStatusText") as TextBlock;
                 if (loadingStatusText != null)
                     loadingStatusText.Text = "Error loading data";
-                
+
                 var debugInfo = FindName("DebugInfo") as TextBlock;
                 if (debugInfo != null)
                     debugInfo.Text = $"DEBUG: ERROR - {ex.Message}";
+                return false;
             }
         }
 
@@ -1256,7 +1361,7 @@ namespace SteamPluginManager.Views
                 if (newFiles.Any())
                 {
                     LogDebug($"Detected {newFiles.Count} new manifest(s) since last visit");
-                    Dispatcher.Invoke(() => UpdateManifestNotificationBanner(newFiles)); 
+                    Dispatcher.Invoke(() => UpdateManifestNotificationBanner(newFiles));
                 }
                 else
                 {
@@ -1450,10 +1555,14 @@ namespace SteamPluginManager.Views
                         continue;
                     }
 
+                    if (!string.IsNullOrEmpty(file.ThumbnailPath))
+                    {
+                        continue;
+                    }
+
                     string thumbnailKey = GetThumbnailKey(file);
                     if (string.IsNullOrEmpty(thumbnailKey) ||
                         _thumbnailLoadRequestedKeys.Contains(thumbnailKey) ||
-                        _thumbnailLoadCompletedKeys.Contains(thumbnailKey) ||
                         _thumbnailLoadFailedKeys.Contains(thumbnailKey))
                     {
                         continue;
@@ -1484,7 +1593,7 @@ namespace SteamPluginManager.Views
 
             return $"name:{file.FileName}";
         }
-        
+
         private async Task<bool> FetchAndCacheSteamThumbnail(ManifestFile file, string? thumbnailKey = null)
         {
             bool success = false;
@@ -1495,10 +1604,6 @@ namespace SteamPluginManager.Views
 
                 if (!string.IsNullOrEmpty(file.ThumbnailPath))
                 {
-                    if (!string.IsNullOrEmpty(thumbnailKey))
-                    {
-                        _thumbnailLoadCompletedKeys.Add(thumbnailKey);
-                    }
                     return true;
                 }
 
@@ -1518,7 +1623,14 @@ namespace SteamPluginManager.Views
                 // Steam CDN URL - use smaller resolution (hemat 94% storage)
                 // Full header.jpg: ~500KB per image
                 // header_292x136.jpg: ~30KB per image (preferred)
-                string[] imageFormats = new[]
+                success = await SharedHttpClient.RunThrottledThumbnailFetchAsync(cacheFileName, async () =>
+                {
+                    if (File.Exists(cachedPath))
+                    {
+                        return true;
+                    }
+
+                    string[] imageFormats = new[]
                     {
                         $"https://cdn.cloudflare.steamstatic.com/steam/apps/{file.AppId}/header_292x136.jpg",  // Small header (preferred)
                         $"https://cdn.cloudflare.steamstatic.com/steam/apps/{file.AppId}/header_616x353.jpg",  // Medium header
@@ -1531,55 +1643,50 @@ namespace SteamPluginManager.Views
                         $"https://cdn.cloudflare.steamstatic.com/steam/apps/{file.AppId}/logo.png"              // Logo if nothing else
                     };
 
-                byte[]? downloadedData = null;
-                
-                // Try each format
-                foreach (var steamImageUrl in imageFormats)
-                {
-                    try
-                    {
-                        var request = new HttpRequestMessage(HttpMethod.Get, steamImageUrl);
-                        
-                        // Add timeout untuk thumbnail fetch (5 detik)
-                        using (var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5)))
-                        {
-                            var response = await _httpClient.SendAsync(request, cts.Token);
+                    byte[]? downloadedData = null;
 
-                            if (response.IsSuccessStatusCode)
+                    // Try each format
+                    foreach (var steamImageUrl in imageFormats)
+                    {
+                        try
+                        {
+                            using var request = new HttpRequestMessage(HttpMethod.Get, steamImageUrl);
+
+                            // Add timeout untuk thumbnail fetch (5 detik)
+                            using (var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5)))
+                            using (var response = await _httpClient.SendAsync(request, cts.Token))
                             {
-                                downloadedData = await response.Content.ReadAsByteArrayAsync();
-                                if (downloadedData != null && downloadedData.Length > 0)
+                                if (response.IsSuccessStatusCode)
                                 {
-                                    LogDebug($"Downloaded thumbnail for {file.Name} (AppID: {file.AppId}) from {steamImageUrl.Split('/').Last()}");
-                                    break; // Success, exit loop
+                                    downloadedData = await response.Content.ReadAsByteArrayAsync();
+                                    if (downloadedData != null && downloadedData.Length > 0)
+                                    {
+                                        LogDebug($"Downloaded thumbnail for {file.Name} (AppID: {file.AppId}) from {steamImageUrl.Split('/').Last()}");
+                                        break; // Success, exit loop
+                                    }
                                 }
                             }
                         }
+                        catch
+                        {
+                            // Try next format
+                            continue;
+                        }
                     }
-                    catch
-                    {
-                        // Try next format
-                        continue;
-                    }
-                }
 
-                // If we got image data, save and use it
-                if (downloadedData != null && downloadedData.Length > 0)
-                {
-                    await File.WriteAllBytesAsync(cachedPath, downloadedData);
-                    // Convert to file:// URI for Image binding
-                    file.ThumbnailPath = new Uri(cachedPath, UriKind.Absolute).ToString();
-                    success = true;
-                    return true;
-                }
-                else
-                {
+                    // If we got image data, save and return true
+                    if (downloadedData != null && downloadedData.Length > 0)
+                    {
+                        await File.WriteAllBytesAsync(cachedPath, downloadedData);
+                        return true;
+                    }
+
                     LogDebug($"Failed to download thumbnail for AppID {file.AppId}: All formats returned 404. Trying store page scrape...");
                     // Try to scrape the Steam store page for the asset URL (og:image)
                     try
                     {
                         string storeUrl = $"https://store.steampowered.com/app/{file.AppId}";
-                        var resp = await _httpClient.GetAsync(storeUrl);
+                        using var resp = await _httpClient.GetAsync(storeUrl);
                         if (resp.IsSuccessStatusCode)
                         {
                             var html = await resp.Content.ReadAsStringAsync();
@@ -1598,15 +1705,13 @@ namespace SteamPluginManager.Views
                                 try
                                 {
                                     using var cts2 = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(6));
-                                    var assetResp = await _httpClient.GetAsync(assetUrl, cts2.Token);
+                                    using var assetResp = await _httpClient.GetAsync(assetUrl, cts2.Token);
                                     if (assetResp.IsSuccessStatusCode)
                                     {
                                         var bytes = await assetResp.Content.ReadAsByteArrayAsync();
                                         if (bytes != null && bytes.Length > 0)
                                         {
                                             await File.WriteAllBytesAsync(cachedPath, bytes);
-                                            file.ThumbnailPath = new Uri(cachedPath, UriKind.Absolute).ToString();
-                                            success = true;
                                             LogDebug($"Downloaded thumbnail from store asset for {file.Name} (AppID: {file.AppId})");
                                             return true;
                                         }
@@ -1637,7 +1742,15 @@ namespace SteamPluginManager.Views
                     }
 
                     return false;
+                });
+
+                if (success && File.Exists(cachedPath))
+                {
+                    file.ThumbnailPath = new Uri(cachedPath, UriKind.Absolute).ToString();
+                    return true;
                 }
+
+                return false;
             }
             catch (Exception ex)
             {
@@ -1649,11 +1762,7 @@ namespace SteamPluginManager.Views
                 if (!string.IsNullOrEmpty(thumbnailKey))
                 {
                     _thumbnailLoadRequestedKeys.Remove(thumbnailKey);
-                    if (success)
-                    {
-                        _thumbnailLoadCompletedKeys.Add(thumbnailKey);
-                    }
-                    else
+                    if (!success)
                     {
                         _thumbnailLoadFailedKeys.Add(thumbnailKey);
                     }
@@ -1661,7 +1770,7 @@ namespace SteamPluginManager.Views
             }
         }
 
-        private async Task<bool> FetchStorageFiles(bool forceRefresh = false)
+        private async Task<bool> FetchStorageFiles(bool forceRefresh = false, long? generation = null)
         {
             try
             {
@@ -1679,7 +1788,7 @@ namespace SteamPluginManager.Views
                     if (cachedData != null)
                     {
                         LogDebug("✓ Found HZM data in cache. Parsing cached data...");
-                        bool parsed = ParseSupabaseTableResponse(cachedData);
+                        bool parsed = ParseSupabaseTableResponse(cachedData, generation);
                         if (parsed)
                         {
                             LogDebug("✓ Successfully parsed cached HZM data.");
@@ -1704,9 +1813,15 @@ namespace SteamPluginManager.Views
 
                 while (hasMoreData)
                 {
+                    if (generation.HasValue && (!IsLoaded || generation.Value != Volatile.Read(ref _refreshGeneration)))
+                    {
+                        LogDebug($"[CONCURRENCY] Aborting FetchStorageFiles pagination: superseded or view unloaded (gen {generation.Value}, current {_refreshGeneration}, IsLoaded={IsLoaded})");
+                        return false;
+                    }
+
                     batchCount++;
                     LogDebug($"Fetching batch {batchCount}: offset={offset}, limit={limit}");
-                    
+
                     string url = $"{SupabaseConfig.SupabaseUrl}/rest/v1/hzmanifest_files?select=*&order=id.asc&limit={limit}&offset={offset}";
 
                     var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -1724,7 +1839,7 @@ namespace SteamPluginManager.Views
 
                         LogDebug($"Batch {batchCount} - Response Status: {(int)response.StatusCode}");
                         LogDebug($"Batch {batchCount} - Response Length: {content.Length} bytes");
-                        
+
                         if (response.Content.Headers.TryGetValues("Content-Range", out var rangeValues))
                         {
                             LogDebug($"Batch {batchCount} - Content-Range: {string.Join(", ", rangeValues)}");
@@ -1733,7 +1848,7 @@ namespace SteamPluginManager.Views
                         if (!response.IsSuccessStatusCode)
                         {
                             LogDebug($"✗ Batch {batchCount} failed - Response: {content.Substring(0, Math.Min(500, content.Length))}");
-                            
+
                             if (batchCount == 1)
                             {
                                 LogDebug("Attempting to fall back to cache...");
@@ -1741,11 +1856,11 @@ namespace SteamPluginManager.Views
                                 if (fallbackCache != null)
                                 {
                                     LogDebug("✓ Using fallback cache due to API failure");
-                                    bool fallbackParsed = ParseSupabaseTableResponse(fallbackCache);
+                                    bool fallbackParsed = ParseSupabaseTableResponse(fallbackCache, generation);
                                     return fallbackParsed;
                                 }
                             }
-                            
+
                             if (allJsonArrays.Count > 0)
                             {
                                 LogDebug($"⚠️ Batch {batchCount} failed but we have {allJsonArrays.Count} batch(es) already");
@@ -1770,10 +1885,10 @@ namespace SteamPluginManager.Views
                                     var jsonDoc = JsonDocument.Parse(content);
                                     int itemCount = jsonDoc.RootElement.GetArrayLength();
                                     LogDebug($"✓ Batch {batchCount} - Got {itemCount} items");
-                                    
+
                                     allJsonArrays.Add(content);
                                     offset += limit;
-                                    
+
                                     if (itemCount < limit)
                                     {
                                         LogDebug($"Batch {batchCount} - Got less than {limit} items, this is the last batch");
@@ -1798,12 +1913,18 @@ namespace SteamPluginManager.Views
                     return false;
                 }
 
+                if (generation.HasValue && (!IsLoaded || generation.Value != Volatile.Read(ref _refreshGeneration)))
+                {
+                    LogDebug($"[CONCURRENCY] Aborting response processing: superseded or view unloaded (gen {generation.Value}, current {_refreshGeneration}, IsLoaded={IsLoaded})");
+                    return false;
+                }
+
                 string mergedContent = MergeJsonArrays(allJsonArrays);
                 LogDebug($"✓ Merged {allJsonArrays.Count} batches into single JSON response");
                 LogDebug($"✓ Merged content length: {mergedContent.Length} bytes");
 
                 LogDebug("✓ SUCCESS! Parsing merged response...");
-                bool parsedResponse = ParseSupabaseTableResponse(mergedContent);
+                bool parsedResponse = ParseSupabaseTableResponse(mergedContent, generation);
                 LogDebug($"Parse result: {parsedResponse}, items loaded: {_totalFiles}");
 
                 if (parsedResponse)
@@ -1819,16 +1940,16 @@ namespace SteamPluginManager.Views
                 LogDebug("=== TIMEOUT IN FetchStorageFiles ===");
                 LogDebug($"Request timed out after 15 seconds: {ex.Message}");
                 LogDebug("Attempting to fall back to cache...");
-                
+
                 // If timeout, try to use cache
                 var cachedData = CacheManager.GetHzmCache("hzm_manifest_data");
                 if (cachedData != null)
                 {
                     LogDebug("✓ Using cache due to timeout");
-                    bool parsed = ParseSupabaseTableResponse(cachedData);
+                    bool parsed = ParseSupabaseTableResponse(cachedData, generation);
                     return parsed;
                 }
-                
+
                 LogDebug("✗ No cache available to use as fallback");
                 return false;
             }
@@ -1837,28 +1958,28 @@ namespace SteamPluginManager.Views
                 LogDebug("=== EXCEPTION IN FetchStorageFiles ===");
                 LogDebug($"Type: {ex.GetType().Name}");
                 LogDebug($"Message: {ex.Message}");
-                
+
                 // Try cache as fallback
                 LogDebug("Attempting to use cache as fallback...");
                 var fallbackData = CacheManager.GetHzmCache("hzm_manifest_data");
                 if (fallbackData != null)
                 {
                     LogDebug("✓ Using cache due to exception");
-                    bool parsed = ParseSupabaseTableResponse(fallbackData);
+                    bool parsed = ParseSupabaseTableResponse(fallbackData, generation);
                     return parsed;
                 }
-                
+
                 return false;
             }
         }
 
-        private bool ParseSupabaseTableResponse(string content)
+        private bool ParseSupabaseTableResponse(string content, long? generation = null)
         {
             try
             {
                 LogDebug("=== PARSING SUPABASE TABLE RESPONSE ===");
                 LogDebug($"Response content length: {content.Length} bytes");
-                
+
                 if (string.IsNullOrWhiteSpace(content))
                 {
                     LogDebug("✗ Empty response content");
@@ -1881,7 +2002,7 @@ namespace SteamPluginManager.Views
 
                 int fileCount = 0;
                 List<ManifestFile> allParsedFiles = new();
-                
+
                 foreach (var item in root.EnumerateArray())
                 {
                     try
@@ -1890,7 +2011,7 @@ namespace SteamPluginManager.Views
                         var appId = item.TryGetProperty("app_id", out var appIdElement) && appIdElement.TryGetInt32(out int aid) ? aid : 0;
                         var description = item.TryGetProperty("description", out var descElement) ? descElement.GetString() ?? "" : "";
                         var genre = item.TryGetProperty("genre", out var genreElement) ? genreElement.GetString() ?? "" : "";
-                        
+
                         // Parse is_adult field - can be boolean OR string "true"/"false"
                         bool isAdult = false;
                         if (item.TryGetProperty("is_adult", out var isAdultElement))
@@ -1912,13 +2033,13 @@ namespace SteamPluginManager.Views
                                 isAdult = false;
                             }
                         }
-                        
+
                         // Debug logging for is_adult field
                         if (fileCount < 5 || isAdult) // Log first 5 files and all adult files
                         {
                             LogDebug($"[Parse] File: {dbName} (AppID: {appId}) - is_adult field exists: {item.TryGetProperty("is_adult", out _)}, is_adult value: {isAdult}");
                         }
-                        
+
                         string storageType = "zip";
                         if (item.TryGetProperty("storage_type", out var storageTypeElement))
                         {
@@ -1936,6 +2057,16 @@ namespace SteamPluginManager.Views
                             // Ignore non-string folder_path values that may come from schema mismatch
                         }
 
+                        string? initialThumbnailPath = null;
+                        if (appId > 0)
+                        {
+                            string cachedPath = Path.Combine(_thumbnailCacheFolder, $"{appId}_header.jpg");
+                            if (File.Exists(cachedPath))
+                            {
+                                initialThumbnailPath = new Uri(cachedPath, UriKind.Absolute).ToString();
+                            }
+                        }
+
                         var file = new ManifestFile
                         {
                             Id = item.TryGetProperty("id", out var idElement) && idElement.TryGetInt32(out int id) ? id : null,
@@ -1951,18 +2082,18 @@ namespace SteamPluginManager.Views
                             FileUrl = item.TryGetProperty("url", out var urlElement) ? urlElement.GetString() ?? "" : "",
                             StorageType = storageType,
                             FolderPath = folderPath,
-                            ThumbnailPath = null, // Reset thumbnail path - akan di-fetch ulang
+                            ThumbnailPath = initialThumbnailPath,
                             DownloadCount = item.TryGetProperty("download_count", out var downloadCountElement) && downloadCountElement.TryGetInt32(out int downloadCount) ? downloadCount : 0
                         };
 
                         // Parse updated_at if exists
-                        if (item.TryGetProperty("created_at", out var createdAtElement) && 
+                        if (item.TryGetProperty("created_at", out var createdAtElement) &&
                             DateTime.TryParse(createdAtElement.GetString(), out var createdAt))
                         {
                             file.CreatedAt = createdAt;
                             file.UpdatedDate = createdAt.ToString("yyyy-MM-dd");
                         }
-                        else if (item.TryGetProperty("updated_at", out var updatedAtElement) && 
+                        else if (item.TryGetProperty("updated_at", out var updatedAtElement) &&
                                  DateTime.TryParse(updatedAtElement.GetString(), out var updatedAt))
                         {
                             file.CreatedAt = updatedAt;
@@ -1983,19 +2114,26 @@ namespace SteamPluginManager.Views
                 }
 
                 LogDebug($"✓ Successfully parsed {fileCount} files");
-                
+
+                // Lifecycle & generation guard before mutating state and UI
+                if (generation.HasValue && (!IsLoaded || generation.Value != Volatile.Read(ref _refreshGeneration)))
+                {
+                    LogDebug($"[CONCURRENCY] Discarding parsed manifests: superseded or view unloaded (gen {generation.Value}, current {_refreshGeneration}, IsLoaded={IsLoaded})");
+                    return false;
+                }
+
                 // Sort files by Name (A-Z)
                 _allFiles = allParsedFiles.OrderBy(f => f.Name ?? "").ToList();
                 LogDebug($"✓ Files sorted alphabetically (A-Z)");
-                
+
                 // Set total count dan reset ke page 0
                 _totalFiles = _allFiles.Count;
                 _currentPage = 0;
                 LogDebug($"✓ Pagination initialized: {_totalFiles} total files, {_pageSize} per page");
-                
+
                 // Display first page
                 DisplayCurrentPage();
-                
+
                 return fileCount > 0;
             }
             catch (Exception ex)
@@ -2035,15 +2173,14 @@ namespace SteamPluginManager.Views
                 loadingText.Visibility = Visibility.Visible;
             try
             {
-                // Hapus cache HZM sebelum refresh
-                CacheManager.ClearHzmCache();
-                LogDebug("HZM cache cleared for refresh.");
-
-                await LoadFilesFromSupabase();
+                await LoadFilesFromSupabase(forceRefresh: true);
             }
             catch (Exception ex)
             {
                 ShowError($"Refresh failed: {ex.Message}");
+            }
+            finally
+            {
                 if (loadingText != null)
                     loadingText.Visibility = Visibility.Collapsed;
             }
@@ -2055,6 +2192,8 @@ namespace SteamPluginManager.Views
                 isGameAvailableInApp: (appId) => _allFiles != null && _allFiles.Any(f => f.AppId == appId),
                 onGameAddedOrRequested: async () =>
                 {
+                    InvalidateCache();
+                    DashboardView.InvalidateCache();
                     await RefreshActiveManifestViewAsync(forceRefresh: true);
                     _ = DashboardView.RefreshNewestManifestsAsync();
                 });
@@ -2127,13 +2266,13 @@ namespace SteamPluginManager.Views
                     {
                         if (thumbnailImage.Tag is Tuple<ManifestFile, PropertyChangedEventHandler> existingBinding)
                         {
-                            if (existingBinding.Item1 == file)
+                            if (ReferenceEquals(existingBinding.Item1, file))
                             {
                                 LoadThumbnailImage(file, thumbnailImage);
                                 return;
                             }
 
-                            file.PropertyChanged -= existingBinding.Item2;
+                            existingBinding.Item1.PropertyChanged -= existingBinding.Item2;
                         }
 
                         PropertyChangedEventHandler thumbnailChangedHandler = (s, args) =>
@@ -2147,13 +2286,30 @@ namespace SteamPluginManager.Views
                         file.PropertyChanged += thumbnailChangedHandler;
                         thumbnailImage.Tag = Tuple.Create(file, thumbnailChangedHandler);
 
+                        // If thumbnail path is not yet set, check local disk cache first
+                        if (string.IsNullOrEmpty(file.ThumbnailPath) && file.AppId.HasValue && file.AppId.Value > 0)
+                        {
+                            string cachedPath = Path.Combine(_thumbnailCacheFolder, $"{file.AppId.Value}_header.jpg");
+                            if (File.Exists(cachedPath))
+                            {
+                                file.ThumbnailPath = new Uri(cachedPath, UriKind.Absolute).ToString();
+                            }
+                        }
+
                         // Load image jika sudah ada path
                         LoadThumbnailImage(file, thumbnailImage);
 
-                        // If thumbnail path is not yet populated, fetch or load from cache immediately
+                        // If thumbnail path is still not populated, fetch or load from cache using deduplication key
                         if (string.IsNullOrEmpty(file.ThumbnailPath) && file.AppId.HasValue && file.AppId.Value > 0)
                         {
-                            _ = FetchAndCacheSteamThumbnail(file);
+                            string thumbnailKey = GetThumbnailKey(file);
+                            if (!string.IsNullOrEmpty(thumbnailKey) &&
+                                !_thumbnailLoadRequestedKeys.Contains(thumbnailKey) &&
+                                !_thumbnailLoadFailedKeys.Contains(thumbnailKey))
+                            {
+                                _thumbnailLoadRequestedKeys.Add(thumbnailKey);
+                                _ = FetchAndCacheSteamThumbnail(file, thumbnailKey);
+                            }
                         }
                     }
                 }
@@ -2164,11 +2320,40 @@ namespace SteamPluginManager.Views
             }
         }
 
+        private void CardBorder_Unloaded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is Border border)
+                {
+                    var thumbnailImage = border.FindName("ThumbnailImage") as Image;
+                    if (thumbnailImage == null)
+                    {
+                        foreach (var child in GetVisualChildren(border))
+                        {
+                            if (child is Image img && img.Name == "ThumbnailImage")
+                            {
+                                thumbnailImage = img;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (thumbnailImage?.Tag is Tuple<ManifestFile, PropertyChangedEventHandler> binding)
+                    {
+                        binding.Item1.PropertyChanged -= binding.Item2;
+                        thumbnailImage.Tag = null;
+                    }
+                }
+            }
+            catch { }
+        }
+
         private void ThumbnailBorder_Loaded(object sender, RoutedEventArgs e)
         {
             if (sender is Border thumbnailBorder && thumbnailBorder.ActualWidth > 0 && thumbnailBorder.ActualHeight > 0)
             {
-                thumbnailBorder.Clip = new RectangleGeometry(new Rect(0, 0, thumbnailBorder.ActualWidth, thumbnailBorder.ActualHeight), 13, 13);
+                ApplyThumbnailClip(thumbnailBorder, thumbnailBorder.ActualWidth, thumbnailBorder.ActualHeight);
             }
         }
 
@@ -2176,7 +2361,19 @@ namespace SteamPluginManager.Views
         {
             if (sender is Border thumbnailBorder && e.NewSize.Width > 0 && e.NewSize.Height > 0)
             {
-                thumbnailBorder.Clip = new RectangleGeometry(new Rect(0, 0, e.NewSize.Width, e.NewSize.Height), 13, 13);
+                ApplyThumbnailClip(thumbnailBorder, e.NewSize.Width, e.NewSize.Height);
+            }
+        }
+
+        private static void ApplyThumbnailClip(Border border, double width, double height)
+        {
+            // PERF-8.8A: Do NOT assign non-rectangular RectangleGeometry clips.
+            // In MilCore / DirectX, non-rectangular geometric clips force intermediate offscreen render target surfaces
+            // and alpha mask composition passes for every card, causing GPU stalls and scrolling lag.
+            // Border.CornerRadius="13,13,0,0" with ClipToBounds="True" handles rectangular clipping natively.
+            if (border.Clip != null)
+            {
+                border.Clip = null;
             }
         }
 
@@ -2198,33 +2395,57 @@ namespace SteamPluginManager.Views
                 thumbnailImage.HorizontalAlignment = HorizontalAlignment.Stretch;
                 thumbnailImage.VerticalAlignment = VerticalAlignment.Stretch;
 
-                // Clear existing source only when the image is changing to a different path.
+                string? path = file.ThumbnailPath;
+                if (string.IsNullOrEmpty(path) && file.AppId.HasValue && file.AppId.Value > 0)
+                {
+                    string cacheFileName = $"{file.AppId.Value}_header.jpg";
+                    string cachedPath = Path.Combine(_thumbnailCacheFolder, cacheFileName);
+                    if (File.Exists(cachedPath))
+                    {
+                        path = new Uri(cachedPath, UriKind.Absolute).ToString();
+                        file.ThumbnailPath = path;
+                    }
+                }
+
+                // If already showing the requested source bitmap, leave it intact
                 if (thumbnailImage.Source is System.Windows.Media.Imaging.BitmapImage existingBitmap &&
-                    existingBitmap.UriSource?.OriginalString == file.ThumbnailPath)
+                    !string.IsNullOrEmpty(path) &&
+                    existingBitmap.UriSource?.OriginalString == path)
                 {
                     return;
                 }
 
                 thumbnailImage.Source = null;
 
-                // Only load if ThumbnailPath is not empty
-                if (!string.IsNullOrEmpty(file.ThumbnailPath))
+                if (!string.IsNullOrEmpty(path))
                 {
-                    try
+                    // PERF-8.8A: Decode BitmapImage on a background thread with Freeze()
+                    // to prevent synchronous disk I/O and WIC decoding from stalling the UI Dispatcher.
+                    _ = System.Threading.Tasks.Task.Run(() =>
                     {
-                        var bitmap = new System.Windows.Media.Imaging.BitmapImage();
-                        bitmap.BeginInit();
-                        bitmap.UriSource = new Uri(file.ThumbnailPath, UriKind.Absolute);
-                        bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                        bitmap.DecodePixelWidth = 280;
-                        bitmap.EndInit();
-                        bitmap.Freeze();
-                        thumbnailImage.Source = bitmap;
-                    }
-                    catch (Exception imgEx)
-                    {
-                        LogDebug($"Failed to load image for {file.Name}: {imgEx.Message}");
-                    }
+                        try
+                        {
+                            var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                            bitmap.BeginInit();
+                            bitmap.UriSource = new Uri(path, UriKind.Absolute);
+                            bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                            bitmap.DecodePixelWidth = 280;
+                            bitmap.EndInit();
+                            bitmap.Freeze();
+
+                            thumbnailImage.Dispatcher.BeginInvoke(new Action(() =>
+                            {
+                                if (file.ThumbnailPath == path)
+                                {
+                                    thumbnailImage.Source = bitmap;
+                                }
+                            }), System.Windows.Threading.DispatcherPriority.Background);
+                        }
+                        catch (Exception imgEx)
+                        {
+                            LogDebug($"Failed to decode image for {file.Name}: {imgEx.Message}");
+                        }
+                    });
                 }
             }
             catch (Exception ex)
@@ -2345,14 +2566,14 @@ namespace SteamPluginManager.Views
         {
             if (jsonArrays.Count == 0)
                 return "[]";
-            
+
             if (jsonArrays.Count == 1)
                 return jsonArrays[0];
 
             try
             {
                 var mergedArray = new System.Collections.Generic.List<System.Text.Json.JsonElement>();
-                
+
                 foreach (var jsonArray in jsonArrays)
                 {
                     var doc = JsonDocument.Parse(jsonArray);
@@ -2374,7 +2595,7 @@ namespace SteamPluginManager.Views
                         }
                         writer.WriteEndArray();
                     }
-                    
+
                     return System.Text.Encoding.UTF8.GetString(stream.ToArray());
                 }
             }
@@ -2497,10 +2718,10 @@ namespace SteamPluginManager.Views
                 _cachedPage = _currentPage;
 
                 LogDebug($"[DisplayCurrentPage] Displayed {filesToDisplay.Count} of {_totalFiles} files (18+ content: {(allow18Plus ? "ALLOWED" : "FILTERED")})");
-                
+
                 // Setup thumbnail loading untuk semua items
                 SetupLazyThumbnailLoading();
-                
+
                 // Restore saved scroll position when returning to this view, otherwise scroll to top on first load
                 if (CardsScrollViewer != null)
                 {
@@ -2563,13 +2784,13 @@ namespace SteamPluginManager.Views
                 {
                     _sizeChangeDebounceTimer.Stop();
                 }
-                
+
                 // Debounce timer for smooth resize
                 _sizeChangeDebounceTimer = new System.Windows.Threading.DispatcherTimer
                 {
                     Interval = TimeSpan.FromMilliseconds(50)
                 };
-                
+
                 _sizeChangeDebounceTimer.Tick += (s, args) =>
                 {
                     try
@@ -2582,7 +2803,7 @@ namespace SteamPluginManager.Views
                         LogDebug($"SizeChanged debounce handler error: {ex.Message}");
                     }
                 };
-                
+
                 _sizeChangeDebounceTimer.Start();
             }
             catch (Exception ex)
@@ -2613,7 +2834,7 @@ namespace SteamPluginManager.Views
                 {
                     viewer.UpdateLayout();
                 }
-                
+
                 LogDebug("Layout recalculated without data reload");
             }
             catch (Exception ex)
@@ -2680,7 +2901,7 @@ namespace SteamPluginManager.Views
                     return;
 
                 const double cardMarginRight = 14;
-                const double targetCardWidth = 220;
+                const double targetCardWidth = 230;
                 const double rightClearance = 36; // Accounts for scrollbar, padding, and drop shadow projection
 
                 double usableWidth = Math.Max(targetCardWidth + cardMarginRight, availableWidth - rightClearance);
@@ -2723,33 +2944,6 @@ namespace SteamPluginManager.Views
         private async Task<bool> CheckDeviceTokenAsync()
         {
             return await DashboardView.CheckDeviceTokenAsync();
-        }
-
-        private string GetDeviceId()
-        {
-            try
-            {
-                string deviceId = DeviceIdentifier.GetDeviceId();
-                LogDebug($"[GetDeviceId] Device ID: {deviceId}");
-                return deviceId;
-            }
-            catch (Exception ex)
-            {
-                LogDebug($"[GetDeviceId] Error: {ex.Message}");
-                return "UNKNOWN";
-            }
-        }
-
-        private static Guid GetRequesterUuid(string deviceId)
-        {
-            if (string.IsNullOrWhiteSpace(deviceId))
-                deviceId = "UNKNOWN";
-
-            using var sha256 = SHA256.Create();
-            var hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(deviceId));
-            var guidBytes = new byte[16];
-            Array.Copy(hash, guidBytes, 16);
-            return new Guid(guidBytes);
         }
 
         /// <summary>

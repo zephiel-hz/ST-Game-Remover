@@ -76,26 +76,53 @@ namespace SteamPluginManager.Views
                 PopulateBasicInfo();
             }
 
-            if (progress.State == SteamAppState.Downloading || progress.State == SteamAppState.Paused || progress.State == SteamAppState.Validating)
-            {
-                _game.IsInstalled = false;
-                _game.InstallationPath = progress.InstallPath;
-                ApplyDownloadingState(progress);
-                StartDownloadTracker();
-            }
-            else if (progress.State == SteamAppState.Installed)
+            bool hasInstallFolder = !string.IsNullOrWhiteSpace(progress.InstallPath) && Directory.Exists(progress.InstallPath);
+            bool isManifestInstalled = (progress.StateFlags & 4) != 0;
+
+            if (progress.State == SteamAppState.Installed || (hasInstallFolder && isManifestInstalled))
             {
                 _game.IsInstalled = true;
                 _game.InstallationPath = progress.InstallPath;
                 StopDownloadTracker();
                 ApplyInstalledState(progress.InstallPath);
             }
+            else if (progress.State == SteamAppState.Downloading || progress.State == SteamAppState.Paused || progress.State == SteamAppState.Validating)
+            {
+                // If game files already exist on disk, do not clear IsInstalled
+                if (hasInstallFolder)
+                {
+                    _game.IsInstalled = true;
+                    _game.InstallationPath = progress.InstallPath;
+                }
+                else
+                {
+                    _game.IsInstalled = false;
+                    _game.InstallationPath = progress.InstallPath;
+                }
+                ApplyDownloadingState(progress);
+                StartDownloadTracker();
+            }
             else
             {
-                _game.IsInstalled = false;
-                _game.InstallationPath = null;
-                StopDownloadTracker();
-                ApplyNotInstalledState();
+                // Before marking as not installed, verify directly on disk to prevent transient state issues during game exit / cloud sync
+                string? fallbackPath = !string.IsNullOrWhiteSpace(_game.InstallationPath) && Directory.Exists(_game.InstallationPath)
+                    ? _game.InstallationPath
+                    : SteamHelper.GetGameInstallationPath(_game.AppId, _game.Name);
+
+                if (!string.IsNullOrWhiteSpace(fallbackPath) && Directory.Exists(fallbackPath))
+                {
+                    _game.IsInstalled = true;
+                    _game.InstallationPath = fallbackPath;
+                    StopDownloadTracker();
+                    ApplyInstalledState(fallbackPath);
+                }
+                else
+                {
+                    _game.IsInstalled = false;
+                    _game.InstallationPath = null;
+                    StopDownloadTracker();
+                    ApplyNotInstalledState();
+                }
             }
         }
 
@@ -906,6 +933,9 @@ namespace SteamPluginManager.Views
                 PlayButton.IsEnabled = false;
                 PlayButtonText.Text = "STOPPING...";
 
+                // Immediately stop background monitoring timer to prevent UI thread contention while killing processes
+                StopGameRunningMonitor();
+
                 await Task.Run(() =>
                 {
                     CustomLaunchService.StopGame(
@@ -918,8 +948,11 @@ namespace SteamPluginManager.Views
                     _runningProcess = null;
                 });
 
-                await Task.Delay(300);
-                CheckAndUpdateRunningState();
+                if (this.IsLoaded)
+                {
+                    SetRunningVisualState(false);
+                    StartGameRunningMonitor();
+                }
             }
             else
             {
@@ -1148,17 +1181,33 @@ namespace SteamPluginManager.Views
 
         private void RemoveFromLibrary_Click(object sender, RoutedEventArgs e)
         {
-            var result = ModernMessageBox.Show($"Are you sure you want to remove the unlocker Lua script for '{_game.Name}' from your library?\n\nFile: {_game.FilePath}", "Remove from Library", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            var result = ModernMessageBox.Show(
+                $"Are you sure you want to remove the unlocker Lua script for '{_game.Name}' from your library?\n\nFile: {_game.FilePath}",
+                "Remove from Library",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
             if (result == MessageBoxResult.Yes)
             {
                 try
                 {
-                    if (File.Exists(_game.FilePath))
+                    // Cleanly delete all candidate Lua files (both stplug-in and lua folders) and associated manifests
+                    SteamHelper.DeleteGameUnlockerFilesCleanly(_game.AppId, _game.FilePath);
+
+                    // Remove from active Games collection immediately so UI updates instantly
+                    var mw = WindowNavigator.GetMainWindow();
+                    if (mw?.Games != null)
                     {
-                        File.Delete(_game.FilePath);
+                        var entry = System.Linq.Enumerable.FirstOrDefault(mw.Games, g => g.AppId == _game.AppId);
+                        if (entry != null)
+                        {
+                            mw.Games.Remove(entry);
+                        }
                     }
+
                     ModernMessageBox.Show($"Removed {_game.Name} unlocker script.", "Removed", MessageBoxButton.OK, MessageBoxImage.Information);
-                    WindowNavigator.RefreshGameList();
+
+                    WindowNavigator.RefreshGameLibraryView();
                     WindowNavigator.NavigateToGameLibrary();
                 }
                 catch (Exception ex)

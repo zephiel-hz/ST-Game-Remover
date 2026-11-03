@@ -569,7 +569,7 @@ namespace SteamPluginManager.Views
 
                 if (directLibrarySave)
                 {
-                    string steamPath = MainWindow.GetSteamPath();
+                    string? steamPath = SteamHelper.GetSteamPath();
                     if (string.IsNullOrEmpty(steamPath))
                         throw new Exception("Steam path not found for direct folder download");
 
@@ -645,7 +645,7 @@ namespace SteamPluginManager.Views
                         }
                     }
 
-                    resultPath = Path.Combine(MainWindow.GetSteamPath() ?? string.Empty, "config", "stplug-in");
+                    resultPath = Path.Combine(SteamHelper.GetSteamPath() ?? string.Empty, "config", "stplug-in");
                     return new DownloadResult(resultPath, true, downloadedFiles);
                 }
 
@@ -1346,7 +1346,7 @@ namespace SteamPluginManager.Views
             try
             {
                 // Get Steam path - usually at Program Files/Steam or user defined
-                string steamPath = MainWindow.GetSteamPath();
+                string? steamPath = SteamHelper.GetSteamPath();
                 if (string.IsNullOrEmpty(steamPath))
                 {
                     Logger.Log("[HZManifestDetailView] Steam path not found");
@@ -1836,7 +1836,7 @@ namespace SteamPluginManager.Views
                 
                 // Show error notification
                 ShowResultNotification(false, $"✗ Error: {ex.Message}");
-                Task.Delay(1500).Wait(); // Wait for user to see the error
+                await Task.Delay(1500); // Wait for user to see the error
                 
                 // Hide loading state and re-enable button on error
                 ShowLoadingState(false);
@@ -2055,7 +2055,7 @@ namespace SteamPluginManager.Views
             try
             {
                 // Get Steam path
-                string steamPath = MainWindow.GetSteamPath();
+                string? steamPath = SteamHelper.GetSteamPath();
                 if (string.IsNullOrEmpty(steamPath))
                 {
                     Logger.Log("[HZManifestDetailView] Steam path not found");
@@ -2576,7 +2576,7 @@ namespace SteamPluginManager.Views
                         });
 
                         // Get Steam executable path
-                        string steamPath = MainWindow.GetSteamPath();
+                        string? steamPath = SteamHelper.GetSteamPath();
                         if (string.IsNullOrEmpty(steamPath))
                         {
                             throw new Exception("Steam installation path not found. Please check Steam settings.");

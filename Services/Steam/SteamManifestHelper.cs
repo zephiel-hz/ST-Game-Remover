@@ -25,7 +25,7 @@ namespace SteamPluginManager
             {
                 // Ambil bagian sebelum underscore atau titik
                 string[] parts = Path.GetFileNameWithoutExtension(filename).Split('_');
-                
+
                 if (int.TryParse(parts[0], out int appId))
                 {
                     return appId;
@@ -35,7 +35,7 @@ namespace SteamPluginManager
             {
                 // Jika gagal parse, return null
             }
-            
+
             return null;
         }
 
@@ -47,8 +47,9 @@ namespace SteamPluginManager
             try
             {
                 string url = $"{SteamApiUrl}?appids={appId}";
-                var response = await _httpClient.GetAsync(url);
-                
+                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(3));
+                var response = await _httpClient.GetAsync(url, cts.Token);
+
                 if (!response.IsSuccessStatusCode)
                     return null;
 
@@ -75,7 +76,7 @@ namespace SteamPluginManager
                     }
 
                     // Extract genres
-                    if (data.TryGetProperty("genres", out var genresArray) && 
+                    if (data.TryGetProperty("genres", out var genresArray) &&
                         genresArray.ValueKind == JsonValueKind.Array)
                     {
                         var genreList = new List<string>();

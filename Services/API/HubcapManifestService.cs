@@ -32,11 +32,13 @@ namespace SteamPluginManager
 
             try
             {
-                // Query a lightweight DRM endpoint (e.g. AppID 730 / CS2) to verify authorization
-                string url = "https://hubcapmanifest.com/manifest-history/api/apps/730/drm";
+                // Verify authorization using official Hubcap API endpoint (CS2 / 730 lua)
+                string baseUrl = ServiceConfiguration.Current.Hubcap.BaseUrl?.TrimEnd('/')
+                                 ?? "https://hubcapmanifest.com/api/v1";
+                string url = $"{baseUrl}/lua/730";
                 var client = SharedHttpClient.Instance;
                 using var req = CreateAuthenticatedRequest(HttpMethod.Get, url, apiKey);
-                using var res = await client.SendAsync(req);
+                using var res = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
 
                 if (res.StatusCode == HttpStatusCode.Unauthorized || res.StatusCode == HttpStatusCode.Forbidden)
                 {
@@ -44,7 +46,7 @@ namespace SteamPluginManager
                     return false;
                 }
 
-                return true;
+                return res.IsSuccessStatusCode;
             }
             catch (Exception ex)
             {
@@ -53,6 +55,8 @@ namespace SteamPluginManager
                 return true;
             }
         }
+
+        private static readonly System.Threading.SemaphoreSlim _apiKeyGenerationLock = new(1, 1);
 
         /// <summary>
         /// Ensures a valid Hubcap API key is available. If missing, invalid, or expired, automatically
@@ -64,6 +68,7 @@ namespace SteamPluginManager
             string? expiredKey = null,
             Action<string>? statusCallback = null)
         {
+            await _apiKeyGenerationLock.WaitAsync();
             try
             {
                 if (!forceRegenerate)
@@ -76,6 +81,7 @@ namespace SteamPluginManager
                         bool isValid = await IsApiKeyValidAsync(existingKey);
                         if (isValid)
                         {
+                            Logger.Log("[HubcapManifestService] Existing Hubcap API key is active and valid. Reusing existing key.");
                             return existingKey;
                         }
                         expiredKey = existingKey;
@@ -95,6 +101,8 @@ namespace SteamPluginManager
                     return null;
                 }
 
+                bool interactiveShown = false;
+
                 // Attempt 1: Background silent mode generation using existing Discord session
                 string? newKey = await dispatcher.InvokeAsync(() =>
                 {
@@ -103,6 +111,7 @@ namespace SteamPluginManager
                         Owner = owner
                     };
                     bool? res = dialog.ShowDialog();
+                    interactiveShown = dialog.InteractiveLoginShown;
                     if (res == true && !string.IsNullOrWhiteSpace(dialog.ExtractedApiKey))
                     {
                         return dialog.ExtractedApiKey;
@@ -117,7 +126,15 @@ namespace SteamPluginManager
                     return newKey;
                 }
 
-                // Attempt 2: If silent mode did not succeed (e.g. Discord login required), open visible dialog for user
+                // If Attempt 1 already showed the interactive login window to the user and the user canceled or closed it,
+                // do NOT pop up a redundant second dialog.
+                if (interactiveShown)
+                {
+                    Logger.Log("[HubcapManifestService] Interactive login was already presented to user in Attempt 1 and completed/closed without key.");
+                    return null;
+                }
+
+                // Attempt 2: If silent mode did not succeed and did not reveal itself, open visible dialog for user
                 statusCallback?.Invoke("Hubcap authorization required. Opening login dialog...");
                 newKey = await dispatcher.InvokeAsync(() =>
                 {
@@ -147,6 +164,10 @@ namespace SteamPluginManager
                 Logger.Log($"[HubcapManifestService] EnsureValidApiKeyAsync error: {ex.Message}");
                 return null;
             }
+            finally
+            {
+                _apiKeyGenerationLock.Release();
+            }
         }
 
         /// <summary>
@@ -168,20 +189,12 @@ namespace SteamPluginManager
                 using var req = CreateAuthenticatedRequest(HttpMethod.Get, url, apiKey);
                 using var res = await client.SendAsync(req);
 
-                // If unauthorized (401/403), regenerate key and retry
+                // If unauthorized (401/403), endpoint requires web session/cookies rather than API key.
+                // Do not force-regenerate the API key here to prevent redundant WebView popups.
                 if (res.StatusCode == HttpStatusCode.Unauthorized || res.StatusCode == HttpStatusCode.Forbidden)
                 {
-                    Logger.Log($"[HubcapManifestService] Hubcap DRM status returned HTTP {res.StatusCode}. Regenerating API key...");
-                    string? newKey = await EnsureValidApiKeyAsync(forceRegenerate: true, expiredKey: apiKey);
-                    if (!string.IsNullOrWhiteSpace(newKey))
-                    {
-                        using var retryReq = CreateAuthenticatedRequest(HttpMethod.Get, url, newKey);
-                        using var retryRes = await client.SendAsync(retryReq);
-                        if (retryRes.IsSuccessStatusCode)
-                        {
-                            return await ParseDenuvoResponseAsync(retryRes);
-                        }
-                    }
+                    Logger.Log($"[HubcapManifestService] Hubcap DRM status returned HTTP {res.StatusCode} (web session required). Falling back to Steam Store DRM check.");
+                    return null;
                 }
                 else if (res.IsSuccessStatusCode)
                 {

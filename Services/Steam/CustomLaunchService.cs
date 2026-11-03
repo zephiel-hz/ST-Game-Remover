@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Runtime.InteropServices;
 using SteamPluginManager.Models;
 
 namespace SteamPluginManager.Services.Steam
@@ -36,7 +37,7 @@ namespace SteamPluginManager.Services.Steam
 
         #region Configuration Management
 
-        private static Dictionary<int, GameCustomLaunchConfig> LoadAllConfigs()
+        public static Dictionary<int, GameCustomLaunchConfig> LoadAllConfigs()
         {
             lock (_fileLock)
             {
@@ -517,6 +518,44 @@ namespace SteamPluginManager.Services.Steam
         /// Checks Steam's RunningAppID registry, the given tracked process,
         /// or running processes originating from the game's installation directory.
         /// </summary>
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern bool QueryFullProcessImageName(IntPtr hProcess, int flags, [Out] System.Text.StringBuilder lpExeName, ref int lpdwSize);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr OpenProcess(int processAccess, bool bInheritHandle, int processId);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool CloseHandle(IntPtr hObject);
+
+        private const int PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+
+        /// <summary>
+        /// Fast, non-blocking process path lookup using QueryFullProcessImageName.
+        /// Avoids Process.MainModule which hangs on suspended, 64-bit, elevated, or terminating processes.
+        /// </summary>
+        public static string? GetProcessPathSafe(int processId)
+        {
+            if (processId <= 4) return null;
+            IntPtr hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, processId);
+            if (hProcess == IntPtr.Zero) return null;
+            try
+            {
+                var sb = new System.Text.StringBuilder(1024);
+                int size = sb.Capacity;
+                if (QueryFullProcessImageName(hProcess, 0, sb, ref size))
+                {
+                    return sb.ToString();
+                }
+            }
+            catch { }
+            finally
+            {
+                CloseHandle(hProcess);
+            }
+            return null;
+        }
+
         public static bool IsGameRunning(
             int appId,
             int? parentAppId,
@@ -575,7 +614,7 @@ namespace SteamPluginManager.Services.Steam
                             {
                                 try
                                 {
-                                    string? path = p.MainModule?.FileName;
+                                    string? path = GetProcessPathSafe(p.Id);
                                     if (!string.IsNullOrEmpty(path) && path.StartsWith(normInstallPath, StringComparison.OrdinalIgnoreCase))
                                     {
                                         return true;
@@ -652,10 +691,10 @@ namespace SteamPluginManager.Services.Steam
                             {
                                 try
                                 {
-                                    string? path = p.MainModule?.FileName;
+                                    string? path = GetProcessPathSafe(p.Id);
                                     if (!string.IsNullOrEmpty(path) && path.StartsWith(normInstallPath, StringComparison.OrdinalIgnoreCase))
                                     {
-                                        p.Kill(entireProcessTree: true);
+                                        try { p.Kill(entireProcessTree: true); } catch { try { p.Kill(); } catch { } }
                                         anyKilled = true;
                                         Logger.Log($"[CustomLaunchService] Terminated game process: {path} (PID: {p.Id})");
                                     }

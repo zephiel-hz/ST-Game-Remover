@@ -94,7 +94,7 @@ namespace SteamPluginManager.Services.Profile
             if (!forceRefresh)
             {
                 // 1. Check memory cache
-                if (_memoryCache.TryGetValue(uid, out var memImg))
+                if (_memoryCache.TryGetValue(uid, out var memImg) && memImg != null)
                 {
                     return memImg;
                 }
@@ -110,7 +110,7 @@ namespace SteamPluginManager.Services.Profile
             await userLock.WaitAsync();
             try
             {
-                if (!forceRefresh && _memoryCache.TryGetValue(uid, out var memImg))
+                if (!forceRefresh && _memoryCache.TryGetValue(uid, out var memImg) && memImg != null)
                 {
                     return memImg;
                 }
@@ -160,7 +160,7 @@ namespace SteamPluginManager.Services.Profile
                 {
                     // If file doesn't exist on B2 or network error, record negative cache
                     _negativeCache[uid] = DateTime.UtcNow;
-                    _memoryCache[uid] = null;
+                    _memoryCache.TryRemove(uid, out _);
                 }
 
                 return null;

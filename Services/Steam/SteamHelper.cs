@@ -458,6 +458,111 @@ namespace SteamPluginManager
             }
         }
 
+        /// <summary>
+        /// Cleanly and completely deletes all Lua unlocker scripts and associated manifests for a given AppID
+        /// across all known Steam config locations (config/stplug-in, config/lua, and depotcache).
+        /// </summary>
+        public static int DeleteGameUnlockerFilesCleanly(int appId, string? knownFilePath = null)
+        {
+            int deletedCount = 0;
+            string? steamPath = GetSteamPath();
+            if (string.IsNullOrWhiteSpace(steamPath)) return 0;
+
+            string pluginDir = Path.Combine(steamPath, "config", "stplug-in");
+            string luaDir = Path.Combine(steamPath, "config", "lua");
+            string depotCacheDir = Path.Combine(steamPath, "depotcache");
+            string depotCacheDirOld = Path.Combine(steamPath, "config", "depotcache");
+
+            // 1. Gather all candidate Lua files for this game to extract manifests before deletion
+            var candidateLuaFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (!string.IsNullOrWhiteSpace(knownFilePath) && File.Exists(knownFilePath))
+            {
+                candidateLuaFiles.Add(knownFilePath);
+            }
+
+            if (appId > 0)
+            {
+                string p1 = Path.Combine(pluginDir, $"{appId}.lua");
+                if (File.Exists(p1)) candidateLuaFiles.Add(p1);
+
+                string p2 = Path.Combine(luaDir, $"{appId}.lua");
+                if (File.Exists(p2)) candidateLuaFiles.Add(p2);
+            }
+
+            if (!string.IsNullOrWhiteSpace(knownFilePath))
+            {
+                string fn = Path.GetFileName(knownFilePath);
+                if (!string.IsNullOrWhiteSpace(fn))
+                {
+                    string p3 = Path.Combine(pluginDir, fn);
+                    if (File.Exists(p3)) candidateLuaFiles.Add(p3);
+
+                    string p4 = Path.Combine(luaDir, fn);
+                    if (File.Exists(p4)) candidateLuaFiles.Add(p4);
+                }
+            }
+
+            // 2. Extract and delete any manifest files referenced inside the Lua scripts
+            var manifestRegex = new System.Text.RegularExpressions.Regex(@"setManifestid\((\d+),\s*\""(\d+)\""\)");
+            foreach (var luaFile in candidateLuaFiles)
+            {
+                try
+                {
+                    string content = File.ReadAllText(luaFile);
+                    foreach (System.Text.RegularExpressions.Match match in manifestRegex.Matches(content))
+                    {
+                        if (match.Groups.Count > 2)
+                        {
+                            string depotId = match.Groups[1].Value;
+                            string manifestId = match.Groups[2].Value;
+                            string mfName = $"{depotId}_{manifestId}.manifest";
+
+                            string m1 = Path.Combine(depotCacheDir, mfName);
+                            if (File.Exists(m1)) { try { File.Delete(m1); deletedCount++; } catch { } }
+
+                            string m2 = Path.Combine(depotCacheDirOld, mfName);
+                            if (File.Exists(m2)) { try { File.Delete(m2); deletedCount++; } catch { } }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[SteamHelper] Error reading manifests from {luaFile}: {ex.Message}");
+                }
+            }
+
+            // Also check direct {appId}.manifest
+            if (appId > 0)
+            {
+                string am1 = Path.Combine(depotCacheDir, $"{appId}.manifest");
+                if (File.Exists(am1)) { try { File.Delete(am1); deletedCount++; } catch { } }
+
+                string am2 = Path.Combine(depotCacheDirOld, $"{appId}.manifest");
+                if (File.Exists(am2)) { try { File.Delete(am2); deletedCount++; } catch { } }
+            }
+
+            // 3. Delete ALL candidate Lua files
+            foreach (var luaFile in candidateLuaFiles)
+            {
+                try
+                {
+                    if (File.Exists(luaFile))
+                    {
+                        File.Delete(luaFile);
+                        deletedCount++;
+                        Logger.Log($"[SteamHelper] Deleted Lua file: {luaFile}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[SteamHelper] Failed to delete Lua file {luaFile}: {ex.Message}");
+                }
+            }
+
+            return deletedCount;
+        }
+
         public static void OpenGameFolder(string? path)
         {
             try
@@ -575,10 +680,144 @@ namespace SteamPluginManager
             }
         }
 
+        private static readonly object _installedGamesMapLock = new();
+        private static System.Collections.Generic.Dictionary<int, string>? _cachedInstalledGamesMap;
+        private static DateTime _lastInstalledGamesMapCacheTime = DateTime.MinValue;
+        private static System.Threading.Tasks.Task<System.Collections.Generic.Dictionary<int, string>>? _inFlightInstalledGamesMapTask;
+        private static long _installedGamesMapGeneration;
+        private static readonly TimeSpan InstalledGamesMapCacheDuration = TimeSpan.FromSeconds(5);
+
+        /// <summary>
+        /// Explicitly invalidates the cached Steam installation map and advances the generation
+        /// so that any in-flight background scan is superseded and the next request performs a fresh scan.
+        /// </summary>
+        public static void InvalidateInstalledGamesMapCache()
+        {
+            lock (_installedGamesMapLock)
+            {
+                _installedGamesMapGeneration++;
+                _cachedInstalledGamesMap = null;
+                _lastInstalledGamesMapCacheTime = DateTime.MinValue;
+                _inFlightInstalledGamesMapTask = null;
+            }
+        }
+
         /// <summary>
         /// Fast batch scanner that locates all currently installed Steam games across all libraries in a single pass.
+        /// Synchronous entry point. Reuses warm cache when fresh (<5s) or scans disk directly on caller thread.
+        /// Advances generation so older in-flight background scans cannot overwrite this authoritative result.
         /// </summary>
-        public static System.Collections.Generic.Dictionary<int, string> GetInstalledGamesMap()
+        public static System.Collections.Generic.Dictionary<int, string> GetInstalledGamesMap(bool forceRefresh = false)
+        {
+            long capturedGen;
+            lock (_installedGamesMapLock)
+            {
+                if (forceRefresh)
+                {
+                    _installedGamesMapGeneration++;
+                    _cachedInstalledGamesMap = null;
+                    _lastInstalledGamesMapCacheTime = DateTime.MinValue;
+                    _inFlightInstalledGamesMapTask = null;
+                }
+                else if (_cachedInstalledGamesMap != null && (DateTime.UtcNow - _lastInstalledGamesMapCacheTime) < InstalledGamesMapCacheDuration)
+                {
+                    return new System.Collections.Generic.Dictionary<int, string>(_cachedInstalledGamesMap);
+                }
+
+                capturedGen = _installedGamesMapGeneration;
+            }
+
+            var (map, success) = ScanInstalledGamesMapCore();
+
+            if (success)
+            {
+                lock (_installedGamesMapLock)
+                {
+                    if (capturedGen == _installedGamesMapGeneration)
+                    {
+                        _cachedInstalledGamesMap = map;
+                        _lastInstalledGamesMapCacheTime = DateTime.UtcNow;
+                        _installedGamesMapGeneration++;
+                    }
+                }
+            }
+
+            return new System.Collections.Generic.Dictionary<int, string>(map);
+        }
+
+        /// <summary>
+        /// Asynchronous batch scanner that locates all currently installed Steam games off the UI thread.
+        /// Supports short-lived caching (5s), single-flight task deduplication, and cancellation.
+        /// Task cleanup is owned by the background scan itself, preserving deduplication across caller cancellations.
+        /// </summary>
+        public static async System.Threading.Tasks.Task<System.Collections.Generic.Dictionary<int, string>> GetInstalledGamesMapAsync(bool forceRefresh = false, System.Threading.CancellationToken ct = default)
+        {
+            System.Threading.Tasks.Task<System.Collections.Generic.Dictionary<int, string>>? task = null;
+
+            lock (_installedGamesMapLock)
+            {
+                if (forceRefresh)
+                {
+                    _installedGamesMapGeneration++;
+                    _cachedInstalledGamesMap = null;
+                    _lastInstalledGamesMapCacheTime = DateTime.MinValue;
+                    _inFlightInstalledGamesMapTask = null;
+                }
+                else
+                {
+                    if (_cachedInstalledGamesMap != null && (DateTime.UtcNow - _lastInstalledGamesMapCacheTime) < InstalledGamesMapCacheDuration)
+                    {
+                        return new System.Collections.Generic.Dictionary<int, string>(_cachedInstalledGamesMap);
+                    }
+
+                    if (_inFlightInstalledGamesMapTask != null)
+                    {
+                        task = _inFlightInstalledGamesMapTask;
+                    }
+                }
+
+                if (task == null)
+                {
+                    long generation = _installedGamesMapGeneration;
+                    System.Threading.Tasks.Task<System.Collections.Generic.Dictionary<int, string>>? createdTask = null;
+
+                    createdTask = System.Threading.Tasks.Task.Run(() =>
+                    {
+                        try
+                        {
+                            var (map, success) = ScanInstalledGamesMapCore();
+                            lock (_installedGamesMapLock)
+                            {
+                                if (success && generation == _installedGamesMapGeneration)
+                                {
+                                    _cachedInstalledGamesMap = map;
+                                    _lastInstalledGamesMapCacheTime = DateTime.UtcNow;
+                                }
+                            }
+                            return map;
+                        }
+                        finally
+                        {
+                            lock (_installedGamesMapLock)
+                            {
+                                if (ReferenceEquals(_inFlightInstalledGamesMapTask, createdTask))
+                                {
+                                    _inFlightInstalledGamesMapTask = null;
+                                }
+                            }
+                        }
+                    });
+
+                    _inFlightInstalledGamesMapTask = createdTask;
+                    task = createdTask;
+                }
+            }
+
+            var result = await task.WaitAsync(ct);
+            return new System.Collections.Generic.Dictionary<int, string>(result);
+        }
+
+        private static (System.Collections.Generic.Dictionary<int, string> map, bool success) ScanInstalledGamesMapCore()
         {
             var map = new System.Collections.Generic.Dictionary<int, string>();
             try
@@ -608,12 +847,23 @@ namespace SteamPluginManager
                             if (underscore < 0 || !int.TryParse(fileName.AsSpan(underscore + 1), out int appId))
                                 continue;
 
-                            string content;
-                            using (var fs = new FileStream(acf, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                            using (var reader = new StreamReader(fs))
+                                string? content = null;
+                            for (int attempt = 0; attempt < 3; attempt++)
                             {
-                                content = reader.ReadToEnd();
+                                try
+                                {
+                                    using var fs = new FileStream(acf, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                                    using var reader = new StreamReader(fs);
+                                    content = reader.ReadToEnd();
+                                    break;
+                                }
+                                catch (IOException)
+                                {
+                                    if (attempt < 2) System.Threading.Thread.Sleep(25);
+                                }
+                                catch { break; }
                             }
+                            if (string.IsNullOrEmpty(content)) continue;
 
                             int stateFlags = 0;
                             var stateMatch = System.Text.RegularExpressions.Regex.Match(content, "\"StateFlags\"\\s*\"([^\"]+)\"");
@@ -622,8 +872,9 @@ namespace SteamPluginManager
                                 int.TryParse(stateMatch.Groups[1].Value, out stateFlags);
                             }
 
-                            bool isDownloadingOrPaused = (stateFlags & (256 | 512 | 1024)) != 0;
-                            bool isInstalled = (stateFlags & 4) != 0 && !isDownloadingOrPaused;
+                            // In Steam, bit 4 (StateFullyInstalled = 4) denotes the game is installed on disk.
+                            // Active cloud sync (256) or update check (1024) does not negate installation.
+                            bool isInstalled = (stateFlags & 4) != 0;
 
                             if (isInstalled)
                             {
@@ -673,12 +924,63 @@ namespace SteamPluginManager
                         catch { }
                     }
                 }
+
+                // Also map any games configured via CustomLaunchService (non-Steam or external launchers)
+                try
+                {
+                    var customConfigs = CustomLaunchService.LoadAllConfigs();
+                    if (customConfigs != null)
+                    {
+                        foreach (var kvp in customConfigs)
+                        {
+                            var cfg = kvp.Value;
+                            if (cfg != null && cfg.IsEnabled && !string.IsNullOrWhiteSpace(cfg.ExecutablePath) && File.Exists(cfg.ExecutablePath))
+                            {
+                                string gameDir = !string.IsNullOrWhiteSpace(cfg.WorkingDirectory) && Directory.Exists(cfg.WorkingDirectory)
+                                    ? cfg.WorkingDirectory
+                                    : Path.GetDirectoryName(cfg.ExecutablePath) ?? "";
+
+                                if (!string.IsNullOrWhiteSpace(gameDir) && Directory.Exists(gameDir) && !map.ContainsKey(kvp.Key))
+                                {
+                                    map[kvp.Key] = gameDir;
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                // Also map any games tracked via OnlineFixTrackerService
+                try
+                {
+                    string trackingDir = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "SteamPluginManager",
+                        "OnlineFixManifests"
+                    );
+                    if (Directory.Exists(trackingDir))
+                    {
+                        foreach (var mf in Directory.GetFiles(trackingDir, "*.json"))
+                        {
+                            string fn = Path.GetFileNameWithoutExtension(mf);
+                            if (int.TryParse(fn, out int ofAppId) && !map.ContainsKey(ofAppId))
+                            {
+                                var rec = OnlineFixTrackerService.GetInstallRecord(ofAppId);
+                                if (rec != null && !string.IsNullOrWhiteSpace(rec.TargetFolder) && Directory.Exists(rec.TargetFolder))
+                                {
+                                    map[ofAppId] = rec.TargetFolder;
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
             }
             catch (Exception ex)
             {
                 Logger.Log($"[SteamHelper] Error getting installed games map: {ex.Message}");
             }
-            return map;
+            return (map, true);
         }
 
         /// <summary>
@@ -745,6 +1047,20 @@ namespace SteamPluginManager
                     {
                         Logger.Log($"[SteamHelper] Found installation folder for AppID {appId} via OnlineFixTracker: {installRecord.TargetFolder}");
                         return installRecord.TargetFolder;
+                    }
+
+                    // 4. Check Custom Launch config if enabled
+                    var customCfg = CustomLaunchService.GetConfig(appId);
+                    if (customCfg != null && customCfg.IsEnabled && !string.IsNullOrWhiteSpace(customCfg.ExecutablePath) && File.Exists(customCfg.ExecutablePath))
+                    {
+                        string customDir = !string.IsNullOrWhiteSpace(customCfg.WorkingDirectory) && Directory.Exists(customCfg.WorkingDirectory)
+                            ? customCfg.WorkingDirectory
+                            : Path.GetDirectoryName(customCfg.ExecutablePath) ?? "";
+                        if (!string.IsNullOrWhiteSpace(customDir) && Directory.Exists(customDir))
+                        {
+                            Logger.Log($"[SteamHelper] Found installation folder for AppID {appId} via CustomLaunch: {customDir}");
+                            return customDir;
+                        }
                     }
                 }
 
@@ -851,167 +1167,167 @@ namespace SteamPluginManager
             {
                 string logTail = GetContentLogTail(32768);
 
-                foreach (var library in EnumerateSteamLibraries())
-                {
-                    string manifest = Path.Combine(library, "steamapps", $"appmanifest_{appId}.acf");
-                    if (File.Exists(manifest))
+                    foreach (var library in EnumerateSteamLibraries())
                     {
-                        try
+                        string manifest = Path.Combine(library, "steamapps", $"appmanifest_{appId}.acf");
+                        if (File.Exists(manifest))
                         {
-                            string content;
-                            using (var fs = new FileStream(manifest, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                            using (var reader = new StreamReader(fs))
+                            try
                             {
-                                content = reader.ReadToEnd();
-                            }
-
-                            int stateFlags = 0;
-                            var stateMatch = System.Text.RegularExpressions.Regex.Match(content, "\"StateFlags\"\\s*\"([^\"]+)\"");
-                            if (stateMatch.Success)
-                            {
-                                int.TryParse(stateMatch.Groups[1].Value, out stateFlags);
-                            }
-                            result.StateFlags = stateFlags;
-
-                            int updateResult = 0;
-                            var updateResultMatch = System.Text.RegularExpressions.Regex.Match(content, "\"UpdateResult\"\\s*\"([^\"]+)\"");
-                            if (updateResultMatch.Success)
-                            {
-                                int.TryParse(updateResultMatch.Groups[1].Value, out updateResult);
-                            }
-                            result.UpdateResult = updateResult;
-
-                            long bytesDownloaded = 0;
-                            var dlMatch = System.Text.RegularExpressions.Regex.Match(content, "\"BytesDownloaded\"\\s*\"([^\"]+)\"");
-                            if (dlMatch.Success)
-                            {
-                                long.TryParse(dlMatch.Groups[1].Value, out bytesDownloaded);
-                            }
-
-                            long bytesTotal = 0;
-                            var totalMatch = System.Text.RegularExpressions.Regex.Match(content, "\"BytesToDownload\"\\s*\"([^\"]+)\"");
-                            if (totalMatch.Success)
-                            {
-                                long.TryParse(totalMatch.Groups[1].Value, out bytesTotal);
-                            }
-
-                            // Reconcile with latest Steam content_log.txt events if available
-                            if (!string.IsNullOrEmpty(logTail))
-                            {
-                                var startMatches = System.Text.RegularExpressions.Regex.Matches(logTail, $@"AppID\s+{appId}\s+update started\s*:\s*download\s+(\d+)/(\d+)");
-                                if (startMatches.Count > 0)
+                                string content;
+                                using (var fs = new FileStream(manifest, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                                using (var reader = new StreamReader(fs))
                                 {
-                                    var lastStart = startMatches[startMatches.Count - 1];
-                                    if (long.TryParse(lastStart.Groups[1].Value, out long logDl) && logDl > bytesDownloaded)
-                                    {
-                                        bytesDownloaded = logDl;
-                                    }
-                                    if (long.TryParse(lastStart.Groups[2].Value, out long logTotal) && logTotal > bytesTotal)
-                                    {
-                                        bytesTotal = logTotal;
-                                    }
+                                    content = reader.ReadToEnd();
                                 }
 
-                                int idxCanceled = logTail.LastIndexOf($"AppID {appId} update canceled");
-                                int idxStarted = logTail.LastIndexOf($"AppID {appId} update started");
-                                if (idxCanceled > idxStarted && idxCanceled >= 0)
+                                int stateFlags = 0;
+                                var stateMatch = System.Text.RegularExpressions.Regex.Match(content, "\"StateFlags\"\\s*\"([^\"]+)\"");
+                                if (stateMatch.Success)
                                 {
-                                    updateResult = 4; // Suspended / Paused
+                                    int.TryParse(stateMatch.Groups[1].Value, out stateFlags);
                                 }
-                                else
+                                result.StateFlags = stateFlags;
+
+                                int updateResult = 0;
+                                var updateResultMatch = System.Text.RegularExpressions.Regex.Match(content, "\"UpdateResult\"\\s*\"([^\"]+)\"");
+                                if (updateResultMatch.Success)
                                 {
-                                    int idxState = logTail.LastIndexOf($"AppID {appId} state changed : ");
-                                    if (idxState > idxStarted && idxState >= 0)
+                                    int.TryParse(updateResultMatch.Groups[1].Value, out updateResult);
+                                }
+                                result.UpdateResult = updateResult;
+
+                                long bytesDownloaded = 0;
+                                var dlMatch = System.Text.RegularExpressions.Regex.Match(content, "\"BytesDownloaded\"\\s*\"([^\"]+)\"");
+                                if (dlMatch.Success)
+                                {
+                                    long.TryParse(dlMatch.Groups[1].Value, out bytesDownloaded);
+                                }
+
+                                long bytesTotal = 0;
+                                var totalMatch = System.Text.RegularExpressions.Regex.Match(content, "\"BytesToDownload\"\\s*\"([^\"]+)\"");
+                                if (totalMatch.Success)
+                                {
+                                    long.TryParse(totalMatch.Groups[1].Value, out bytesTotal);
+                                }
+
+                                // Reconcile with latest Steam content_log.txt events if available
+                                if (!string.IsNullOrEmpty(logTail))
+                                {
+                                        var startMatches = System.Text.RegularExpressions.Regex.Matches(logTail, $@"AppID\s+{appId}\s+update started\s*:\s*download\s+(\d+)/(\d+)");
+                                    if (startMatches.Count > 0)
                                     {
-                                        int endOfLine = logTail.IndexOf('\n', idxState);
-                                        string line = endOfLine > idxState ? logTail.Substring(idxState, endOfLine - idxState) : logTail.Substring(idxState);
-                                        if (line.Contains("(Suspended)"))
+                                            var lastStart = startMatches[startMatches.Count - 1];
+                                        if (long.TryParse(lastStart.Groups[1].Value, out long logDl) && logDl > bytesDownloaded)
                                         {
-                                            updateResult = 4;
+                                            bytesDownloaded = logDl;
+                                        }
+                                            if (long.TryParse(lastStart.Groups[2].Value, out long logTotal) && logTotal > bytesTotal)
+                                            {
+                                                bytesTotal = logTotal;
+                                            }
+                                }
+
+                                    int idxCanceled = logTail.LastIndexOf($"AppID {appId} update canceled");
+                                    int idxStarted = logTail.LastIndexOf($"AppID {appId} update started");
+                                    if (idxCanceled > idxStarted && idxCanceled >= 0)
+                                    {
+                                        updateResult = 4; // Suspended / Paused
+                                    }
+                                    else
+                                    {
+                                        int idxState = logTail.LastIndexOf($"AppID {appId} state changed : ");
+                                        if (idxState > idxStarted && idxState >= 0)
+                                        {
+                                                int endOfLine = logTail.IndexOf('\n', idxState);
+                                            string line = endOfLine > idxState ? logTail.Substring(idxState, endOfLine - idxState) : logTail.Substring(idxState);
+                                            if (line.Contains("(Suspended)"))
+                                            {
+                                                updateResult = 4;
+                                            }
                                         }
                                     }
                                 }
-                            }
 
-                            result.BytesDownloaded = bytesDownloaded;
-                            result.BytesTotal = bytesTotal;
+                                result.BytesDownloaded = bytesDownloaded;
+                                result.BytesTotal = bytesTotal;
 
-                            string? installDir = null;
-                            var dirMatch = System.Text.RegularExpressions.Regex.Match(content, "\"installdir\"\\s*\"([^\"]+)\"");
-                            if (dirMatch.Success)
-                            {
-                                installDir = dirMatch.Groups[1].Value;
-                                string rawFolder = Path.Combine(library, "steamapps", "common", installDir).Replace('/', '\\');
-                                string gameFolder = rawFolder;
-                                try { gameFolder = Path.GetFullPath(rawFolder); } catch { }
-                                if (Directory.Exists(gameFolder))
+                                string? installDir = null;
+                                var dirMatch = System.Text.RegularExpressions.Regex.Match(content, "\"installdir\"\\s*\"([^\"]+)\"");
+                                if (dirMatch.Success)
                                 {
-                                    result.InstallPath = gameFolder;
-                                }
-                            }
-
-                            bool isExplicitlyPaused = (stateFlags & 512) != 0 || updateResult == 4 || updateResult == 2;
-                            bool isValidating = (stateFlags & 131072) != 0;
-
-                            if (!isValidating && !string.IsNullOrEmpty(logTail))
-                            {
-                                int idxValStart = Math.Max(
-                                    logTail.LastIndexOf($"Start validating appID {appId}", StringComparison.OrdinalIgnoreCase),
-                                    logTail.LastIndexOf($"AppID {appId} App update changed : Running Update,Verifying Installed,", StringComparison.OrdinalIgnoreCase)
-                                );
-                                if (idxValStart >= 0)
-                                {
-                                    int idxFinished = Math.Max(
-                                        logTail.LastIndexOf($"AppID {appId} scheduler finished", StringComparison.OrdinalIgnoreCase),
-                                        logTail.LastIndexOf($"AppID {appId} App update changed : None", StringComparison.OrdinalIgnoreCase)
-                                    );
-                                    if (idxValStart > idxFinished)
+                                    installDir = dirMatch.Groups[1].Value;
+                                    string rawFolder = Path.Combine(library, "steamapps", "common", installDir).Replace('/', '\\');
+                                    string gameFolder = rawFolder;
+                                    try { gameFolder = Path.GetFullPath(rawFolder); } catch { }
+                                    if (Directory.Exists(gameFolder))
                                     {
-                                        isValidating = true;
+                                        result.InstallPath = gameFolder;
                                     }
                                 }
-                            }
 
-                            if (isValidating)
-                            {
-                                result.State = SteamAppState.Validating;
-                                return result;
-                            }
+                                bool isExplicitlyPaused = (stateFlags & 512) != 0 || updateResult == 4 || updateResult == 2;
+                                bool isValidating = (stateFlags & 131072) != 0;
 
-                            if (isExplicitlyPaused && (bytesTotal > 0 && bytesDownloaded < bytesTotal))
-                            {
-                                result.State = SteamAppState.Paused;
-                                result.DownloadRateMbps = 0.0;
-                                return result;
-                            }
+                                if (!isValidating && !string.IsNullOrEmpty(logTail))
+                                {
+                                    int idxValStart = Math.Max(
+                                        logTail.LastIndexOf($"Start validating appID {appId}", StringComparison.OrdinalIgnoreCase),
+                                        logTail.LastIndexOf($"AppID {appId} App update changed : Running Update,Verifying Installed,", StringComparison.OrdinalIgnoreCase)
+                                    );
+                                    if (idxValStart >= 0)
+                                    {
+                                        int idxFinished = Math.Max(
+                                            logTail.LastIndexOf($"AppID {appId} scheduler finished", StringComparison.OrdinalIgnoreCase),
+                                            logTail.LastIndexOf($"AppID {appId} App update changed : None", StringComparison.OrdinalIgnoreCase)
+                                        );
+                                        if (idxValStart > idxFinished)
+                                        {
+                                            isValidating = true;
+                                        }
+                                    }
+                                }
 
-                            bool isActivelyDownloading = (stateFlags & (256 | 1024 | 524288 | 1048576 | 2097152 | 4194304)) != 0
-                                || (bytesTotal > 0 && bytesDownloaded < bytesTotal);
+                                if (isValidating)
+                                {
+                                    result.State = SteamAppState.Validating;
+                                    return result;
+                                }
 
-                            if (isActivelyDownloading && !isExplicitlyPaused)
-                            {
-                                result.State = SteamAppState.Downloading;
-                                result.DownloadRateMbps = GetLiveDownloadRateMbps();
-                                return result;
-                            }
+                                    if (isExplicitlyPaused && (bytesTotal > 0 && bytesDownloaded < bytesTotal))
+                                    {
+                                        result.State = SteamAppState.Paused;
+                                        result.DownloadRateMbps = 0.0;
+                                        return result;
+                                    }
 
-                            if ((stateFlags & 4) != 0 && (stateFlags & (256 | 1024)) == 0 && !string.IsNullOrWhiteSpace(result.InstallPath))
-                            {
-                                result.State = SteamAppState.Installed;
-                                return result;
+                                    bool isActivelyDownloading = (stateFlags & (256 | 1024 | 524288 | 1048576 | 2097152 | 4194304)) != 0
+                                        || (bytesTotal > 0 && bytesDownloaded < bytesTotal);
+
+                                if (isActivelyDownloading && !isExplicitlyPaused)
+                                {
+                                    result.State = SteamAppState.Downloading;
+                                    result.DownloadRateMbps = GetLiveDownloadRateMbps();
+                                    return result;
+                                }
+
+                                    if ((stateFlags & 4) != 0 && (stateFlags & (256 | 1024)) == 0 && !string.IsNullOrWhiteSpace(result.InstallPath))
+                                    {
+                                        result.State = SteamAppState.Installed;
+                                        return result;
+                                    }
                             }
+                            catch { }
                         }
-                        catch { }
-                    }
 
                     // Check if downloading staging folder exists even if manifest is still initializing
                     string downloadingFolder = Path.Combine(library, "steamapps", "downloading", appId.ToString());
-                    if (Directory.Exists(downloadingFolder))
-                    {
-                        result.State = SteamAppState.Downloading;
-                        result.DownloadRateMbps = GetLiveDownloadRateMbps();
-                        return result;
-                    }
+                        if (Directory.Exists(downloadingFolder))
+                        {
+                            result.State = SteamAppState.Downloading;
+                            result.DownloadRateMbps = GetLiveDownloadRateMbps();
+                            return result;
+                        }
                 }
 
                 // If direct appmanifest_{appId}.acf was not found, check if this appId is a sub-DLC / component of an installed parent game
@@ -1119,17 +1435,17 @@ namespace SteamPluginManager
                                     result.StateFlags = pStateFlags;
 
                                     bool isDownloadingOrPaused = (pStateFlags & (256 | 512 | 1024)) != 0;
-                                    if ((pStateFlags & 4) != 0 && !isDownloadingOrPaused)
-                                    {
-                                        result.State = SteamAppState.Installed;
-                                        return result;
-                                    }
-                                    else if (isDownloadingOrPaused)
-                                    {
-                                        result.State = (pStateFlags & 512) != 0 ? SteamAppState.Paused : SteamAppState.Downloading;
-                                        result.DownloadRateMbps = GetLiveDownloadRateMbps();
-                                        return result;
-                                    }
+                                        if ((pStateFlags & 4) != 0)
+                                        {
+                                            result.State = SteamAppState.Installed;
+                                            return result;
+                                        }
+                                        else if (isDownloadingOrPaused)
+                                        {
+                                            result.State = (pStateFlags & 512) != 0 ? SteamAppState.Paused : SteamAppState.Downloading;
+                                            result.DownloadRateMbps = GetLiveDownloadRateMbps();
+                                            return result;
+                                        }
                                 }
                             }
                         }

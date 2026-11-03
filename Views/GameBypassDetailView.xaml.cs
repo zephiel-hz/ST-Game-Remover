@@ -871,6 +871,8 @@ namespace SteamPluginManager.Views
 
         private async void AddToLibrary_Click(object sender, RoutedEventArgs e)
         {
+            string? tempZip = null;
+            string? extractDir = null;
             try
             {
                 if (_currentFile == null)
@@ -949,7 +951,7 @@ namespace SteamPluginManager.Views
                 // 1. Download file dari R2 (debug log detail)
                 string r2Key = _currentFile.FileName;
                 Logger.Log($"[GameBypassDetailView] Attempting to download from R2. FileName: '{_currentFile.FileName}', r2Key: '{r2Key}'");
-                string tempZip = Path.Combine(Path.GetTempPath(), $"bypass_{Guid.NewGuid()}.zip");
+                tempZip = Path.Combine(Path.GetTempPath(), $"bypass_{Guid.NewGuid()}.zip");
                 try
                 {
                     var progress = new Progress<int>(p =>
@@ -981,13 +983,14 @@ namespace SteamPluginManager.Views
                         });
                     });
 
-                    byte[] zipBytes = await SteamPluginManager.R2Config.DownloadFileAsync(r2Key, progress, _downloadCancellationTokenSource.Token, PauseCheckAsync);
-                    Logger.Log($"[GameBypassDetailView] Download success. Size: {zipBytes?.Length ?? 0} bytes");
-                    await File.WriteAllBytesAsync(tempZip, zipBytes);
+                    await SteamPluginManager.R2Config.DownloadFileToPathAsync(r2Key, tempZip, progress, _downloadCancellationTokenSource.Token, PauseCheckAsync);
+                    var zipInfo = new FileInfo(tempZip);
+                    Logger.Log($"[GameBypassDetailView] Download success. Size: {zipInfo.Length} bytes");
                 }
                 catch (OperationCanceledException ex)
                 {
                     Logger.Log($"[GameBypassDetailView] Download cancelled by user. Exception: {ex.Message}");
+                    try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
                     ShowResultNotification(false, "✗ Download cancelled!");
                     ShowLoadingState(false);
                     ShowControlButtons(false);
@@ -997,7 +1000,8 @@ namespace SteamPluginManager.Views
                 }
                 catch (Exception exDownload)
                 {
-                    Logger.Log($"[GameBypassDetailView] DownloadFileAsync failed for key '{r2Key}'. Exception: {exDownload.Message}\nStackTrace: {exDownload.StackTrace}");
+                    try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
+                    Logger.Log($"[GameBypassDetailView] DownloadFileToPathAsync failed for key '{r2Key}'. Exception: {exDownload.Message}\nStackTrace: {exDownload.StackTrace}");
                     throw;
                 }
 
@@ -1012,9 +1016,12 @@ namespace SteamPluginManager.Views
                 }
 
                 // 2. Ekstrak file ZIP
-                string extractDir = Path.Combine(Path.GetTempPath(), $"bypass_extract_{Guid.NewGuid()}");
+                extractDir = Path.Combine(Path.GetTempPath(), $"bypass_extract_{Guid.NewGuid()}");
                 Directory.CreateDirectory(extractDir);
                 await Task.Run(() => ZipFile.ExtractToDirectory(tempZip, extractDir));
+
+                // Temporary ZIP is no longer needed once extracted
+                try { File.Delete(tempZip); } catch { }
 
                 ShowLoadingState(true, "Checking target folder...", "Verifying directory structure...");
                 UpdateProgressStep(4);
@@ -1118,6 +1125,8 @@ namespace SteamPluginManager.Views
                 _downloadCancellationTokenSource?.Dispose();
                 _downloadCancellationTokenSource = null;
                 _isPaused = false;
+                try { if (!string.IsNullOrEmpty(tempZip) && File.Exists(tempZip)) File.Delete(tempZip); } catch { }
+                try { if (!string.IsNullOrEmpty(extractDir) && Directory.Exists(extractDir)) Directory.Delete(extractDir, true); } catch { }
             }
         }
 
