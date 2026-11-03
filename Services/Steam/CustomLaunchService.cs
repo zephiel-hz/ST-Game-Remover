@@ -429,7 +429,7 @@ namespace SteamPluginManager.Services.Steam
                     }
 
                     // Launch custom target
-                    SteamHelper.LaunchSteam();
+
 
                     string workDir = !string.IsNullOrWhiteSpace(config.WorkingDirectory) && Directory.Exists(config.WorkingDirectory)
                         ? config.WorkingDirectory
