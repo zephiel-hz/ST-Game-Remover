@@ -2325,7 +2325,7 @@ namespace SteamPluginManager.Views
 
                     };
 
-                    SetProfileStatus("No profile found. Create one now.");
+                    SetProfileStatus("No profile found. Create one if you want to use community features.");
 
                 }
 
@@ -2351,10 +2351,8 @@ namespace SteamPluginManager.Views
 
 
 
-                // Force user to set display name on startup if it has never been set
-
+                // Allow users to skip setup so an intentionally deleted profile is not recreated automatically.
                 if (string.IsNullOrWhiteSpace(_currentUserProfile.DisplayName))
-
                 {
 
                     var mainShell = WindowNavigator.GetMainShell();
@@ -2381,7 +2379,7 @@ namespace SteamPluginManager.Views
 
                                 }
 
-                            }, isMandatorySetup: true);
+                            }, isMandatorySetup: false);
 
                         });
 
@@ -6413,6 +6411,8 @@ namespace SteamPluginManager.Views
 
             {
 
+                await DeviceIdentityService.ResolveAndMigrateAsync();
+
                 string deviceId = DeviceIdentifier.GetDeviceId();
 
                 if (!DeviceIdentifier.IsValidDeviceId(deviceId))
@@ -6588,4 +6588,3 @@ namespace SteamPluginManager.Views
     }
 
 }
-

@@ -96,6 +96,11 @@ namespace SteamPluginManager
             _mainShellInstance?.NavigateToSettings();
         }
 
+        public static void NavigateToTools()
+        {
+            _mainShellInstance?.NavigateToTools();
+        }
+
         public static void NavigateToDev()
         {
             _mainShellInstance?.NavigateToDev();

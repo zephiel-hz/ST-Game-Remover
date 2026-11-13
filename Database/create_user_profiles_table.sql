@@ -20,6 +20,7 @@ ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow public select on user_profiles" ON user_profiles;
 DROP POLICY IF EXISTS "Allow public insert on user_profiles" ON user_profiles;
 DROP POLICY IF EXISTS "Allow public update on user_profiles" ON user_profiles;
+DROP POLICY IF EXISTS "Allow service role delete on user_profiles" ON user_profiles;
 
 -- Allow public read access
 CREATE POLICY "Allow public select on user_profiles"
@@ -43,10 +44,18 @@ TO public, anon, authenticated
 USING (true)
 WITH CHECK (true);
 
+-- Allow profile deletion only through the trusted service-role key used by the admin console
+CREATE POLICY "Allow service role delete on user_profiles"
+ON user_profiles
+FOR DELETE
+TO service_role
+USING (true);
+
 -- Grant necessary permissions
 GRANT SELECT, INSERT, UPDATE ON user_profiles TO anon;
 GRANT SELECT, INSERT, UPDATE ON user_profiles TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON user_profiles TO public;
+GRANT DELETE ON user_profiles TO service_role;
 
 -- Grant permissions on the sequence (for IDENTITY columns)
 GRANT USAGE, SELECT ON SEQUENCE user_profiles_id_seq TO anon;

@@ -156,10 +156,10 @@
             <Trigger Property="IsMouseOver" Value="True">
               <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource HoverBrush}"/>
             </Trigger>
-            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+            <Trigger Property="IsSelected" Value="True">
               <Setter TargetName="itemBorder" Property="Background" Value="{DynamicResource SelectedBrush}"/>
               <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
-            </DataTrigger>
+            </Trigger>
             <Trigger Property="ItemsControl.AlternationIndex" Value="0">
               <Setter TargetName="itemBorder" Property="Background" Value="Transparent"/>
             </Trigger>

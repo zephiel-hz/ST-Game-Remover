@@ -58,7 +58,9 @@ cache/
 data/
 logs/
 *.bak
-Database/
+Database/*
+!Database/create_community_message_reactions.sql
+!Database/migrate_device_tpm_identity.sql
 hubcap_app.js
 
 # Logs and diagnostic output

@@ -13,6 +13,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using EmojiData = Emoji.Wpf.EmojiData;
+using EmojiInline = Emoji.Wpf.EmojiInline;
 using SteamPluginManager.Models;
 using SteamPluginManager.Services.API;
 using SteamPluginManager.Services.Security;
@@ -58,6 +60,9 @@ namespace SteamPluginManager.Views
 
         private static readonly Regex _mentionOrUrlRegex = new(
             @"(@[a-zA-Z0-9_.-]+|https?://[^\s]+|www\.[^\s]+)", 
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private static readonly Regex _urlRegex = new(
+            @"(https?://[^\s]+|www\.[^\s]+)",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         /// <summary>
@@ -151,55 +156,78 @@ namespace SteamPluginManager.Views
                          part.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
                          part.StartsWith("www.", StringComparison.OrdinalIgnoreCase))
                 {
-                    string cleanUrl = part;
-                    string trailingPunctuation = string.Empty;
-                    while (cleanUrl.Length > 0 && ".,;:!?)'\"".IndexOf(cleanUrl[^1]) >= 0)
-                    {
-                        trailingPunctuation = cleanUrl[^1] + trailingPunctuation;
-                        cleanUrl = cleanUrl.Substring(0, cleanUrl.Length - 1);
-                    }
-
-                    string navUrl = cleanUrl;
-                    if (navUrl.StartsWith("www.", StringComparison.OrdinalIgnoreCase))
-                    {
-                        navUrl = "https://" + navUrl;
-                    }
-
-                    string displayUrl = InsertSoftBreaks(cleanUrl);
-
-                    var hyperlink = new Hyperlink(new Run(displayUrl))
-                    {
-                        TextDecorations = TextDecorations.Underline,
-                        FontWeight = FontWeights.Normal,
-                        Foreground = urlBrush,
-                        Cursor = Cursors.Hand,
-                        ToolTip = $"Open link: {navUrl}"
-                    };
-
-                    hyperlink.Click += (s, e) =>
-                    {
-                        try
-                        {
-                            Process.Start(new ProcessStartInfo(navUrl) { UseShellExecute = true });
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.Log($"[CommunityChatWidget] Failed to open URL '{navUrl}': {ex.Message}");
-                        }
-                    };
-
-                    tb.Inlines.Add(hyperlink);
-
-                    if (!string.IsNullOrEmpty(trailingPunctuation))
-                    {
-                        tb.Inlines.Add(new Run(trailingPunctuation) { Foreground = textBrush });
-                    }
+                    AddUrlInlines(tb, part, urlBrush, textBrush);
                 }
                 else
                 {
                     string displayText = InsertSoftBreaks(part);
                     tb.Inlines.Add(new Run(displayText) { Foreground = textBrush });
                 }
+            }
+        }
+
+        private static void RenderAnnouncementInlines(TextBlock textBlock, string text)
+        {
+            textBlock.Inlines.Clear();
+            Brush textBrush = textBlock.Foreground;
+            foreach (var part in _urlRegex.Split(text))
+            {
+                if (string.IsNullOrEmpty(part))
+                    continue;
+
+                if (part.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                    part.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                    part.StartsWith("www.", StringComparison.OrdinalIgnoreCase))
+                {
+                    AddUrlInlines(textBlock, part, Application.Current?.TryFindResource("AccentBrush") as Brush ?? textBrush, textBrush);
+                }
+                else
+                {
+                    textBlock.Inlines.Add(new Run(InsertSoftBreaks(part)) { Foreground = textBrush });
+                }
+            }
+        }
+
+        private static void AddUrlInlines(TextBlock textBlock, string urlWithPunctuation, Brush urlBrush, Brush textBrush)
+        {
+            string cleanUrl = urlWithPunctuation;
+            string trailingPunctuation = string.Empty;
+            while (cleanUrl.Length > 0 && ".,;:!?)'\"".IndexOf(cleanUrl[^1]) >= 0)
+            {
+                trailingPunctuation = cleanUrl[^1] + trailingPunctuation;
+                cleanUrl = cleanUrl.Substring(0, cleanUrl.Length - 1);
+            }
+
+            if (cleanUrl.Length > 0)
+            {
+                string navUrl = cleanUrl.StartsWith("www.", StringComparison.OrdinalIgnoreCase)
+                    ? "https://" + cleanUrl
+                    : cleanUrl;
+                var hyperlink = new Hyperlink(new Run(InsertSoftBreaks(cleanUrl)))
+                {
+                    TextDecorations = TextDecorations.Underline,
+                    FontWeight = FontWeights.Normal,
+                    Foreground = urlBrush,
+                    Cursor = Cursors.Hand,
+                    ToolTip = $"Open link: {navUrl}"
+                };
+                hyperlink.Click += (_, _) => OpenUrl(navUrl);
+                textBlock.Inlines.Add(hyperlink);
+            }
+
+            if (!string.IsNullOrEmpty(trailingPunctuation))
+                textBlock.Inlines.Add(new Run(trailingPunctuation) { Foreground = textBrush });
+        }
+
+        private static void OpenUrl(string url)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[CommunityChatWidget] Failed to open URL '{url}': {ex.Message}");
             }
         }
         #endregion
@@ -218,7 +246,56 @@ namespace SteamPluginManager.Views
         private bool _isSending;
         private bool _isLoading;
         private bool _isUpdatingMentionList;
+        private bool _isNormalizingChatInput;
         private string _pendingMentionQuery = string.Empty;
+        private int _emojiSelectionStart;
+        private int _emojiSelectionLength;
+        private ChatMessage? _reactionTargetMessage;
+        private readonly HashSet<long> _pendingReactionToggles = new();
+        private const int MaxChatMessageLength = 300;
+
+        private sealed class EmojiPickerCategory
+        {
+            public string Name { get; init; } = string.Empty;
+            public string Icon { get; init; } = string.Empty;
+            public List<List<EmojiData.Emoji>> EmojiRows { get; init; } = new();
+        }
+
+        private static List<EmojiPickerCategory> CreateEmojiPickerCategories()
+        {
+            return EmojiData.AllGroups
+                .Select(group =>
+                {
+                    var emojis = new List<EmojiData.Emoji>();
+                    var seenEmoji = new HashSet<string>();
+
+                    foreach (var emoji in group.EmojiList)
+                    {
+                        IEnumerable<EmojiData.Emoji> variations = emoji.VariationList.Count > 0
+                            ? emoji.VariationList
+                            : new[] { emoji };
+
+                        foreach (var variation in variations)
+                        {
+                            if (seenEmoji.Add(variation.Text))
+                                emojis.Add(variation);
+                        }
+                    }
+
+                    var emojiRows = new List<List<EmojiData.Emoji>>();
+                    for (int i = 0; i < emojis.Count; i += 8)
+                        emojiRows.Add(emojis.Skip(i).Take(8).ToList());
+
+                    return new EmojiPickerCategory
+                    {
+                        Name = group.Name,
+                        Icon = group.Icon ?? string.Empty,
+                        EmojiRows = emojiRows
+                    };
+                })
+                .Where(category => category.EmojiRows.Count > 0)
+                .ToList();
+        }
 
         private DateTime _lastHeartbeatSent = DateTime.MinValue;
 
@@ -231,6 +308,7 @@ namespace SteamPluginManager.Views
             MessagesItemsControl.ItemsSource = _messages;
             OnlineUsersItemsControl.ItemsSource = _onlineUsersList;
             OfflineUsersItemsControl.ItemsSource = _offlineUsersList;
+            EmojiPickerTabControl.ItemsSource = CreateEmojiPickerCategories();
 
             // Subscribe to local/realtime avatar updates
             Services.Profile.ProfilePictureCacheService.OnAvatarUpdated += (userId, img) =>
@@ -692,7 +770,7 @@ namespace SteamPluginManager.Views
                             ? cleanMessage
                             : $"{announcement.Title}  •  {cleanMessage}";
 
-                        PinnedMarqueeTextBlock.Text = combinedText;
+                        RenderAnnouncementInlines(PinnedMarqueeTextBlock, combinedText);
                         PinnedAnnouncementBanner.ToolTip = string.IsNullOrWhiteSpace(announcement.Title)
                             ? announcement.Message
                             : $"📢 {announcement.Title}\n{announcement.Message}";
@@ -792,7 +870,7 @@ namespace SteamPluginManager.Views
 
         public async void Expand()
         {
-            CollapsedPill.Visibility = Visibility.Collapsed;
+            IsHitTestVisible = true;
             ExpandedDrawer.Visibility = Visibility.Visible;
 
             await CheckUserProfileStatusAsync();
@@ -812,10 +890,18 @@ namespace SteamPluginManager.Views
         {
             _pollTimer.Stop();
             _mentionDebounceTimer.Stop();
+            CloseEmojiPicker();
             ExpandedDrawer.Visibility = Visibility.Collapsed;
-            CollapsedPill.Visibility = Visibility.Visible;
             MentionSuggestionPopup.IsOpen = false;
             MiniProfileCardOverlay.Visibility = Visibility.Collapsed;
+            IsHitTestVisible = false;
+        }
+
+        public void CloseEmojiPicker()
+        {
+            EmojiPickerPopup.IsOpen = false;
+            _reactionTargetMessage = null;
+            EmojiPickerPopup.PlacementTarget = ChatInputContainer;
         }
 
         public void Toggle()
@@ -918,7 +1004,7 @@ namespace SteamPluginManager.Views
 
                 _ = RefreshBroadcastAnnouncementAsync();
 
-                var fetched = await CommunityChatService.GetRecentMessagesAsync();
+                var fetched = await CommunityChatService.GetRecentMessagesAsync(_currentDeviceId);
                 _messages.Clear();
                 foreach (var msg in fetched)
                 {
@@ -962,7 +1048,7 @@ namespace SteamPluginManager.Views
             {
                 _ = RefreshBroadcastAnnouncementAsync();
 
-                var fetched = await CommunityChatService.GetRecentMessagesAsync();
+                var fetched = await CommunityChatService.GetRecentMessagesAsync(_currentDeviceId);
                 if (fetched == null || fetched.Count == 0) return;
 
                 long lastCurrentId = _messages.LastOrDefault()?.Id ?? 0;
@@ -1001,6 +1087,9 @@ namespace SteamPluginManager.Views
                     {
                         if (_messages[i].Id == fetched[i].Id)
                         {
+                            if (fetched[i].ReactionsLoaded)
+                                _messages[i].SetReactions(fetched[i].Reactions);
+
                             if (_messages[i].SenderName != fetched[i].SenderName)
                                 _messages[i].SenderName = fetched[i].SenderName;
                             if (_messages[i].Level != fetched[i].Level)
@@ -1500,7 +1589,7 @@ namespace SteamPluginManager.Views
                 ChatInputTextBox.Text += $"@{cleanName} ";
             }
 
-            ChatInputTextBox.CaretIndex = ChatInputTextBox.Text.Length;
+            SetChatInputCaretIndex(ChatInputTextBox.Text.Length);
             ChatInputTextBox.Focus();
         }
 
@@ -1749,14 +1838,97 @@ namespace SteamPluginManager.Views
         // ========================================================
         // Mention Popup Autocomplete Logic
         // ========================================================
+        private string GetChatInputTextUntil(TextPointer end)
+        {
+            var start = ChatInputTextBox.Document.ContentStart;
+            var text = new StringBuilder();
+
+            for (var position = start;
+                 position != null && position.CompareTo(end) < 0;)
+            {
+                var next = position.GetNextContextPosition(LogicalDirection.Forward);
+                if (next == null)
+                    break;
+
+                var segmentEnd = next.CompareTo(end) < 0 ? next : end;
+                switch (position.GetPointerContext(LogicalDirection.Forward))
+                {
+                    case TextPointerContext.ElementStart:
+                        if (position.GetAdjacentElement(LogicalDirection.Forward) is EmojiInline emoji)
+                            text.Append(emoji.Text);
+                        break;
+                    case TextPointerContext.Text:
+                        text.Append(new TextRange(position, segmentEnd).Text);
+                        break;
+                }
+
+                position = next;
+            }
+
+            return text.ToString();
+        }
+
+        private int GetChatInputCaretIndex()
+        {
+            return GetChatInputTextUntil(ChatInputTextBox.CaretPosition).Length;
+        }
+
+        private TextPointer GetChatInputPositionAtIndex(int index)
+        {
+            index = Math.Clamp(index, 0, (ChatInputTextBox.Text ?? string.Empty).Length);
+            int currentIndex = 0;
+
+            for (var position = ChatInputTextBox.Document.ContentStart;
+                 position != null;)
+            {
+                var context = position.GetPointerContext(LogicalDirection.Forward);
+                if (context == TextPointerContext.Text)
+                {
+                    var run = position.GetTextInRun(LogicalDirection.Forward);
+                    if (index <= currentIndex + run.Length)
+                        return position.GetPositionAtOffset(index - currentIndex, LogicalDirection.Forward) ?? position;
+
+                    currentIndex += run.Length;
+                }
+                else if (context == TextPointerContext.ElementStart &&
+                         position.GetAdjacentElement(LogicalDirection.Forward) is EmojiInline emoji)
+                {
+                    if (index <= currentIndex)
+                        return position;
+
+                    if (index < currentIndex + emoji.Text.Length)
+                        return index - currentIndex < emoji.Text.Length / 2 ? position : emoji.ElementEnd;
+
+                    currentIndex += emoji.Text.Length;
+                }
+
+                position = position.GetNextContextPosition(LogicalDirection.Forward);
+            }
+
+            return ChatInputTextBox.Document.ContentEnd;
+        }
+
+        private void SetChatInputCaretIndex(int index)
+        {
+            ChatInputTextBox.CaretPosition = GetChatInputPositionAtIndex(index);
+        }
+
         private void ChatInputTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
-            // Handle placeholder text visibility
-            if (ChatInputPlaceholder != null)
+            if (!_isNormalizingChatInput && ChatInputTextBox.Text.Length > MaxChatMessageLength)
             {
-                ChatInputPlaceholder.Visibility = string.IsNullOrEmpty(ChatInputTextBox.Text)
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
+                int caretIndex = GetChatInputCaretIndex();
+                _isNormalizingChatInput = true;
+                try
+                {
+                    ChatInputTextBox.Text = ChatInputTextBox.Text.Substring(0, MaxChatMessageLength);
+                    SetChatInputCaretIndex(Math.Min(caretIndex, MaxChatMessageLength));
+                }
+                finally
+                {
+                    _isNormalizingChatInput = false;
+                }
+                return;
             }
 
             if (_isUpdatingMentionList) return;
@@ -1764,7 +1936,7 @@ namespace SteamPluginManager.Views
             try
             {
                 string text = ChatInputTextBox.Text ?? string.Empty;
-                int caret = ChatInputTextBox.CaretIndex;
+                int caret = GetChatInputCaretIndex();
 
                 if (caret > 0 && caret <= text.Length)
                 {
@@ -1871,7 +2043,7 @@ namespace SteamPluginManager.Views
             _isUpdatingMentionList = true;
             try
             {
-                int caret = ChatInputTextBox.CaretIndex;
+                int caret = GetChatInputCaretIndex();
                 string text = ChatInputTextBox.Text ?? string.Empty;
                 int lastAt = -1;
                 if (caret > 0 && caret <= text.Length)
@@ -1885,7 +2057,7 @@ namespace SteamPluginManager.Views
                     string after = (caret < text.Length) ? text.Substring(caret) : string.Empty;
                     string inserted = $"@{senderName} ";
                     ChatInputTextBox.Text = before + inserted + after;
-                    ChatInputTextBox.CaretIndex = (before + inserted).Length;
+                    SetChatInputCaretIndex((before + inserted).Length);
                 }
                 else
                 {
@@ -1979,11 +2151,6 @@ namespace SteamPluginManager.Views
         // ========================================================
         // Widget Controls & Profile Settings
         // ========================================================
-        private void CollapsedPill_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            Expand();
-        }
-
         private void CollapseChatBtn_Click(object sender, RoutedEventArgs e)
         {
             Collapse();
@@ -2000,6 +2167,150 @@ namespace SteamPluginManager.Views
             SendCurrentMessage();
         }
 
+        private void EmojiPickerButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (EmojiPickerPopup.IsOpen)
+            {
+                CloseEmojiPicker();
+                return;
+            }
+
+            _reactionTargetMessage = null;
+            EmojiPickerPopup.PlacementTarget = ChatInputContainer;
+            _emojiSelectionStart = GetChatInputTextUntil(ChatInputTextBox.Selection.Start).Length;
+            _emojiSelectionLength = ChatInputTextBox.Selection.Text.Length;
+            EmojiPickerPopup.IsOpen = true;
+        }
+
+        private void AddReactionButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button || button.DataContext is not ChatMessage message)
+                return;
+
+            if (EmojiPickerPopup.IsOpen && ReferenceEquals(_reactionTargetMessage, message))
+            {
+                CloseEmojiPicker();
+                return;
+            }
+
+            _reactionTargetMessage = message;
+            EmojiPickerPopup.PlacementTarget = button;
+            EmojiPickerPopup.IsOpen = true;
+        }
+
+        private async void ChatReactionButton_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not ChatReactionSummary reaction)
+                return;
+
+            var message = _messages.FirstOrDefault(item => item.Id == reaction.MessageId);
+            if (message != null)
+                await ToggleMessageReactionAsync(message, reaction.Emoji);
+        }
+
+        private async Task ToggleMessageReactionAsync(ChatMessage message, string emoji)
+        {
+            if (message.Id <= 0 || string.IsNullOrWhiteSpace(_currentDeviceId))
+            {
+                ShowChatToast("Your device is not ready to react.");
+                return;
+            }
+
+            var key = message.Id;
+            if (!_pendingReactionToggles.Add(key))
+                return;
+
+            try
+            {
+                var reaction = message.Reactions.FirstOrDefault(item => item.Emoji == emoji);
+                bool addReaction = reaction?.IsSelected != true;
+                var result = await CommunityChatService.SetMessageReactionAsync(
+                    message.Id,
+                    _currentDeviceId,
+                    emoji,
+                    addReaction);
+
+                if (!result.Success)
+                {
+                    ShowChatToast(result.ErrorMessage ?? "Failed to save reaction.");
+                    return;
+                }
+
+                if (addReaction)
+                {
+                    var previousReaction = message.Reactions.FirstOrDefault(item => item.IsSelected);
+                    if (previousReaction != null && !ReferenceEquals(previousReaction, reaction))
+                    {
+                        previousReaction.Count--;
+                        if (previousReaction.Count <= 0)
+                            message.Reactions.Remove(previousReaction);
+                        else
+                            previousReaction.IsSelected = false;
+                    }
+
+                    if (reaction == null)
+                    {
+                        message.Reactions.Add(new ChatReactionSummary
+                        {
+                            MessageId = message.Id,
+                            Emoji = emoji,
+                            Count = 1,
+                            IsSelected = true
+                        });
+                    }
+                    else
+                    {
+                        reaction.Count++;
+                        reaction.IsSelected = true;
+                    }
+                }
+                else if (reaction != null)
+                {
+                    reaction.Count--;
+                    if (reaction.Count <= 0)
+                        message.Reactions.Remove(reaction);
+                    else
+                        reaction.IsSelected = false;
+                }
+            }
+            finally
+            {
+                _pendingReactionToggles.Remove(key);
+            }
+        }
+
+        private async void EmojiPickerItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button || button.Tag is not string emoji)
+                return;
+
+            if (_reactionTargetMessage != null)
+            {
+                var targetMessage = _reactionTargetMessage;
+                CloseEmojiPicker();
+                await ToggleMessageReactionAsync(targetMessage, emoji);
+                return;
+            }
+
+            string text = ChatInputTextBox.Text ?? string.Empty;
+            int start = Math.Clamp(_emojiSelectionStart, 0, text.Length);
+            int length = Math.Clamp(_emojiSelectionLength, 0, text.Length - start);
+            string updatedText = text.Remove(start, length).Insert(start, emoji);
+
+            if (updatedText.Length > MaxChatMessageLength)
+            {
+                ChatInputTextBox.Focus();
+                ShowChatToast("Message has reached the maximum length.");
+                return;
+            }
+
+            ChatInputTextBox.Text = updatedText;
+            SetChatInputCaretIndex(start + emoji.Length);
+            _emojiSelectionStart = start + emoji.Length;
+            _emojiSelectionLength = 0;
+            ChatInputTextBox.Focus();
+        }
+
         private void SetProfileNameBtn_Click(object sender, RoutedEventArgs e)
         {
             WindowNavigator.ShowCustomizeProfileModal(onSaved: async () =>
@@ -2007,5 +2318,6 @@ namespace SteamPluginManager.Views
                 await CheckUserProfileStatusAsync();
             });
         }
+
     }
 }

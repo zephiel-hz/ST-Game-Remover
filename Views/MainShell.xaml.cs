@@ -27,6 +27,7 @@ namespace SteamPluginManager.Views
         private Point _mouseDownScreenPoint = new();
         private readonly bool? _startupLicenseVerified;
         private int? _currentUserId;
+        private int _unreadMentionCount;
 
         // View instance caching for instant (0 ms) tab switching without losing state or scroll position
         private readonly Dictionary<string, object> _viewCache = new(StringComparer.OrdinalIgnoreCase);
@@ -252,14 +253,10 @@ namespace SteamPluginManager.Views
                     onNotificationClickAction: () =>
                     {
                         RestoreFromTray();
-                        if (GlobalChatWidget != null)
+                        OpenCommunityChat();
+                        if (_lastNotificationTargetId.HasValue)
                         {
-                            GlobalChatWidget.Visibility = Visibility.Visible;
-                            GlobalChatWidget.Expand();
-                            if (_lastNotificationTargetId.HasValue)
-                            {
-                                GlobalChatWidget.ScrollToAndHighlightMessage(_lastNotificationTargetId.Value);
-                            }
+                            GlobalChatWidget?.ScrollToAndHighlightMessage(_lastNotificationTargetId.Value);
                         }
                     }
                 );
@@ -273,6 +270,11 @@ namespace SteamPluginManager.Views
             await CheckStartupActivationAsync();
         }
 
+        private void Window_Deactivated(object sender, EventArgs e)
+        {
+            GlobalChatWidget?.CloseEmojiPicker();
+        }
+
         public void UpdateHeaderProfileVisibility(bool isVisible)
         {
             Dispatcher.Invoke(() =>
@@ -280,6 +282,11 @@ namespace SteamPluginManager.Views
                 if (HeaderProfilePill != null)
                 {
                     HeaderProfilePill.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
+                }
+
+                if (CommunityChatPod != null)
+                {
+                    CommunityChatPod.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
                 }
 
                 if (GlobalChatWidget != null)
@@ -411,6 +418,20 @@ namespace SteamPluginManager.Views
             }
             TransitionToView(view);
             try { GlobalSidebar?.SetActiveMenu("Settings"); } catch { }
+        }
+
+        public void NavigateToTools()
+        {
+            TitleText.Text = "Tools";
+            if (!_viewCache.TryGetValue("Tools", out var view))
+            {
+                var toolsView = new ToolsView();
+                toolsView.DataContext = this.DataContext;
+                view = toolsView;
+                _viewCache["Tools"] = view;
+            }
+            TransitionToView(view);
+            try { GlobalSidebar?.SetActiveMenu("Tools"); } catch { }
         }
 
         public void NavigateToDev()
@@ -1428,12 +1449,34 @@ namespace SteamPluginManager.Views
 
         public void ToggleCommunityChat()
         {
-            GlobalChatWidget?.Toggle();
+            if (GlobalChatWidget == null)
+                return;
+
+            if (GlobalChatWidget.IsExpanded)
+            {
+                GlobalChatWidget.Collapse();
+            }
+            else
+            {
+                OpenCommunityChat();
+            }
         }
 
         public void OpenCommunityChat()
         {
-            GlobalChatWidget?.Expand();
+            if (GlobalChatWidget == null)
+                return;
+
+            _unreadMentionCount = 0;
+            UpdateUnreadMentionBadge();
+            GlobalChatWidget.Visibility = Visibility.Visible;
+            GlobalChatWidget.Expand();
+        }
+
+        private void CommunityChatPod_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            ToggleCommunityChat();
         }
 
         #region In-App Chat Notification Toast
@@ -1463,6 +1506,12 @@ namespace SteamPluginManager.Views
                 bool isMentioned = msg.Message.Contains($"@{currentName}", StringComparison.OrdinalIgnoreCase);
                 bool isReplied = !string.IsNullOrWhiteSpace(msg.ReplyToSender) &&
                                  string.Equals(msg.ReplyToSender.Trim(), currentName, StringComparison.OrdinalIgnoreCase);
+
+                if (isMentioned && GlobalChatWidget?.IsExpanded != true)
+                {
+                    _unreadMentionCount++;
+                    UpdateUnreadMentionBadge();
+                }
 
                 _lastNotificationTargetId = msg.Id;
 
@@ -1530,15 +1579,20 @@ namespace SteamPluginManager.Views
             _notificationToastTimer?.Stop();
             InAppNotificationToast.Visibility = Visibility.Collapsed;
 
-            if (GlobalChatWidget != null)
+            OpenCommunityChat();
+            if (_lastNotificationTargetId.HasValue)
             {
-                GlobalChatWidget.Visibility = Visibility.Visible;
-                GlobalChatWidget.Expand();
-                if (_lastNotificationTargetId.HasValue)
-                {
-                    GlobalChatWidget.ScrollToAndHighlightMessage(_lastNotificationTargetId.Value);
-                }
+                GlobalChatWidget?.ScrollToAndHighlightMessage(_lastNotificationTargetId.Value);
             }
+        }
+
+        private void UpdateUnreadMentionBadge()
+        {
+            if (UnreadMentionBadge == null || UnreadMentionCountText == null)
+                return;
+
+            UnreadMentionBadge.Visibility = _unreadMentionCount > 0 ? Visibility.Visible : Visibility.Collapsed;
+            UnreadMentionCountText.Text = _unreadMentionCount > 99 ? "99+" : _unreadMentionCount.ToString();
         }
 
         private void CloseToastBtn_Click(object sender, RoutedEventArgs e)

@@ -70,7 +70,7 @@ namespace SteamPluginManager
                     // Fallback
                 }
 
-                _version = "3.1.5";
+                _version = "3.1.7";
                 return _version;
             }
         }

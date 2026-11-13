@@ -945,8 +945,16 @@
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
                                 <DataGridTextColumn Header="Device ID" Binding="{Binding DeviceId}" Width="180"/>
+                                <DataGridTextColumn Header="Token Binding" Binding="{Binding TokenBindingText}" Width="105"/>
                                 <DataGridTextColumn Header="Bio" Binding="{Binding Bio}" Width="*"/>
                                 <DataGridTextColumn Header="Last Activity" Binding="{Binding CreatedAt}" Width="130"/>
+                                <DataGridTemplateColumn Header="Action" Width="90">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button Content="Delete" Style="{StaticResource DevTableDangerButton}" Click="DeleteUserProfile_Click"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                             </DataGrid.Columns>
                         </DataGrid>
                     </Border>

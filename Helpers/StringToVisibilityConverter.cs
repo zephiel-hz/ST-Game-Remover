@@ -9,11 +9,13 @@ namespace SteamPluginManager.Helpers
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (value is string str && !string.IsNullOrWhiteSpace(str))
+            bool hasText = value is string str && !string.IsNullOrWhiteSpace(str);
+            if (string.Equals(parameter?.ToString(), "Invert", StringComparison.OrdinalIgnoreCase))
             {
-                return Visibility.Visible;
+                hasText = !hasText;
             }
-            return Visibility.Collapsed;
+
+            return hasText ? Visibility.Visible : Visibility.Collapsed;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

@@ -1033,6 +1033,7 @@ namespace SteamPluginManager.Views
                 _allUsers.Clear();
                 var http = SharedHttpClient.Instance;
                 var url = $"{SupabaseConfig.SupabaseUrl}/rest/v1/user_profiles?select=*&order=created_at.desc&limit=1000";
+                var profiles = new List<UserProfile>();
 
                 using var req = new HttpRequestMessage(HttpMethod.Get, url);
                 req.Headers.Add("apikey", SupabaseConfig.SupabaseKey);
@@ -1042,24 +1043,57 @@ namespace SteamPluginManager.Views
                 if (resp.IsSuccessStatusCode)
                 {
                     var content = await resp.Content.ReadAsStringAsync();
-                    var profiles = JsonSerializer.Deserialize<List<UserProfile>>(content, _jsonOpts);
-                    if (profiles != null)
+                    profiles = JsonSerializer.Deserialize<List<UserProfile>>(content, _jsonOpts) ?? new();
+                }
+                else
+                {
+                    LogConsole($"[Users] Failed to load user profiles: {resp.StatusCode}");
+                    return;
+                }
+
+                var tokenBoundDeviceIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                bool tokenBindingsAvailable = false;
+                try
+                {
+                    var tokenUrl = $"{SupabaseConfig.SupabaseUrl}/rest/v1/device_tokens?select=*";
+                    using var tokenReq = new HttpRequestMessage(HttpMethod.Get, tokenUrl);
+                    tokenReq.Headers.Add("apikey", SupabaseConfig.SupabaseKey);
+                    tokenReq.Headers.Add("Authorization", $"Bearer {SupabaseConfig.SupabaseKey}");
+
+                    var tokenResp = await http.SendAsync(tokenReq);
+                    if (tokenResp.IsSuccessStatusCode)
                     {
-                        foreach (var p in profiles)
-                        {
-                            _allUsers.Add(new DevUserItem
-                            {
-                                Id = p.Id ?? 0,
-                                DisplayName = p.DisplayName,
-                                BadgeText = p.BadgeText,
-                                DeviceId = p.DeviceId,
-                                Bio = p.Bio,
-                                Level = p.Level,
-                                AvatarUrl = p.AvatarUrl,
-                                CreatedAt = p.LastSeenText
-                            });
-                        }
+                        var tokenContent = await tokenResp.Content.ReadAsStringAsync();
+                        tokenBoundDeviceIds = GetTokenBoundDeviceIds(tokenContent);
+                        tokenBindingsAvailable = true;
                     }
+                    else
+                    {
+                        LogConsole($"[Users] Failed to load token bindings: {tokenResp.StatusCode}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogConsole($"[Users] Token binding status unavailable: {ex.Message}");
+                }
+
+                foreach (var p in profiles)
+                {
+                    bool canCheckBinding = tokenBindingsAvailable && !string.IsNullOrWhiteSpace(p.DeviceId);
+                    _allUsers.Add(new DevUserItem
+                    {
+                        Id = p.Id ?? 0,
+                        DisplayName = p.DisplayName,
+                        BadgeText = p.BadgeText,
+                        DeviceId = p.DeviceId,
+                        Bio = p.Bio,
+                        Level = p.Level,
+                        AvatarUrl = p.AvatarUrl,
+                        CreatedAt = p.LastSeenText,
+                        TokenBindingText = !canCheckBinding
+                            ? "Unknown"
+                            : tokenBoundDeviceIds.Contains(p.DeviceId) ? "Bound" : "Not bound"
+                    });
                 }
 
                 _allUsers.Sort((a, b) => {
@@ -1075,6 +1109,47 @@ namespace SteamPluginManager.Views
             {
                 LogConsole($"[Users] Error loading user profiles: {ex.Message}");
             }
+        }
+
+        private static HashSet<string> GetTokenBoundDeviceIds(string tokenContent)
+        {
+            var deviceIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using var doc = JsonDocument.Parse(tokenContent);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                throw new JsonException("The device token response was not an array.");
+            }
+
+            foreach (var token in doc.RootElement.EnumerateArray())
+            {
+                bool hasDeviceIds = false;
+                if (token.TryGetProperty("device_ids", out var idsElement) && idsElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var idElement in idsElement.EnumerateArray())
+                    {
+                        if (idElement.ValueKind != JsonValueKind.String) continue;
+                        var deviceId = idElement.GetString()?.Trim();
+                        if (!string.IsNullOrWhiteSpace(deviceId))
+                        {
+                            deviceIds.Add(deviceId);
+                            hasDeviceIds = true;
+                        }
+                    }
+                }
+
+                if (!hasDeviceIds &&
+                    token.TryGetProperty("device_id", out var legacyIdElement) &&
+                    legacyIdElement.ValueKind == JsonValueKind.String)
+                {
+                    var deviceId = legacyIdElement.GetString()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(deviceId))
+                    {
+                        deviceIds.Add(deviceId);
+                    }
+                }
+            }
+
+            return deviceIds;
         }
 
         private void UserSearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -1102,6 +1177,129 @@ namespace SteamPluginManager.Views
         private async void ReloadUsers_Click(object sender, RoutedEventArgs e)
         {
             await LoadUsersAsync();
+        }
+
+        private async void DeleteUserProfile_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button || button.DataContext is not DevUserItem user)
+                return;
+
+            if (user.Id <= 0)
+            {
+                ModernMessageBox.ShowWarning("This profile has an invalid ID and cannot be deleted.", "Invalid Profile");
+                return;
+            }
+
+            bool confirm = ModernMessageBox.ShowConfirm(
+                $"Are you sure you want to delete profile '{user.DisplayName}' (UID {user.Id})?\n\n" +
+                $"Token binding: {user.TokenBindingText}.\n" +
+                "This removes only the profile; any token and device binding will remain unchanged.",
+                "Delete User Profile",
+                isDestructive: true
+            );
+
+            if (!confirm) return;
+
+            try
+            {
+                var http = SharedHttpClient.Instance;
+                var deleteUrl = $"{SupabaseConfig.SupabaseUrl}/rest/v1/user_profiles?id=eq.{user.Id}";
+                using var req = new HttpRequestMessage(HttpMethod.Delete, deleteUrl);
+                req.Headers.Add("apikey", SupabaseConfig.SupabaseKey);
+                req.Headers.Add("Authorization", $"Bearer {SupabaseConfig.SupabaseKey}");
+                req.Headers.Add("Prefer", "return=representation");
+
+                var resp = await http.SendAsync(req);
+                if (!resp.IsSuccessStatusCode)
+                {
+                    ModernMessageBox.ShowError($"Failed to delete profile: {resp.StatusCode}", "Delete Error");
+                    LogConsole($"[UserRoles] Failed to delete profile '{user.DisplayName}' (UID {user.Id}): {resp.StatusCode}");
+                    return;
+                }
+
+                var deletedContent = await resp.Content.ReadAsStringAsync();
+                var deletedProfiles = string.IsNullOrWhiteSpace(deletedContent)
+                    ? null
+                    : JsonSerializer.Deserialize<List<UserProfile>>(deletedContent, _jsonOpts);
+                bool deletionConfirmed = deletedProfiles?.Any(profile => profile.Id == user.Id) == true;
+                string verificationFailure = string.Empty;
+
+                if (!deletionConfirmed)
+                {
+                    try
+                    {
+                        var verifyUrl = $"{SupabaseConfig.SupabaseUrl}/rest/v1/user_profiles?id=eq.{user.Id}&select=id";
+                        using var verifyReq = new HttpRequestMessage(HttpMethod.Get, verifyUrl);
+                        verifyReq.Headers.Add("apikey", SupabaseConfig.SupabaseKey);
+                        verifyReq.Headers.Add("Authorization", $"Bearer {SupabaseConfig.SupabaseKey}");
+
+                        var verifyResp = await http.SendAsync(verifyReq);
+                        if (verifyResp.IsSuccessStatusCode)
+                        {
+                            var remainingContent = await verifyResp.Content.ReadAsStringAsync();
+                            var remainingProfiles = JsonSerializer.Deserialize<List<UserProfile>>(remainingContent, _jsonOpts);
+                            deletionConfirmed = remainingProfiles != null &&
+                                remainingProfiles.All(profile => profile.Id != user.Id);
+                        }
+                        else
+                        {
+                            verificationFailure = $"Verification request failed: {verifyResp.StatusCode}.";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        verificationFailure = $"Verification request failed: {ex.Message}";
+                    }
+                }
+
+                if (!deletionConfirmed)
+                {
+                    LogConsole($"[UserRoles] Could not confirm deletion of profile '{user.DisplayName}' (UID {user.Id}). {verificationFailure}");
+                    ModernMessageBox.ShowWarning(
+                        string.IsNullOrWhiteSpace(verificationFailure)
+                            ? "The profile still exists on the server. The database is not allowing this delete operation. Apply Database/allow_service_role_delete_user_profiles.sql in the Supabase SQL Editor, then try again."
+                            : $"The server could not confirm whether the profile was deleted. {verificationFailure} Refresh the list before trying again.",
+                        "Profile Not Deleted"
+                    );
+                    await LoadUsersAsync();
+                    return;
+                }
+
+                bool avatarDeleted = string.IsNullOrWhiteSpace(user.AvatarUrl) ||
+                    await ProfilePictureCacheService.DeleteAvatarAsync(user.Id);
+                if (!avatarDeleted)
+                {
+                    LogConsole($"[UserRoles] Profile '{user.DisplayName}' deleted, but avatar cleanup failed.");
+                }
+
+                _allUsers.Remove(user);
+                FilterUsers();
+
+                if (_selectedUser?.Id == user.Id)
+                {
+                    _selectedUser = null;
+                    UsersDataGrid.SelectedItem = null;
+                }
+
+                LogConsole($"[UserRoles] Profile '{user.DisplayName}' (UID {user.Id}) deleted.");
+
+                if (avatarDeleted)
+                {
+                    ModernMessageBox.ShowInformation($"Profile '{user.DisplayName}' has been deleted.", "Profile Deleted");
+                }
+                else
+                {
+                    ModernMessageBox.ShowWarning(
+                        $"Profile '{user.DisplayName}' was deleted, but its avatar could not be removed from storage.",
+                        "Profile Deleted with Warning"
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                LogConsole($"[UserRoles] Error deleting profile '{user.DisplayName}': {ex.Message}");
+                ModernMessageBox.ShowError($"An error occurred while deleting the profile: {ex.Message}", "Delete Error");
+            }
         }
 
         private void UsersDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -2367,6 +2565,7 @@ namespace SteamPluginManager.Views
         public int Level { get; set; }
         public string? AvatarUrl { get; set; }
         public string CreatedAt { get; set; } = string.Empty;
+        public string TokenBindingText { get; set; } = "Unknown";
 
         public int RoleRank => Level switch
         {

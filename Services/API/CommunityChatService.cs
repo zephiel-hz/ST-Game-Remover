@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using SteamPluginManager.Models;
 using SteamPluginManager.Services.Security;
@@ -16,11 +17,23 @@ namespace SteamPluginManager.Services.API
         private static readonly TimeSpan _minSendInterval = TimeSpan.FromSeconds(1.5);
         private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
 
+        private sealed class MessageReactionRecord
+        {
+            [JsonPropertyName("message_id")]
+            public long MessageId { get; set; }
+
+            [JsonPropertyName("device_id")]
+            public string DeviceId { get; set; } = string.Empty;
+
+            [JsonPropertyName("emoji")]
+            public string Emoji { get; set; } = string.Empty;
+        }
+
         /// <summary>
         /// Mengambil maksimal 50 pesan obrolan terbaru dalam urutan kronologis (terlama ke terbaru).
         /// Secara otomatis memetakan nama tampilan dan badge level terbaru dari tabel user_profiles.
         /// </summary>
-        public static async Task<List<ChatMessage>> GetRecentMessagesAsync()
+        public static async Task<List<ChatMessage>> GetRecentMessagesAsync(string? currentDeviceId = null)
         {
             try
             {
@@ -132,6 +145,8 @@ namespace SteamPluginManager.Services.API
                     Logger.Log($"[CommunityChatService] Sync user_profiles in GetRecentMessagesAsync error: {pEx.Message}");
                 }
 
+                await LoadMessageReactionsAsync(http, messages, currentDeviceId);
+
                 // Balik urutan agar pesan tertua di atas dan pesan terbaru di bawah
                 messages.Reverse();
                 return messages;
@@ -140,6 +155,153 @@ namespace SteamPluginManager.Services.API
             {
                 Logger.Log($"[CommunityChatService] GetRecentMessagesAsync error: {ex.Message}");
                 return new List<ChatMessage>();
+            }
+        }
+
+        private static async Task LoadMessageReactionsAsync(HttpClient http, List<ChatMessage> messages, string? currentDeviceId)
+        {
+            var messageIds = messages.Where(message => message.Id > 0).Select(message => message.Id).Distinct().ToList();
+            if (messageIds.Count == 0)
+                return;
+
+            string ids = string.Join(",", messageIds);
+            string url = $"{SupabaseConfig.SupabaseUrl}/rest/v1/community_message_reactions?select=message_id,device_id,emoji&message_id=in.({ids})";
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add("apikey", SupabaseConfig.SupabaseKey);
+            request.Headers.Add("Authorization", $"Bearer {SupabaseConfig.SupabaseKey}");
+            request.Headers.Add("Accept", "application/json");
+
+            try
+            {
+                var response = await http.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var error = await response.Content.ReadAsStringAsync();
+                    Logger.Log($"[CommunityChatService] LoadMessageReactionsAsync failed: HTTP {response.StatusCode} - {error}");
+                    return;
+                }
+
+                var content = await response.Content.ReadAsStringAsync();
+                var reactionRows = JsonSerializer.Deserialize<List<MessageReactionRecord>>(content, _jsonOptions);
+                if (reactionRows == null)
+                {
+                    Logger.Log("[CommunityChatService] LoadMessageReactionsAsync returned an invalid response.");
+                    return;
+                }
+
+                foreach (var message in messages)
+                {
+                    var summaries = reactionRows
+                        .Where(row => row.MessageId == message.Id && !string.IsNullOrWhiteSpace(row.Emoji))
+                        .GroupBy(row => row.Emoji)
+                        .Select(group =>
+                        {
+                            var deviceIds = group
+                                .Select(row => row.DeviceId)
+                                .Where(deviceId => !string.IsNullOrWhiteSpace(deviceId))
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .ToList();
+
+                            return new ChatReactionSummary
+                            {
+                                MessageId = message.Id,
+                                Emoji = group.Key,
+                                Count = deviceIds.Count,
+                                IsSelected = !string.IsNullOrWhiteSpace(currentDeviceId) &&
+                                             deviceIds.Contains(currentDeviceId, StringComparer.OrdinalIgnoreCase)
+                            };
+                        })
+                        .Where(summary => summary.Count > 0)
+                        .ToList();
+
+                    message.SetReactions(summaries);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[CommunityChatService] LoadMessageReactionsAsync error: {ex.Message}");
+            }
+        }
+
+        public static async Task<(bool Success, string? ErrorMessage)> SetMessageReactionAsync(
+            long messageId,
+            string deviceId,
+            string emoji,
+            bool addReaction)
+        {
+            if (messageId <= 0 || string.IsNullOrWhiteSpace(deviceId) ||
+                string.IsNullOrWhiteSpace(emoji) || emoji.Length > 32)
+            {
+                return (false, "Invalid reaction data.");
+            }
+
+            try
+            {
+                var http = SharedHttpClient.Instance;
+                if (addReaction)
+                {
+                    var clearUrl = $"{SupabaseConfig.SupabaseUrl}/rest/v1/community_message_reactions" +
+                                   $"?message_id=eq.{messageId}&device_id=eq.{Uri.EscapeDataString(deviceId)}";
+                    using var clearRequest = new HttpRequestMessage(HttpMethod.Delete, clearUrl);
+                    clearRequest.Headers.Add("apikey", SupabaseConfig.SupabaseKey);
+                    clearRequest.Headers.Add("Authorization", $"Bearer {SupabaseConfig.SupabaseKey}");
+                    clearRequest.Headers.Add("Prefer", "return=minimal");
+
+                    using var clearResponse = await http.SendAsync(clearRequest);
+                    if (!clearResponse.IsSuccessStatusCode)
+                    {
+                        var error = await clearResponse.Content.ReadAsStringAsync();
+                        Logger.Log($"[CommunityChatService] SetMessageReactionAsync clear failed: HTTP {clearResponse.StatusCode} - {error}");
+                        return (false, "Could not save the reaction. Please try again.");
+                    }
+                }
+
+                HttpRequestMessage request;
+                if (addReaction)
+                {
+                    var url = $"{SupabaseConfig.SupabaseUrl}/rest/v1/community_message_reactions?on_conflict=message_id,device_id,emoji";
+                    var payload = new Dictionary<string, object>
+                    {
+                        ["message_id"] = messageId,
+                        ["device_id"] = deviceId,
+                        ["emoji"] = emoji
+                    };
+
+                    request = new HttpRequestMessage(HttpMethod.Post, url)
+                    {
+                        Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+                    };
+                    request.Headers.Add("Prefer", "resolution=ignore-duplicates,return=minimal");
+                }
+                else
+                {
+                    var url = $"{SupabaseConfig.SupabaseUrl}/rest/v1/community_message_reactions" +
+                              $"?message_id=eq.{messageId}&device_id=eq.{Uri.EscapeDataString(deviceId)}&emoji=eq.{Uri.EscapeDataString(emoji)}";
+                    request = new HttpRequestMessage(HttpMethod.Delete, url);
+                    request.Headers.Add("Prefer", "return=minimal");
+                }
+
+                request.Headers.Add("apikey", SupabaseConfig.SupabaseKey);
+                request.Headers.Add("Authorization", $"Bearer {SupabaseConfig.SupabaseKey}");
+
+                using (request)
+                using (var response = await http.SendAsync(request))
+                {
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var error = await response.Content.ReadAsStringAsync();
+                        Logger.Log($"[CommunityChatService] SetMessageReactionAsync failed: HTTP {response.StatusCode} - {error}");
+                        return (false, "Could not save the reaction. Check that the chat reactions database migration has been applied.");
+                    }
+                }
+
+                return (true, null);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[CommunityChatService] SetMessageReactionAsync error: {ex.Message}");
+                return (false, "Could not save the reaction. Please try again.");
             }
         }
 

@@ -2,6 +2,17 @@
 
 ---
 
+## [3.1.7] - 2026-11-14
+
+### Added
+* **Tools Post Viewer:** Added a searchable post feed with a side-opening detail view, lazy-loaded replies, earlier-reply paging, attachment downloads, and clickable URLs.
+* **Community Chat Reactions and Emoji Picker:** Added colored emoji selection and per-message reactions with counts and selected-state indicators.
+* **TPM-Based Device Identity Migration:** Added TPM endorsement-key identity aliases while preserving existing device bindings and retaining the legacy identity fallback when TPM data is unavailable.
+
+### Improved
+* **Community Chat:** Added an unread-mention badge and improved chat access from the main header.
+---
+
 ## [3.1.6] - 2026-11-03
 
 ### Fixed

@@ -63,6 +63,11 @@ namespace SteamPluginManager.Views
             WindowNavigator.NavigateToGameLibrary();
         }
 
+        private void Tools_Click(object sender, RoutedEventArgs e)
+        {
+            WindowNavigator.NavigateToTools();
+        }
+
         private void HZManifest_Click(object sender, RoutedEventArgs e)
         {
             WindowNavigator.NavigateToHZManifest();
@@ -193,6 +198,7 @@ namespace SteamPluginManager.Views
 
                 Clear(DashboardButton);
                 Clear(LibraryButton);
+                Clear(ToolsButton);
                 Clear(HZManifestButton);
                 Clear(GameBypassButton);
                 Clear(OnlineFixButton);
@@ -213,6 +219,7 @@ namespace SteamPluginManager.Views
                 {
                     "dashboard" => DashboardButton,
                     "library" => LibraryButton,
+                    "tools" => ToolsButton,
                     "hzmanifest" => HZManifestButton,
                     "gamebypass" => GameBypassButton,
                     "onlinefix" => OnlineFixButton,

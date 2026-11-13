@@ -170,6 +170,14 @@
                         </StackPanel>
                     </Button>
 
+                    <!-- Tools -->
+                    <Button x:Name="ToolsButton" Style="{StaticResource RailNavButton}" Click="Tools_Click" ToolTip="Discord Forum Tools">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="&#xE90F;" FontFamily="Segoe MDL2 Assets" FontSize="18" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Tools" FontSize="9" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </Button>
+
                     <!-- Subtle Separator -->
                     <Rectangle Width="36" Height="1" Fill="{DynamicResource BorderBrush}" Margin="0,8"/>
 
@@ -184,7 +192,7 @@
                     <!-- Dev Button (Admin only) -->
                     <Button x:Name="DevButton" Style="{StaticResource RailNavButton}" Click="Dev_Click" ToolTip="Developer &amp; Admin Console" Visibility="Collapsed">
                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <TextBlock Text="&#xE90F;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="#EC4899" HorizontalAlignment="Center"/>
+                            <TextBlock Text="&#xE943;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="#EC4899" HorizontalAlignment="Center"/>
                             <TextBlock Text="Dev" FontSize="9" FontWeight="SemiBold" Foreground="#EC4899" HorizontalAlignment="Center" Margin="0,3,0,0"/>
                         </StackPanel>
                     </Button>

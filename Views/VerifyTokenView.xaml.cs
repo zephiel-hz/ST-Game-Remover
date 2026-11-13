@@ -201,6 +201,7 @@ namespace SteamPluginManager.Views
                 Logger.Log($"[VerifyTokenView] Verifying token: {token.Substring(0, Math.Min(20, token.Length))}...");
 
                 // Get device ID
+                await DeviceIdentityService.ResolveAndMigrateAsync();
                 string deviceId = DeviceIdentifier.GetDeviceId();
                 Logger.Log($"[VerifyTokenView] Device ID: {deviceId}");
 
@@ -349,6 +350,7 @@ namespace SteamPluginManager.Views
                     if (boundDeviceIds.Any(existingDeviceId => string.Equals(existingDeviceId, deviceId, StringComparison.OrdinalIgnoreCase)))
                     {
                         Logger.Log($"[VerifyTokenView] Token already bound to this device: {deviceId}");
+                        await DeviceIdentityService.ResolveAndMigrateAsync();
                         return new VerificationResult(true, false);
                     }
 
@@ -397,6 +399,7 @@ namespace SteamPluginManager.Views
                     if (updateResponse.IsSuccessStatusCode)
                     {
                         Logger.Log($"[VerifyTokenView] Token updated successfully");
+                        await DeviceIdentityService.ResolveAndMigrateAsync();
                         return new VerificationResult(true, false);
                     }
                     else

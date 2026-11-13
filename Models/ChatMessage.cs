@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
@@ -8,6 +10,11 @@ namespace SteamPluginManager.Models
     public class ChatMessage : INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler? PropertyChanged;
+
+        public ChatMessage()
+        {
+            Reactions.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasReactions));
+        }
 
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
@@ -58,6 +65,23 @@ namespace SteamPluginManager.Models
 
         [JsonPropertyName("message")]
         public string Message { get; set; } = string.Empty;
+
+        [JsonIgnore]
+        public ObservableCollection<ChatReactionSummary> Reactions { get; } = new();
+
+        [JsonIgnore]
+        public bool HasReactions => Reactions.Count > 0;
+
+        [JsonIgnore]
+        public bool ReactionsLoaded { get; private set; }
+
+        public void SetReactions(IEnumerable<ChatReactionSummary> reactions)
+        {
+            Reactions.Clear();
+            foreach (var reaction in reactions)
+                Reactions.Add(reaction);
+            ReactionsLoaded = true;
+        }
 
         private int _level = 2; // 0 = Admin, 1 = Supporter, 2 = Member, 3 = Moderator
         [JsonPropertyName("level")]

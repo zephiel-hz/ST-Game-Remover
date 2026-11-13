@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -17,11 +18,14 @@ namespace SteamPluginManager.Services.Security
     public static class DeviceIdentifier
     {
         private static string? _cachedDeviceId;
+        private static string? _cachedTpmIdentityHash;
+        private static bool _tpmIdentityResolved;
         private static readonly object _lock = new();
 
         private const string RegistrySubKey = @"Software\HZLuaManager";
         private const string LegacyRegistrySubKey = @"Software\SteamPluginManager";
         private const string DeviceIdValueName = "DeviceId";
+        private const string TpmIdentityValueName = "TpmIdentityHash";
 
         private static readonly HashSet<string> InvalidValues = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -76,6 +80,33 @@ namespace SteamPluginManager.Services.Security
             }
         }
 
+        public static string? GetTpmIdentityHash()
+        {
+            lock (_lock)
+            {
+                if (!_tpmIdentityResolved)
+                {
+                    _cachedTpmIdentityHash = ReadTpmIdentityHash();
+                    _tpmIdentityResolved = true;
+                }
+
+                return _cachedTpmIdentityHash;
+            }
+        }
+
+        public static void SetResolvedDeviceId(string deviceId, string tpmHash)
+        {
+            if (!IsValidDeviceId(deviceId) || !IsValidTpmHash(tpmHash))
+                throw new ArgumentException("The resolved device ID is invalid.", nameof(deviceId));
+
+            lock (_lock)
+            {
+                _cachedDeviceId = deviceId.Trim();
+                PersistDeviceId(_cachedDeviceId);
+                PersistTpmIdentityHash(tpmHash);
+            }
+        }
+
         /// <summary>
         /// Memvalidasi apakah string Device ID atau Serial Number valid dan bukan nilai placeholder/junk.
         /// </summary>
@@ -101,12 +132,27 @@ namespace SteamPluginManager.Services.Security
 
         private static string ResolveAndPersistDeviceId()
         {
+            string? currentTpmHash = GetTpmIdentityHash();
+
             // 1. Coba baca dari penyimpanan lokal yang sudah ada (Registry & AppData)
             string? storedId = ReadPersistedDeviceId();
             if (IsValidDeviceId(storedId))
             {
+                string? storedTpmHash = ReadPersistedTpmIdentityHash();
+                if (IsValidTpmHash(currentTpmHash) &&
+                    IsValidTpmHash(storedTpmHash) &&
+                    !string.Equals(currentTpmHash, storedTpmHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    string newDeviceId = $"TPM-SHA256:{currentTpmHash}";
+                    PersistDeviceId(newDeviceId);
+                    PersistTpmIdentityHash(currentTpmHash!);
+                    return newDeviceId;
+                }
+
                 // Pastikan tersinkronisasi ke Registry dan AppData jika salah satu hilang
                 PersistDeviceId(storedId!);
+                if (IsValidTpmHash(currentTpmHash) && !IsValidTpmHash(storedTpmHash))
+                    PersistTpmIdentityHash(currentTpmHash!);
                 return storedId!;
             }
 
@@ -116,8 +162,15 @@ namespace SteamPluginManager.Services.Security
 
             // 3. Simpan permanen ke Registry & AppData
             PersistDeviceId(resolvedId);
+            if (IsValidTpmHash(currentTpmHash))
+                PersistTpmIdentityHash(currentTpmHash!);
 
             return resolvedId;
+        }
+
+        private static bool IsValidTpmHash(string? hash)
+        {
+            return hash?.Length == 64 && hash.All(Uri.IsHexDigit);
         }
 
         private static string? ReadPersistedDeviceId()
@@ -207,6 +260,80 @@ namespace SteamPluginManager.Services.Security
             catch { }
         }
 
+        private static string? ReadPersistedTpmIdentityHash()
+        {
+            try
+            {
+                using (var key = Registry.CurrentUser.OpenSubKey(RegistrySubKey))
+                {
+                    var value = key?.GetValue(TpmIdentityValueName)?.ToString();
+                    if (IsValidTpmHash(value))
+                        return value!.Trim();
+                }
+
+                using (var key = Registry.CurrentUser.OpenSubKey(LegacyRegistrySubKey))
+                {
+                    var value = key?.GetValue(TpmIdentityValueName)?.ToString();
+                    if (IsValidTpmHash(value))
+                        return value!.Trim();
+                }
+
+                string localPath = GetAppDataTpmFilePath("HZLuaManager");
+                if (File.Exists(localPath))
+                {
+                    string content = File.ReadAllText(localPath).Trim();
+                    if (IsValidTpmHash(content))
+                        return content;
+                }
+
+                string legacyPath = GetAppDataTpmFilePath("SteamPluginManager");
+                if (File.Exists(legacyPath))
+                {
+                    string content = File.ReadAllText(legacyPath).Trim();
+                    if (IsValidTpmHash(content))
+                        return content;
+                }
+            }
+            catch
+            {
+                // Continue with the available hardware and server identity.
+            }
+
+            return null;
+        }
+
+        private static void PersistTpmIdentityHash(string tpmHash)
+        {
+            try
+            {
+                using (var key = Registry.CurrentUser.CreateSubKey(RegistrySubKey))
+                    key?.SetValue(TpmIdentityValueName, tpmHash, RegistryValueKind.String);
+
+                using (var key = Registry.CurrentUser.CreateSubKey(LegacyRegistrySubKey))
+                    key?.SetValue(TpmIdentityValueName, tpmHash, RegistryValueKind.String);
+            }
+            catch { }
+
+            try
+            {
+                foreach (string appFolder in new[] { "HZLuaManager", "SteamPluginManager" })
+                {
+                    string path = GetAppDataTpmFilePath(appFolder);
+                    string? directory = Path.GetDirectoryName(path);
+                    if (!string.IsNullOrEmpty(directory))
+                        Directory.CreateDirectory(directory);
+                    File.WriteAllText(path, tpmHash);
+                }
+            }
+            catch { }
+        }
+
+        private static string GetAppDataTpmFilePath(string appFolderName)
+        {
+            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            return Path.Combine(localAppData, appFolderName, "device.tpm");
+        }
+
         private static string GetAppDataFilePath(string appFolderName)
         {
             string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -215,6 +342,10 @@ namespace SteamPluginManager.Services.Security
 
         private static string GenerateHardwareOsFingerprint()
         {
+            string? tpmHash = GetTpmIdentityHash();
+            if (!string.IsNullOrWhiteSpace(tpmHash))
+                return $"TPM-SHA256:{tpmHash}";
+
             // A. Cek apakah motherboard memiliki Serial Number ASLI yang valid
             // Jika ada serial motherboard asli (bukan 'Not applicable', bukan OEM default),
             // kita prioritaskan agar user yang sudah terikat token lama tidak perlu verifikasi ulang.
@@ -254,6 +385,90 @@ namespace SteamPluginManager.Services.Security
             Array.Copy(hash, guidBytes, 16);
 
             return new Guid(guidBytes).ToString("D").ToUpperInvariant();
+        }
+
+        private static string? ReadTpmIdentityHash()
+        {
+            try
+            {
+                string systemDirectory = Environment.GetFolderPath(Environment.SpecialFolder.System);
+                if (Environment.Is64BitOperatingSystem && !Environment.Is64BitProcess)
+                {
+                    systemDirectory = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                        "Sysnative");
+                }
+
+                string powershellPath = Path.Combine(systemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+                if (!File.Exists(powershellPath))
+                {
+                    SteamPluginManager.Logger.Log(
+                        $"[DeviceIdentifier] Windows PowerShell was not found at '{powershellPath}'; using the legacy device ID method.");
+                    return null;
+                }
+
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = powershellPath,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+                startInfo.ArgumentList.Add("-NoLogo");
+                startInfo.ArgumentList.Add("-NoProfile");
+                startInfo.ArgumentList.Add("-NonInteractive");
+                startInfo.ArgumentList.Add("-EncodedCommand");
+                string command =
+                    "$ErrorActionPreference='Stop'; " +
+                    "try { " +
+                    "$ek=Get-TpmEndorsementKeyInfo -HashAlgorithm Sha256; " +
+                    "if ($ek.IsPresent -and $ek.PublicKeyHash) { " +
+                    "[Console]::Out.WriteLine([string]$ek.PublicKeyHash); exit 0 " +
+                    "} " +
+                    "[Console]::Error.WriteLine('TPM endorsement key is not available in this PowerShell process.'); exit 2 " +
+                    "} catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }";
+                startInfo.ArgumentList.Add(Convert.ToBase64String(Encoding.Unicode.GetBytes(command)));
+
+                using var process = Process.Start(startInfo);
+                if (process == null)
+                    return null;
+
+                Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+                Task<string> errorTask = process.StandardError.ReadToEndAsync();
+                if (!process.WaitForExit(15000))
+                {
+                    process.Kill(true);
+                    SteamPluginManager.Logger.Log(
+                        "[DeviceIdentifier] Windows PowerShell timed out while reading the TPM endorsement key; using the legacy device ID method.");
+                    return null;
+                }
+
+                string output = outputTask.GetAwaiter().GetResult().Trim();
+                string error = errorTask.GetAwaiter().GetResult().Trim();
+                string? hash = output
+                    .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(line => line.Trim())
+                    .FirstOrDefault(line => line.Length == 64 && line.All(Uri.IsHexDigit));
+
+                if (process.ExitCode != 0 || hash == null)
+                {
+                    string detail = string.IsNullOrWhiteSpace(error)
+                        ? "No valid 64-character hash was returned."
+                        : error.Length > 300 ? error.Substring(0, 300) : error;
+                    SteamPluginManager.Logger.Log(
+                        $"[DeviceIdentifier] TPM endorsement key unavailable (PowerShell exit code {process.ExitCode}; {detail}); using the legacy device ID method.");
+                    return null;
+                }
+
+                SteamPluginManager.Logger.Log("[DeviceIdentifier] TPM endorsement key hash retrieved successfully.");
+                return hash.ToUpperInvariant();
+            }
+            catch (Exception ex)
+            {
+                SteamPluginManager.Logger.Log($"[DeviceIdentifier] TPM identity lookup failed: {ex.Message}");
+                return null;
+            }
         }
 
         private static string? GetWindowsMachineGuid()

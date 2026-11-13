@@ -174,7 +174,7 @@
                         </Border>
 
                         <!-- Layer 3: Foreground Content (Game Title, Badges, Description, CTA) -->
-                        <Grid Margin="36,24,36,24" IsHitTestVisible="False">
+                        <Grid Margin="72,24,36,24" IsHitTestVisible="False">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
