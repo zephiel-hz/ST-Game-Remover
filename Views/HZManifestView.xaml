@@ -2,6 +2,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:helpers="clr-namespace:SteamPluginManager.Helpers"
+             xmlns:controls="clr-namespace:SteamPluginManager.UI.Controls"
              Background="{DynamicResource BackgroundBrush}"
              Foreground="{DynamicResource ForegroundBrush}">
     <UserControl.Resources>
@@ -18,7 +19,7 @@
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="btnBorder"
                                 Background="{TemplateBinding Background}" 
-                                CornerRadius="8"
+                                CornerRadius="4"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 Width="{TemplateBinding Width}"
@@ -45,7 +46,7 @@
             <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="14"/>
+            <Setter Property="CornerRadius" Value="8"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Margin" Value="0"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
@@ -88,7 +89,7 @@
                                                 Background="{TemplateBinding Background}"
                                                 BorderBrush="{TemplateBinding BorderBrush}"
                                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                                CornerRadius="10"
+                                                CornerRadius="4"
                                                 Padding="{TemplateBinding Padding}">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
@@ -132,7 +133,7 @@
                                 <Border Background="{DynamicResource CardBackgroundBrush}"
                                         BorderBrush="{DynamicResource BorderBrush}"
                                         BorderThickness="1"
-                                        CornerRadius="10"
+                                        CornerRadius="4"
                                         Padding="4">
                                     <ScrollViewer CanContentScroll="True"
                                                   MinWidth="{Binding ActualWidth, ElementName=DropDownToggle}"
@@ -166,7 +167,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="10"
+                                CornerRadius="4"
                                 SnapsToDevicePixels="True">
                             <ScrollViewer x:Name="PART_ContentHost" Margin="0" VerticalAlignment="Center"/>
                         </Border>
@@ -196,7 +197,7 @@
                         <Border x:Name="itemBorder"
                                 Background="{TemplateBinding Background}"
                                 Padding="{TemplateBinding Padding}"
-                                CornerRadius="6">
+                                CornerRadius="3">
                             <ContentPresenter VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -219,13 +220,13 @@
             <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="18"/>
+            <Setter Property="CornerRadius" Value="8"/>
             <Setter Property="Padding" Value="24,20"/>
             <Setter Property="Width" Value="520"/>
             <Setter Property="MaxWidth" Value="520"/>
             <Setter Property="Effect">
                 <Setter.Value>
-                    <DropShadowEffect Color="#000000" BlurRadius="30" ShadowDepth="12" Opacity="0.3"/>
+                    <DropShadowEffect Color="#000000" BlurRadius="12" ShadowDepth="2" Opacity="0.2"/>
                 </Setter.Value>
             </Setter>
         </Style>
@@ -247,7 +248,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="10">
+                                CornerRadius="4">
                             <ScrollViewer x:Name="PART_ContentHost" Margin="0" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -280,7 +281,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="9"
+                                CornerRadius="5"
                                 Padding="{TemplateBinding Padding}"
                                 SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -312,13 +313,10 @@
                     Background="{DynamicResource CardBackgroundBrush}"
                     BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1"
-                    CornerRadius="16"
+                    CornerRadius="8"
                     Padding="32,24"
                     MinWidth="260"
                     MaxWidth="360">
-                <Border.Effect>
-                    <DropShadowEffect Color="#000000" BlurRadius="32" ShadowDepth="12" Opacity="0.45"/>
-                </Border.Effect>
 
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                     <!-- High-Precision Dual Ring Glowing Spinner -->
@@ -375,7 +373,7 @@
             </Grid.RowDefinitions>
 
             <!-- Command & Filter Bar -->
-            <Border Grid.Row="0" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="14" Padding="14,10" Margin="0,0,0,12">
+            <Border Grid.Row="0" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12,8" Margin="0,0,0,10">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -478,18 +476,18 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Style="{StaticResource ManifestCardStyle}" ClipToBounds="True" MinWidth="180" Height="276" MouseLeftButtonUp="FileCard_MouseLeftButtonUp" Cursor="Hand" x:Name="CardBorder" Loaded="CardBorder_Loaded" Unloaded="CardBorder_Unloaded" Margin="0,0,12,12">
+                                <Border Style="{StaticResource ManifestCardStyle}" ClipToBounds="True" MinWidth="180" Height="276" MouseLeftButtonUp="FileCard_MouseLeftButtonUp" Cursor="Hand" x:Name="CardBorder" Loaded="CardBorder_Loaded" Unloaded="CardBorder_Unloaded" Margin="0,0,14,14">
                                     <Grid>
                                         <Grid.RowDefinitions>
-                                             <RowDefinition Height="134"/>
+                                            <RowDefinition Height="134"/>
                                             <RowDefinition Height="*"/>
                                         </Grid.RowDefinitions>
 
                                         <!-- Thumbnail Image Area -->
-                                        <Border Grid.Row="0" Background="{DynamicResource BackgroundBrush}" CornerRadius="13,13,0,0" ClipToBounds="True" Loaded="ThumbnailBorder_Loaded" SizeChanged="ThumbnailBorder_SizeChanged">
+                                        <Border Grid.Row="0" Background="{DynamicResource BackgroundBrush}" CornerRadius="7,7,0,0" ClipToBounds="True" Loaded="ThumbnailBorder_Loaded" SizeChanged="ThumbnailBorder_SizeChanged">
                                             <Grid>
                                                 <!-- Fallback Placeholder Icon -->
-                                                <TextBlock Text="🎮" FontSize="44" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.25"/>
+                                                <TextBlock Text="&#xE7FC;" FontFamily="Segoe MDL2 Assets" FontSize="40" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.25"/>
                                                 <!-- Game Thumbnail Image (Loaded via Code-Behind with 280px decode width) -->
                                                 <Image x:Name="ThumbnailImage"
                                                        Stretch="UniformToFill"
@@ -527,46 +525,10 @@
                     </ItemsControl>
                 </ScrollViewer>
 
-                <!-- Modern Pagination Footer -->
-                <Border Grid.Row="1" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="10,8" Margin="0,4,0,0">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-
-                        <!-- Previous Button -->
-                        <Button Grid.Column="0" x:Name="PreviousPageButton" Width="105" Height="34" 
-                                Background="{DynamicResource PrimaryButtonBrush}"
-                                Style="{StaticResource CompactIconButtonStyle}"
-                                Tag="{StaticResource Icon.Back}"
-                                Click="PreviousPage_Click">
-                            <TextBlock Text="Previous" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="11.5"/>
-                        </Button>
-
-                        <!-- Page Indicator & Jump To Page -->
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
-                            <TextBlock x:Name="PageIndicator" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center"/>
-                            <Border Margin="14,0,0,0" Background="{DynamicResource InputBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="6,3" VerticalAlignment="Center" Visibility="Collapsed" x:Name="JumpToPageContainer">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="Go to:" FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <TextBox x:Name="JumpToPageTextBox" Width="38" Height="22" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" FontSize="11" Background="Transparent" Foreground="{DynamicResource ForegroundBrush}" BorderThickness="0" KeyDown="JumpToPageTextBox_KeyDown"/>
-                                    <Button x:Name="JumpToPageButton" Width="36" Height="22" Margin="6,0,0,0" Padding="0" VerticalAlignment="Center" Background="{DynamicResource AccentBrush}" Foreground="White" FontSize="11" FontWeight="SemiBold" Click="JumpToPage_Click">Go</Button>
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
-
-                        <!-- Next Button -->
-                        <Button Grid.Column="2" x:Name="NextPageButton" Width="105" Height="34" 
-                                Background="{DynamicResource PrimaryButtonBrush}"
-                                Style="{StaticResource CompactIconButtonStyle}"
-                                Tag="{StaticResource Icon.Forward}"
-                                Click="NextPage_Click">
-                            <TextBlock Text="Next" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="11.5"/>
-                        </Button>
-                    </Grid>
-                </Border>
+                <controls:PaginationFooter x:Name="PaginationFooter"
+                                           Grid.Row="1"
+                                           Margin="0,4,0,0"
+                                           PageChanged="PaginationFooter_PageChanged"/>
             </Grid>
         </Grid>
 
@@ -580,14 +542,14 @@
                 Background="{DynamicResource CardBackgroundBrush}"
                 BorderBrush="{DynamicResource AccentBrush}"
                 BorderThickness="1"
-                CornerRadius="14"
+                CornerRadius="6"
                 Padding="16,14"
                 Margin="20,12,20,0"
                 Visibility="Collapsed"
                 Cursor="Hand"
                 MouseLeftButtonUp="NotificationBanner_Click">
             <Border.Effect>
-                <DropShadowEffect Color="#000000" BlurRadius="24" ShadowDepth="8" Opacity="0.3"/>
+                <DropShadowEffect Color="#000000" BlurRadius="12" ShadowDepth="2" Opacity="0.2"/>
             </Border.Effect>
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -639,11 +601,8 @@
                     Background="{DynamicResource CardBackgroundBrush}"
                     BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1"
-                    CornerRadius="16"
+                    CornerRadius="8"
                     Padding="22">
-                <Border.Effect>
-                    <DropShadowEffect Color="#000000" BlurRadius="32" ShadowDepth="12" Opacity="0.35"/>
-                </Border.Effect>
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>

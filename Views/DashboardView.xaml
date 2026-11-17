@@ -16,9 +16,9 @@
             <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="16"/>
-            <Setter Property="Padding" Value="20"/>
-            <Setter Property="Margin" Value="0,0,0,18"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="16"/>
+            <Setter Property="Margin" Value="0,0,0,14"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
             <Setter Property="UseLayoutRounding" Value="True"/>
         </Style>
@@ -27,8 +27,8 @@
             <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="16"/>
-            <Setter Property="Padding" Value="20"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="16"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
             <Setter Property="UseLayoutRounding" Value="True"/>
         </Style>
@@ -37,7 +37,7 @@
             <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="14"/>
+            <Setter Property="CornerRadius" Value="6"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
@@ -61,7 +61,7 @@
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="btnBorder"
                                 Background="{TemplateBinding Background}" 
-                                CornerRadius="8"
+                                CornerRadius="4"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 Padding="{TemplateBinding Padding}">
@@ -93,7 +93,7 @@
                     <ControlTemplate TargetType="RadioButton">
                         <Border x:Name="tabBorder"
                                 Background="{TemplateBinding Background}"
-                                CornerRadius="6"
+                                CornerRadius="4"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
@@ -114,41 +114,75 @@
     </UserControl.Resources>
 
     <ScrollViewer x:Name="DashboardScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0"
-                  helpers:SmoothScrollViewerHelper.EnableSmoothScrolling="True"
-                  ScrollChanged="DashboardScrollViewer_ScrollChanged">
-        <Grid Margin="24,20,24,24" MaxWidth="1280">
+                  ScrollChanged="DashboardScrollViewer_ScrollChanged"
+                  helpers:SmoothScrollViewerHelper.EnableSmoothScrolling="True">
+        <Grid Margin="20,16,20,20" MaxWidth="1280">
             <StackPanel>
                 <!-- Featured Most Downloaded Games Slider -->
                 <Border x:Name="FeaturedSliderCard"
                         Height="340"
-                        CornerRadius="20"
-                        Background="#0D111A"
+                        CornerRadius="12"
+                        Background="{DynamicResource CardBackgroundBrush}"
                         BorderBrush="{DynamicResource BorderBrush}"
                         BorderThickness="1"
                         Margin="0,0,0,24"
                         ClipToBounds="True"
                         Cursor="Hand"
                         SnapsToDevicePixels="True"
-                        MouseLeftButtonUp="FeaturedSliderCard_Click"
                         MouseEnter="FeaturedSlider_MouseEnter"
-                        MouseLeave="FeaturedSlider_MouseLeave">
+                        MouseLeave="FeaturedSlider_MouseLeave"
+                        GotKeyboardFocus="FeaturedSlider_GotKeyboardFocus"
+                        LostKeyboardFocus="FeaturedSlider_LostKeyboardFocus">
                     <Grid>
+                        <Button x:Name="FeaturedSliderActionButton"
+                                Background="Transparent"
+                                BorderBrush="Transparent"
+                                BorderThickness="1"
+                                Padding="0"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                Focusable="True"
+                                IsTabStop="True"
+                                AutomationProperties.Name="View featured game manifest"
+                                ToolTip="View Manifest &amp; Download"
+                                Click="FeaturedSliderCard_Click">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="FeaturedSliderFocusBorder"
+                                            Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            CornerRadius="12"/>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsKeyboardFocused" Value="True">
+                                            <Setter TargetName="FeaturedSliderFocusBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                            <Setter TargetName="FeaturedSliderFocusBorder" Property="BorderThickness" Value="2"/>
+                                        </Trigger>
+                                        <Trigger Property="IsPressed" Value="True">
+                                            <Setter TargetName="FeaturedSliderFocusBorder" Property="Opacity" Value="0.9"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+
                         <!-- Layer 1: Dual Image Elements for Smooth Cross-Fade (Matching GameLibraryDetailView) -->
                         <Image x:Name="SlideImageA"
                                Stretch="UniformToFill"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Top"
                                Opacity="1.0"
+                               IsHitTestVisible="False"
                                RenderOptions.BitmapScalingMode="Linear"/>
                         <Image x:Name="SlideImageB"
                                Stretch="UniformToFill"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Top"
                                Opacity="0.0"
+                               IsHitTestVisible="False"
                                RenderOptions.BitmapScalingMode="Linear"/>
 
-                        <!-- Layer 2: Gradient Overlays (Soft and vibrant, matching GameLibraryDetailView) -->
-                        <!-- Soft Left-to-right fade (protects title and badge readability on the left) -->
+                        <!-- The left fade keeps text readable over game artwork. -->
                         <Border IsHitTestVisible="False">
                             <Border.Background>
                                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
@@ -160,7 +194,7 @@
                             </Border.Background>
                         </Border>
 
-                        <!-- Soft Bottom-Only Fade (matching GameLibraryDetailView to keep background artwork clear and bright) -->
+                        <!-- A low fade anchors the pagination and keeps it visible over bright artwork. -->
                         <Border IsHitTestVisible="False">
                             <Border.Background>
                                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
@@ -184,23 +218,21 @@
                                 <!-- Badges Row -->
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,12" VerticalAlignment="Center">
                                     <!-- Top Downloaded Highlight Badge -->
-                                    <Border Background="#26E11D48" BorderBrush="#E11D48" BorderThickness="1" CornerRadius="8" Padding="10,5" Margin="0,0,8,0">
+                                    <Border Background="{DynamicResource SelectedBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" CornerRadius="6" Padding="10,5" Margin="0,0,8,0">
                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                            <TextBlock Text="🔥" FontSize="11" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                            <TextBlock Text="TOP DOWNLOADED" FontSize="10.5" FontWeight="Bold" Foreground="#FDA4AF" VerticalAlignment="Center"/>
+                                            <TextBlock Text="TOP DOWNLOADED" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </Border>
 
                                     <!-- Downloads Count Badge -->
-                                    <Border x:Name="SlideDownloadsBadge" Background="{DynamicResource ButtonBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="10,5" Margin="0,0,8,0">
+                                    <Border x:Name="SlideDownloadsBadge" Background="{DynamicResource ButtonBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="10,5" Margin="0,0,8,0">
                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                            <TextBlock Text="📥" FontSize="11" Margin="0,0,6,0" VerticalAlignment="Center"/>
                                             <TextBlock x:Name="SlideDownloadsText" Text="0 Downloads" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </Border>
 
                                     <!-- AppID Badge -->
-                                    <Border Background="#22FFFFFF" BorderBrush="#20FFFFFF" BorderThickness="1" CornerRadius="8" Padding="8,5">
+                                    <Border Background="#22FFFFFF" BorderBrush="#20FFFFFF" BorderThickness="1" CornerRadius="6" Padding="8,5">
                                         <TextBlock x:Name="SlideAppIdText" Text="AppID: 0" FontSize="10.5" FontWeight="SemiBold" Foreground="#94A3B8" VerticalAlignment="Center"/>
                                     </Border>
                                 </StackPanel>
@@ -220,7 +252,7 @@
                                 <TextBlock x:Name="SlideGameDescription"
                                            Text="Game description preview goes here..."
                                            FontSize="12.5"
-                                           Foreground="#CBD5E1"
+                                           Foreground="{DynamicResource ForegroundBrush}"
                                            TextWrapping="Wrap"
                                            TextTrimming="CharacterEllipsis"
                                            MaxHeight="38"
@@ -228,10 +260,10 @@
                                            Margin="0,0,0,18"/>
 
                                 <!-- Action CTA Button -->
-                                <Border Background="{DynamicResource AccentBrush}" CornerRadius="10" Padding="18,10" HorizontalAlignment="Left">
+                                <Border Background="{DynamicResource AccentBrush}" CornerRadius="8" Padding="18,10" HorizontalAlignment="Left">
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <TextBlock Text="View Manifest &amp; Download" FontSize="12" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center"/>
-                                        <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="10" Foreground="White" Margin="8,1,0,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="View Manifest &amp; Download" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource BackgroundBrush}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="10" Foreground="{DynamicResource BackgroundBrush}" Margin="8,1,0,0" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
@@ -244,9 +276,11 @@
                                 VerticalAlignment="Center"
                                 Margin="16,0,0,0"
                                 Cursor="Hand"
-                                Opacity="0.0"
+                                Opacity="0"
                                 IsHitTestVisible="False"
+                                IsEnabled="False"
                                 Click="SliderPrevButton_Click"
+                                AutomationProperties.Name="Previous featured game"
                                 ToolTip="Previous Game">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
@@ -258,6 +292,10 @@
                                              <Setter TargetName="arrowBorder" Property="Background" Value="#CC0A0E17"/>
                                              <Setter TargetName="arrowBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                                          </Trigger>
+                                        <Trigger Property="IsKeyboardFocused" Value="True">
+                                            <Setter TargetName="arrowBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                            <Setter TargetName="arrowBorder" Property="Background" Value="#CC0A0E17"/>
+                                        </Trigger>
                                      </ControlTemplate.Triggers>
                                  </ControlTemplate>
                              </Button.Template>
@@ -269,9 +307,11 @@
                                 VerticalAlignment="Center"
                                 Margin="0,0,16,0"
                                 Cursor="Hand"
-                                Opacity="0.0"
+                                Opacity="0"
                                 IsHitTestVisible="False"
+                                IsEnabled="False"
                                 Click="SliderNextButton_Click"
+                                AutomationProperties.Name="Next featured game"
                                 ToolTip="Next Game">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
@@ -282,6 +322,45 @@
                                         <Trigger Property="IsMouseOver" Value="True">
                                             <Setter TargetName="arrowBorder" Property="Background" Value="#CC0A0E17"/>
                                             <Setter TargetName="arrowBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                        </Trigger>
+                                        <Trigger Property="IsKeyboardFocused" Value="True">
+                                            <Setter TargetName="arrowBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                            <Setter TargetName="arrowBorder" Property="Background" Value="#CC0A0E17"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+
+                        <Button x:Name="SliderAutoAdvanceButton"
+                                Width="36" Height="36"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Top"
+                                Margin="0,14,16,0"
+                                Cursor="Hand"
+                                Opacity="0"
+                                IsHitTestVisible="False"
+                                IsEnabled="False"
+                                Click="SliderAutoAdvanceButton_Click"
+                                AutomationProperties.Name="Pause carousel"
+                                ToolTip="Pause carousel"
+                                FontFamily="Segoe MDL2 Assets"
+                                FontSize="13"
+                                Foreground="White"
+                                Content="&#xE769;">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="autoAdvanceBorder" Background="#7A0A0E17" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="18">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="autoAdvanceBorder" Property="Background" Value="#CC0A0E17"/>
+                                            <Setter TargetName="autoAdvanceBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                        </Trigger>
+                                        <Trigger Property="IsKeyboardFocused" Value="True">
+                                            <Setter TargetName="autoAdvanceBorder" Property="Background" Value="#CC0A0E17"/>
+                                            <Setter TargetName="autoAdvanceBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
@@ -298,7 +377,7 @@
                         <!-- Loading State Shimmer / Placeholder -->
                         <Border x:Name="SliderLoadingOverlay" Background="#0D111A" Visibility="Collapsed" IsHitTestVisible="False">
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="🎮" FontSize="36" HorizontalAlignment="Center" Opacity="0.3" Margin="0,0,0,10"/>
+                                <TextBlock Text="&#xE7FC;" FontFamily="Segoe MDL2 Assets" FontSize="28" HorizontalAlignment="Center" Opacity="0.3" Margin="0,0,0,8"/>
                                 <TextBlock Text="Loading featured games..." FontSize="13" Foreground="{DynamicResource MutedForegroundBrush}" HorizontalAlignment="Center"/>
                             </StackPanel>
                         </Border>

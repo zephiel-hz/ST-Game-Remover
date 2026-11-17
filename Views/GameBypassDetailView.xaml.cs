@@ -873,6 +873,7 @@ namespace SteamPluginManager.Views
         {
             string? tempZip = null;
             string? extractDir = null;
+            GameEntry? gameToOpen = null;
             try
             {
                 if (_currentFile == null)
@@ -1099,6 +1100,28 @@ namespace SteamPluginManager.Views
 
                 await Task.Delay(1500);
 
+                try
+                {
+                    if (_currentFile.AppId is int appId &&
+                        await CustomLaunchTutorialService.ApplyAdminConfiguredTutorialToLocalGameAsync(
+                            appId,
+                            "GAMEBYPASS",
+                            gameFolder!))
+                    {
+                        gameToOpen = new GameEntry
+                        {
+                            AppId = appId,
+                            Name = _currentFile.Name ?? "Game",
+                            InstallationPath = gameFolder!,
+                            IsInstalled = true
+                        };
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[GameBypassDetailView] Bypass applied, but automatic Custom Launch setup failed: {ex.Message}");
+                }
+
                 if (FindName("AddToLibraryButton") is Button btnSuccess)
                     btnSuccess.IsEnabled = true;
 
@@ -1128,6 +1151,9 @@ namespace SteamPluginManager.Views
                 try { if (!string.IsNullOrEmpty(tempZip) && File.Exists(tempZip)) File.Delete(tempZip); } catch { }
                 try { if (!string.IsNullOrEmpty(extractDir) && Directory.Exists(extractDir)) Directory.Delete(extractDir, true); } catch { }
             }
+
+            if (gameToOpen != null)
+                WindowNavigator.NavigateToGameLibraryDetail(gameToOpen);
         }
 
         /// <summary>

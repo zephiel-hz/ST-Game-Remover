@@ -10,12 +10,12 @@ using SteamPluginManager.Services.Security;
 namespace SteamPluginManager.Services.ResourcePipeline
 {
     /// <summary>
-    /// Storage service untuk Backblaze B2 — digunakan untuk upload OnlineFix archives.
+    /// Storage service untuk akun Cloudflare R2 khusus OnlineFix.
     /// GameBypass tetap menggunakan CloudflareR2StorageService.
     /// </summary>
-    public class BackblazeB2StorageService : IStorageService
+    public class OnlineFixR2StorageService : IStorageService
     {
-        public string ProviderName => "Backblaze B2";
+        public string ProviderName => "Cloudflare R2 (OnlineFix)";
 
         public async Task<string> UploadFileAsync(
             string localFilePath,
@@ -24,16 +24,19 @@ namespace SteamPluginManager.Services.ResourcePipeline
             IProgress<ResourceWorkflowProgress>? progress = null,
             CancellationToken cancellationToken = default)
         {
-            var config = ServiceConfiguration.Current.BackblazeB2;
-            if (string.IsNullOrWhiteSpace(config.Endpoint) || string.IsNullOrWhiteSpace(config.Bucket))
-                throw new InvalidOperationException("Backblaze B2 endpoint or bucket is not configured in ServiceConfiguration.");
+            var config = ServiceConfiguration.Current.OnlineFixCloudflareR2;
+            if (string.IsNullOrWhiteSpace(config.Endpoint) ||
+                string.IsNullOrWhiteSpace(config.AccessKey) ||
+                string.IsNullOrWhiteSpace(config.SecretKey) ||
+                string.IsNullOrWhiteSpace(config.Bucket))
+                throw new InvalidOperationException("OnlineFix Cloudflare R2 credentials, endpoint, or bucket are not configured.");
 
             var fileInfo = new FileInfo(localFilePath);
             if (!fileInfo.Exists)
                 throw new FileNotFoundException($"File to upload was not found: {localFilePath}");
 
             var service = "s3";
-            var region = !string.IsNullOrWhiteSpace(config.Region) ? config.Region : "us-east-005";
+            var region = "auto";
             var host = new Uri(config.Endpoint).Host;
             var now = DateTime.UtcNow;
             var amzDate = now.ToString("yyyyMMddTHHmmssZ");
@@ -68,7 +71,7 @@ namespace SteamPluginManager.Services.ResourcePipeline
                     progress.Report(new ResourceWorkflowProgress(
                         WorkflowStage.Uploading,
                         pct,
-                        $"Uploading to Backblaze B2 ({sentBytes / (1024 * 1024)}MB / {totalBytes / (1024 * 1024)}MB)...",
+                        $"Uploading to Cloudflare R2 (OnlineFix) ({sentBytes / (1024 * 1024)}MB / {totalBytes / (1024 * 1024)}MB)...",
                         sentBytes,
                         totalBytes));
                 }
@@ -87,7 +90,7 @@ namespace SteamPluginManager.Services.ResourcePipeline
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                throw new HttpRequestException($"Backblaze B2 Upload failed with status {response.StatusCode}: {errorBody}");
+                throw new HttpRequestException($"OnlineFix Cloudflare R2 upload failed with status {response.StatusCode}: {errorBody}");
             }
 
             return $"{config.Endpoint}/{config.Bucket}/{remoteKey}";
@@ -97,12 +100,12 @@ namespace SteamPluginManager.Services.ResourcePipeline
         {
             try
             {
-                var config = ServiceConfiguration.Current.BackblazeB2;
+                var config = ServiceConfiguration.Current.OnlineFixCloudflareR2;
                 if (string.IsNullOrWhiteSpace(config.Endpoint) || string.IsNullOrWhiteSpace(config.Bucket))
                     return false;
 
                 var service = "s3";
-                var region = !string.IsNullOrWhiteSpace(config.Region) ? config.Region : "us-east-005";
+                var region = "auto";
                 var host = new Uri(config.Endpoint).Host;
                 var now = DateTime.UtcNow;
                 var amzDate = now.ToString("yyyyMMddTHHmmssZ");

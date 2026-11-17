@@ -12,6 +12,8 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using System.Windows.Media;
+using SteamPluginManager.Helpers;
+using SteamPluginManager.UI.Controls;
 using SteamPluginManager;
 using SteamPluginManager.Services.Security;
 using SteamPluginManager.Services.Steam;
@@ -30,6 +32,9 @@ namespace SteamPluginManager.Views
         private string _selectedCategory = "All";
         private ICollectionView? _collectionView; // For sorted view
         private List<GameEntry> _lastFilteredGames = new();
+        private const int ROWS_PER_PAGE = 10;
+        private int _pageSize = ROWS_PER_PAGE * 3;
+        private int _currentPage;
         private int _projectedColumnCount = 0;
         private List<GameEntry>? _lastProjectedItems;
 
@@ -109,6 +114,34 @@ namespace SteamPluginManager.Views
             {
                 _mainWindow.Games.CollectionChanged -= Games_CollectionChanged;
             }
+        }
+
+        private void ThumbnailBorder_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is Border border && border.ActualWidth > 0 && border.ActualHeight > 0)
+            {
+                ThumbnailClipHelper.ApplyTopRoundedClip(border, border.ActualWidth, border.ActualHeight, 9);
+            }
+        }
+
+        private void ThumbnailBorder_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (sender is Border border && e.NewSize.Width > 0 && e.NewSize.Height > 0)
+            {
+                ThumbnailClipHelper.ApplyTopRoundedClip(border, e.NewSize.Width, e.NewSize.Height, 9);
+            }
+        }
+
+        private void PaginationFooter_PageChanged(object? sender, PageChangedEventArgs e)
+        {
+            if (_currentPage == e.PageIndex)
+                return;
+
+            _currentPage = e.PageIndex;
+            UpdateRowsProjection();
+
+            if (Rows.Count > 0 && GameCards != null)
+                GameCards.ScrollIntoView(Rows[0]);
         }
 
         private void LanguageChanged_Handler(object? sender, EventArgs e)
@@ -480,9 +513,11 @@ namespace SteamPluginManager.Views
                 int columns = Math.Max(1, (int)(usableWidth / (targetCardWidth + cardMarginRight)));
 
                 bool columnCountChanged = columns != ColumnCount;
+                bool pageSizeChanged = columns * ROWS_PER_PAGE != _pageSize;
                 ColumnCount = columns;
+                _pageSize = columns * ROWS_PER_PAGE;
 
-                if (columnCountChanged)
+                if (columnCountChanged || pageSizeChanged)
                 {
                     UpdateRowsProjection();
                 }
@@ -968,6 +1003,7 @@ namespace SteamPluginManager.Views
 
                 Logger.Log($"[GameLibraryView] Filter applied: Category={_selectedCategory}, Search='{effectiveSearch}', Matches={filtered.Count}/{_mainWindow.Games.Count}");
 
+                _currentPage = 0;
                 _lastFilteredGames = filtered;
                 UpdateRowsProjection();
 
@@ -1659,6 +1695,7 @@ namespace SteamPluginManager.Views
         {
             if (_mainWindow?.Games == null)
             {
+                PaginationFooter?.UpdatePage(0, 0, _pageSize, "games");
                 if (Rows.Count > 0)
                 {
                     CancelHoldGesture();
@@ -1672,8 +1709,16 @@ namespace SteamPluginManager.Views
             try
             {
                 var currentFiltered = _lastFilteredGames;
+                int totalPages = Math.Max(1, (int)Math.Ceiling((double)currentFiltered.Count / _pageSize));
+                _currentPage = Math.Clamp(_currentPage, 0, totalPages - 1);
+                var pageItems = currentFiltered
+                    .Skip(_currentPage * _pageSize)
+                    .Take(_pageSize)
+                    .ToList();
 
-                if (ColumnCount == _projectedColumnCount && !HasSequenceChanged(currentFiltered))
+                PaginationFooter.UpdatePage(_currentPage, currentFiltered.Count, _pageSize, "games");
+
+                if (ColumnCount == _projectedColumnCount && !HasSequenceChanged(pageItems))
                 {
                     return;
                 }
@@ -1681,17 +1726,17 @@ namespace SteamPluginManager.Views
                 CancelHoldGesture();
 
                 int columns = Math.Max(1, ColumnCount);
-                int totalCount = currentFiltered.Count;
+                int totalCount = pageItems.Count;
                 int rowIndex = 0;
                 var newRows = new List<GameRow>((totalCount + columns - 1) / columns);
 
-                for (int i = 0; i < totalCount; i += columns)
+                for (int i = 0; i < pageItems.Count; i += columns)
                 {
-                    int count = Math.Min(columns, totalCount - i);
+                    int count = Math.Min(columns, pageItems.Count - i);
                     var rowItems = new GameEntry[count];
                     for (int j = 0; j < count; j++)
                     {
-                        rowItems[j] = currentFiltered[i + j];
+                        rowItems[j] = pageItems[i + j];
                     }
                     newRows.Add(new GameRow(rowIndex++, rowItems, columns));
                 }
@@ -1703,8 +1748,8 @@ namespace SteamPluginManager.Views
                 }
 
                 _projectedColumnCount = ColumnCount;
-                _lastProjectedItems = currentFiltered;
-                Logger.Log($"[GameLibraryView] Rows projection updated: {Rows.Count} rows ({totalCount} games, {columns} cols)");
+                _lastProjectedItems = pageItems;
+                Logger.Log($"[GameLibraryView] Rows projection updated: {Rows.Count} rows ({totalCount} of {currentFiltered.Count} games, {columns} cols)");
             }
             catch (Exception ex)
             {

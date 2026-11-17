@@ -20,7 +20,9 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Globalization;
 using System.Management;
+using SteamPluginManager.Helpers;
 using SteamPluginManager.Services.Security;
+using SteamPluginManager.UI.Controls;
 
 namespace SteamPluginManager.Views
 {
@@ -58,6 +60,7 @@ namespace SteamPluginManager.Views
 
             return true;
         }
+
         public string Description { get; set; } = "";
         public string Genre { get; set; } = "";
         public string GenreBadgeDisplay => Genre;
@@ -197,7 +200,7 @@ namespace SteamPluginManager.Views
 
         // Pagination fields
         private int _currentPage = 0;
-        private int _pageSize = 50;
+        private int _pageSize = ROWS_PER_PAGE * 3;
         private int _totalFiles = 0;
         private List<ManifestFile> _allFiles = new(); // Store all files from Supabase
         private HashSet<int> _newManifestIds = new();
@@ -2376,14 +2379,7 @@ namespace SteamPluginManager.Views
 
         private static void ApplyThumbnailClip(Border border, double width, double height)
         {
-            // PERF-8.8A: Do NOT assign non-rectangular RectangleGeometry clips.
-            // In MilCore / DirectX, non-rectangular geometric clips force intermediate offscreen render target surfaces
-            // and alpha mask composition passes for every card, causing GPU stalls and scrolling lag.
-            // Border.CornerRadius="13,13,0,0" with ClipToBounds="True" handles rectangular clipping natively.
-            if (border.Clip != null)
-            {
-                border.Clip = null;
-            }
+            ThumbnailClipHelper.ApplyTopRoundedClip(border, width, height, 7);
         }
 
         private void LoadThumbnailImage(ManifestFile file, Image thumbnailImage)
@@ -2495,6 +2491,16 @@ namespace SteamPluginManager.Views
         private void ShowError(string message)
         {
             ModernMessageBox.Show(message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+
+        private void PaginationFooter_PageChanged(object? sender, PageChangedEventArgs e)
+        {
+            if (_currentPage == e.PageIndex)
+                return;
+
+            _currentPage = e.PageIndex;
+            DisplayCurrentPage();
+            ResetCardsScrollToTop();
         }
 
         private void NextPage_Click(object sender, RoutedEventArgs e)
@@ -2694,34 +2700,7 @@ namespace SteamPluginManager.Views
                     }
                 }
 
-                // Pagination UI: show buttons when paged mode is active
-                int totalPages = Math.Max(1, (int)Math.Ceiling((double)filesToDisplay.Count / _pageSize));
-
-                if (FindName("PreviousPageButton") is Button prevBtn)
-                    prevBtn.Visibility = (isPagedMode && _currentPage > 0) ? Visibility.Visible : Visibility.Collapsed;
-
-                if (FindName("NextPageButton") is Button nextBtn)
-                    nextBtn.Visibility = (isPagedMode && _currentPage < totalPages - 1) ? Visibility.Visible : Visibility.Collapsed;
-
-                if (FindName("JumpToPageContainer") is Border jumpContainer)
-                {
-                    jumpContainer.Visibility = isPagedMode ? Visibility.Visible : Visibility.Collapsed;
-                    if (isPagedMode && FindName("JumpToPageTextBox") is TextBox jumpTextBox)
-                        jumpTextBox.Text = (_currentPage + 1).ToString();
-                }
-
-                if (FindName("PageIndicator") is TextBlock pageIndicator)
-                {
-                    pageIndicator.Visibility = Visibility.Visible;
-                    if (isPagedMode)
-                        pageIndicator.Text = hasSearch
-                            ? $"Page {_currentPage + 1} / {totalPages} ({filesToDisplay.Count} matching)"
-                            : $"Page {_currentPage + 1} / {totalPages} ({filesToDisplay.Count} items)";
-                    else
-                        pageIndicator.Text = hasSearch
-                            ? $"Found {filesToDisplay.Count} matching files"
-                            : $"Total: {filesToDisplay.Count} files";
-                }
+                PaginationFooter.UpdatePage(_currentPage, filesToDisplay.Count, _pageSize, "games");
 
                 // Persist the current page so returning from detail restores it
                 _cachedPage = _currentPage;
@@ -2915,10 +2894,10 @@ namespace SteamPluginManager.Views
 
                 double usableWidth = Math.Max(targetCardWidth + cardMarginRight, availableWidth - rightClearance);
                 int columns = Math.Max(1, (int)(usableWidth / (targetCardWidth + cardMarginRight)));
-                double computedWidth = Math.Floor(usableWidth / columns);
+                double computedWidth = Math.Floor(Math.Max(usableWidth, availableWidth) / columns);
 
                 CardPanel.ItemWidth = computedWidth;
-                CardPanel.ItemHeight = 288; // 276 card height + 12 bottom margin
+                CardPanel.ItemHeight = 290; // 276 card height + 14 bottom margin
 
                 int previousPageSize = _pageSize;
 

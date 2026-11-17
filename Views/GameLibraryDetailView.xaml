@@ -6,7 +6,7 @@
              xmlns:helpers="clr-namespace:SteamPluginManager.Helpers"
              mc:Ignorable="d"
              d:DesignHeight="850" d:DesignWidth="1200"
-             Background="#121214"
+             Background="{DynamicResource BackgroundBrush}"
              Foreground="{DynamicResource ForegroundBrush}">
 
     <UserControl.Resources>
@@ -14,18 +14,17 @@
         <Style x:Key="LauncherPrimaryPlayButton" TargetType="Button">
             <Setter Property="Background" Value="#10B981"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="#0B1017"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="border"
                                 Background="{TemplateBinding Background}"
-                                CornerRadius="12"
+                                CornerRadius="6"
+                                BorderBrush="Transparent"
+                                BorderThickness="1"
                                 Padding="{TemplateBinding Padding}">
-                            <Border.Effect>
-                                <DropShadowEffect Color="#10B981" BlurRadius="20" ShadowDepth="4" Opacity="0.45"/>
-                            </Border.Effect>
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -34,6 +33,12 @@
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="border" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border" Property="Opacity" Value="0.5"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -45,18 +50,17 @@
         <Style x:Key="LauncherPrimaryStopButton" TargetType="Button">
             <Setter Property="Background" Value="#EF4444"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="#0B1017"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="border"
                                 Background="{TemplateBinding Background}"
-                                CornerRadius="12"
+                                CornerRadius="6"
+                                BorderBrush="Transparent"
+                                BorderThickness="1"
                                 Padding="{TemplateBinding Padding}">
-                            <Border.Effect>
-                                <DropShadowEffect Color="#EF4444" BlurRadius="20" ShadowDepth="4" Opacity="0.45"/>
-                            </Border.Effect>
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -66,6 +70,12 @@
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="border" Property="Opacity" Value="0.85"/>
                             </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border" Property="Opacity" Value="0.5"/>
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -74,28 +84,33 @@
 
         <!-- Modern Launcher Primary Install Button -->
         <Style x:Key="LauncherPrimaryInstallButton" TargetType="Button">
-            <Setter Property="Background" Value="#0284C7"/>
+            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="#0B1017"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="border"
                                 Background="{TemplateBinding Background}"
-                                CornerRadius="12"
+                                CornerRadius="6"
+                                BorderBrush="Transparent"
+                                BorderThickness="1"
                                 Padding="{TemplateBinding Padding}">
-                            <Border.Effect>
-                                <DropShadowEffect Color="#0284C7" BlurRadius="20" ShadowDepth="4" Opacity="0.45"/>
-                            </Border.Effect>
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#0369A1"/>
+                                <Setter TargetName="border" Property="Opacity" Value="0.9"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="border" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource ForegroundBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border" Property="Opacity" Value="0.5"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -119,7 +134,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="10"
+                                CornerRadius="6"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
@@ -141,14 +156,14 @@
             </Setter>
         </Style>
 
-        <!-- Glassmorphic Card Style -->
+        <!-- Opaque cards preserve text contrast over game artwork. -->
         <Style x:Key="LauncherGlassCard" TargetType="Border">
-            <Setter Property="Background" Value="#7A18181C"/>
-            <Setter Property="BorderBrush" Value="#40FFFFFF"/>
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="14"/>
-            <Setter Property="Padding" Value="20"/>
-            <Setter Property="Margin" Value="0,0,0,16"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="16"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
         </Style>
     </UserControl.Resources>
 
@@ -213,31 +228,31 @@
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,12" VerticalAlignment="Center">
                                 <!-- Dynamic Installed Status Chip -->
                                 <Border x:Name="InstalledStatusBadge"
-                                        CornerRadius="8"
+                                        CornerRadius="4"
                                         Padding="10,5"
                                         Margin="0,0,10,0"
                                         VerticalAlignment="Center">
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <TextBlock x:Name="InstalledStatusIcon" Text="●" FontSize="10" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="InstalledStatusIcon" Text="●" FontFamily="Segoe MDL2 Assets" FontSize="10" Margin="0,0,6,0" VerticalAlignment="Center"/>
                                         <TextBlock x:Name="InstalledStatusText" Text="INSTALLED" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Border>
 
                                 <!-- AppID Pill -->
-                                <Border Background="#33FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1" CornerRadius="8" Padding="10,5" Margin="0,0,10,0" VerticalAlignment="Center">
-                                    <TextBlock x:Name="HeroAppIdText" Text="AppID: 0" FontSize="11" FontWeight="SemiBold" Foreground="#E2E8F0"/>
+                                <Border Background="{DynamicResource ButtonBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="8,4" Margin="0,0,8,0" VerticalAlignment="Center">
+                                    <TextBlock x:Name="HeroAppIdText" Text="AppID: 0" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}"/>
                                 </Border>
 
                                 <!-- Genre Chip -->
-                                <Border x:Name="HeroGenreBorder" Background="#26A855F7" BorderBrush="#6A0DAD" BorderThickness="1" CornerRadius="8" Padding="10,5" Margin="0,0,10,0" VerticalAlignment="Center">
-                                    <TextBlock x:Name="HeroGenreText" Text="Genre" FontSize="11" FontWeight="SemiBold" Foreground="#D8B4FE"/>
+                                <Border x:Name="HeroGenreBorder" Background="{DynamicResource ButtonBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="8,4" Margin="0,0,8,0" VerticalAlignment="Center">
+                                    <TextBlock x:Name="HeroGenreText" Text="Genre" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
                                 </Border>
 
                                 <!-- Base Game Badge (for DLC / Sub-Apps) -->
-                                <Border x:Name="HeroBaseGameBorder" Background="#2638BDF8" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="8" Padding="10,5" Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed">
+                                <Border x:Name="HeroBaseGameBorder" Background="{DynamicResource ButtonBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="8,4" Margin="0,0,8,0" VerticalAlignment="Center" Visibility="Collapsed">
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <TextBlock Text="&#xE7FC;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="#38BDF8" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                        <TextBlock x:Name="HeroBaseGameText" Text="Base Game: 0" FontSize="11" FontWeight="SemiBold" Foreground="#38BDF8"/>
+                                        <TextBlock Text="&#xE7FC;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="{DynamicResource AccentBrush}" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="HeroBaseGameText" Text="Base Game: 0" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
@@ -249,17 +264,13 @@
                                        FontWeight="ExtraBold"
                                        Foreground="White"
                                        TextWrapping="Wrap"
-                                       Margin="0,0,0,14">
-                                <TextBlock.Effect>
-                                    <DropShadowEffect Color="#000000" BlurRadius="28" ShadowDepth="4" Opacity="0.95"/>
-                                </TextBlock.Effect>
-                            </TextBlock>
+                                       Margin="0,0,0,14"/>
 
                             <!-- Install Location Subtitle (Shown if installed) -->
-                            <Border x:Name="InstallLocationPanel" Background="#80000000" BorderBrush="#22FFFFFF" BorderThickness="1" CornerRadius="8" Padding="10,5" Margin="0,0,0,20" HorizontalAlignment="Left">
+                            <Border x:Name="InstallLocationPanel" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4" Padding="8,4" Margin="0,0,0,16" HorizontalAlignment="Left">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="#E2E8F0" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                    <TextBlock x:Name="InstallPathText" Text="C:\Program Files (x86)\Steam\steamapps\common\..." FontSize="12" Foreground="#E2E8F0" TextTrimming="CharacterEllipsis" MaxWidth="650"/>
+                                    <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="InstallPathText" Text="C:\Program Files (x86)\Steam\steamapps\common\..." FontSize="12" Foreground="{DynamicResource ForegroundBrush}" TextTrimming="CharacterEllipsis" MaxWidth="650"/>
                                 </StackPanel>
                             </Border>
 
@@ -274,8 +285,8 @@
                                         Click="PlayButton_Click"
                                         ToolTip="Launch game immediately via Steam">
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <TextBlock x:Name="PlayButtonIcon" Text="▶" FontSize="17" Foreground="White" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                        <TextBlock x:Name="PlayButtonText" Text="PLAY" FontSize="16" FontWeight="ExtraBold" Foreground="White" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="PlayButtonIcon" Text="▶" FontSize="17" Foreground="#0B1017" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="PlayButtonText" Text="Play" FontSize="16" FontWeight="ExtraBold" Foreground="#0B1017" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
 
@@ -293,8 +304,8 @@
                                         MouseLeftButtonDown="CustomLaunchIndicatorBadge_Click"
                                         ToolTip="Custom Launch is active. Click to modify or reset.">
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <TextBlock Text="⚡" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                        <TextBlock x:Name="CustomLaunchBadgeText" Text="CUSTOM LAUNCH" FontSize="11" FontWeight="Bold" Foreground="#10B981" VerticalAlignment="Center"/>
+                                        <TextBlock Text="&#xE9CE;" FontFamily="Segoe MDL2 Assets" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="CustomLaunchBadgeText" Text="Custom launch" FontSize="11" FontWeight="Bold" Foreground="#10B981" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Border>
 
@@ -307,17 +318,17 @@
                                         Click="InstallButton_Click"
                                         ToolTip="Open Steam installation dialog and begin download">
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <TextBlock Text="📥" FontSize="16" Foreground="White" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                        <TextBlock Text="INSTALL GAME" FontSize="15" FontWeight="ExtraBold" Foreground="White" VerticalAlignment="Center"/>
+                                        <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="#0B1017" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Install game" FontSize="15" FontWeight="ExtraBold" Foreground="#0B1017" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
 
                                 <!-- Dynamic Download Progress Panel (Shown when downloading from Steam) -->
                                 <Border x:Name="DownloadProgressPanel"
                                         Background="#D9161619"
-                                        BorderBrush="#0284C7"
+                                        BorderBrush="{DynamicResource AccentBrush}"
                                         BorderThickness="1.5"
-                                        CornerRadius="14"
+                                        CornerRadius="6"
                                         Padding="18,12"
                                         Margin="0,0,16,10"
                                         MinWidth="360"
@@ -325,8 +336,8 @@
                                     <StackPanel>
                                         <Grid Margin="0,0,0,8">
                                              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <TextBlock x:Name="DownloadStatusIcon" Text="📥" FontSize="13" Foreground="#38BDF8" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                                <TextBlock x:Name="DownloadStatusLabel" Text="DOWNLOADING VIA STEAM..." FontSize="12" FontWeight="Bold" Foreground="#38BDF8"/>
+                                                <TextBlock x:Name="DownloadStatusIcon" Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="{DynamicResource AccentBrush}" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                <TextBlock x:Name="DownloadStatusLabel" Text="Downloading via Steam..." FontSize="12" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"/>
                                             </StackPanel>
                                             <TextBlock x:Name="DownloadPercentText" Text="0.0%" HorizontalAlignment="Right" FontSize="13" FontWeight="ExtraBold" Foreground="White"/>
                                         </Grid>
@@ -337,15 +348,15 @@
                                                      Minimum="0"
                                                      Maximum="100"
                                                      Value="0"
-                                                     Foreground="#0284C7"
-                                                     Background="#252528"
+                                                     Foreground="{DynamicResource AccentBrush}"
+                                                     Background="{DynamicResource ButtonBackgroundBrush}"
                                                      BorderThickness="0"
                                                      Margin="0,0,0,8"/>
 
                                         <Grid>
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                 <TextBlock x:Name="DownloadBytesText" Text="0 MB / 0 MB" FontSize="11" Foreground="#94A3B8" VerticalAlignment="Center"/>
-                                                <TextBlock x:Name="DownloadSpeedText" Text="" FontSize="11" FontWeight="Bold" Foreground="#38BDF8" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                                <TextBlock x:Name="DownloadSpeedText" Text="" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="8,0,0,0" VerticalAlignment="Center"/>
                                                 <TextBlock x:Name="DownloadEtaText" Text="" FontSize="11" Foreground="#94A3B8" Margin="6,0,0,0" VerticalAlignment="Center"/>
                                             </StackPanel>
                                             <Button x:Name="OpenSteamDownloadsBtn"

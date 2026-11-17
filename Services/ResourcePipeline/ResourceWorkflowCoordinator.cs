@@ -13,7 +13,7 @@ namespace SteamPluginManager.Services.ResourcePipeline
         public ResourceWorkflowCoordinator(IResourceService? resourceService = null, IStorageService? storageService = null)
         {
             _resourceService = resourceService ?? new OnlineFixResourceService();
-            _storageService = storageService ?? new BackblazeB2StorageService();
+            _storageService = storageService ?? new OnlineFixR2StorageService();
         }
 
         public async Task<ResourceWorkflowResult> ExecuteWorkflowAsync(

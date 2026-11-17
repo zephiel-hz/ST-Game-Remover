@@ -1,0 +1,5 @@
+[functions.device-identity]
+verify_jwt = false
+
+[functions.discord-forum]
+verify_jwt = false

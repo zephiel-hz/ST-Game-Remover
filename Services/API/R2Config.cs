@@ -23,12 +23,28 @@ namespace SteamPluginManager
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (List<R2FileInfo> Files, DateTime Timestamp)> _listCache = new(StringComparer.OrdinalIgnoreCase);
         private static readonly TimeSpan ListCacheDuration = TimeSpan.FromMinutes(5);
 
-        public static void InvalidateListCache() => _listCache.Clear();
+        public static void InvalidateListCache(CloudflareR2Settings? settings = null)
+        {
+            if (settings == null)
+            {
+                _listCache.Clear();
+                return;
+            }
+
+            var cachePrefix = $"{settings.Endpoint}|{settings.Bucket}|{settings.AccessKey}|";
+            foreach (var key in _listCache.Keys)
+            {
+                if (key.StartsWith(cachePrefix, StringComparison.OrdinalIgnoreCase))
+                    _listCache.TryRemove(key, out _);
+            }
+        }
 
         // List file di bucket (private bucket, pakai signature)
-        public static async Task<List<R2FileInfo>> ListFilesAsync(string folderPrefix = "gamebypass/", bool forceRefresh = false)
+        public static async Task<List<R2FileInfo>> ListFilesAsync(string folderPrefix = "gamebypass/", bool forceRefresh = false, CloudflareR2Settings? settings = null)
         {
-            if (!forceRefresh && _listCache.TryGetValue(folderPrefix, out var cached) && (DateTime.UtcNow - cached.Timestamp) < ListCacheDuration)
+            var config = settings ?? ServiceConfiguration.Current.CloudflareR2;
+            var cacheKey = $"{config.Endpoint}|{config.Bucket}|{config.AccessKey}|{folderPrefix}";
+            if (!forceRefresh && _listCache.TryGetValue(cacheKey, out var cached) && (DateTime.UtcNow - cached.Timestamp) < ListCacheDuration)
             {
                 return new List<R2FileInfo>(cached.Files);
             }
@@ -36,7 +52,7 @@ namespace SteamPluginManager
             var files = new List<R2FileInfo>();
             var service = "s3";
             var region = "auto"; // Cloudflare R2: region 'auto'
-            var host = new Uri(R2Endpoint).Host;
+            var host = new Uri(config.Endpoint).Host;
             var client = SharedHttpClient.Instance;
 
             string? continuationToken = null;
@@ -47,7 +63,7 @@ namespace SteamPluginManager
                 var now = DateTime.UtcNow;
                 var amzDate = now.ToString("yyyyMMddTHHmmssZ");
                 var dateStamp = now.ToString("yyyyMMdd");
-                var canonicalUri = $"/{R2Bucket}";
+                var canonicalUri = $"/{config.Bucket}";
                 var canonicalQueryString = "list-type=2";
                 if (!string.IsNullOrEmpty(continuationToken))
                 {
@@ -61,10 +77,10 @@ namespace SteamPluginManager
                 var algorithm = "AWS4-HMAC-SHA256";
                 var credentialScope = $"{dateStamp}/{region}/{service}/aws4_request";
                 var stringToSign = $"{algorithm}\n{amzDate}\n{credentialScope}\n{AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HashSHA256(canonicalRequest))}";
-                var signingKey = AwsSigV4Crypto.GetSignatureKey(R2SecretKey, dateStamp, region, service);
+                var signingKey = AwsSigV4Crypto.GetSignatureKey(config.SecretKey, dateStamp, region, service);
                 var signature = AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HmacSHA256(signingKey, stringToSign));
-                var authorizationHeader = $"{algorithm} Credential={R2AccessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
-                var url = $"{R2Endpoint}/{R2Bucket}?{canonicalQueryString}";
+                var authorizationHeader = $"{algorithm} Credential={config.AccessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
+                var url = $"{config.Endpoint}/{config.Bucket}?{canonicalQueryString}";
 
                 using var req = new HttpRequestMessage(HttpMethod.Get, url);
                 req.Headers.Add("x-amz-date", amzDate);
@@ -126,7 +142,7 @@ namespace SteamPluginManager
                         files.Add(new R2FileInfo
                         {
                             Key = key,
-                            Url = $"{R2Endpoint}/{R2Bucket}/{key}",
+                            Url = $"{config.Endpoint}/{config.Bucket}/{key}",
                             Size = size,
                             LastModified = lastModified
                         });
@@ -153,7 +169,7 @@ namespace SteamPluginManager
                 }
             } while (isTruncated);
 
-            _listCache[folderPrefix] = (new List<R2FileInfo>(files), DateTime.UtcNow);
+            _listCache[cacheKey] = (new List<R2FileInfo>(files), DateTime.UtcNow);
             return files;
         }
 
@@ -163,19 +179,21 @@ namespace SteamPluginManager
             string remoteKey,
             string contentType = "application/zip",
             IProgress<int>? progress = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            CloudflareR2Settings? settings = null)
         {
+            var config = settings ?? ServiceConfiguration.Current.CloudflareR2;
             var fileInfo = new FileInfo(localFilePath);
             if (!fileInfo.Exists)
                 throw new FileNotFoundException($"File to upload was not found: {localFilePath}");
 
             var service = "s3";
             var region = "auto";
-            var host = new Uri(R2Endpoint).Host;
+            var host = new Uri(config.Endpoint).Host;
             var now = DateTime.UtcNow;
             var amzDate = now.ToString("yyyyMMddTHHmmssZ");
             var dateStamp = now.ToString("yyyyMMdd");
-            var canonicalUri = $"/{R2Bucket}/{remoteKey}";
+            var canonicalUri = $"/{config.Bucket}/{remoteKey}";
             var canonicalQueryString = "";
 
             var canonicalHeaders = $"content-type:{contentType}\nhost:{host}\nx-amz-content-sha256:UNSIGNED-PAYLOAD\nx-amz-date:{amzDate}\n";
@@ -186,11 +204,11 @@ namespace SteamPluginManager
             var algorithm = "AWS4-HMAC-SHA256";
             var credentialScope = $"{dateStamp}/{region}/{service}/aws4_request";
             var stringToSign = $"{algorithm}\n{amzDate}\n{credentialScope}\n{AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HashSHA256(canonicalRequest))}";
-            var signingKey = AwsSigV4Crypto.GetSignatureKey(R2SecretKey, dateStamp, region, service);
+            var signingKey = AwsSigV4Crypto.GetSignatureKey(config.SecretKey, dateStamp, region, service);
             var signature = AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HmacSHA256(signingKey, stringToSign));
-            var authorizationHeader = $"{algorithm} Credential={R2AccessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
+            var authorizationHeader = $"{algorithm} Credential={config.AccessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
 
-            var url = $"{R2Endpoint}/{R2Bucket}/{remoteKey}";
+            var url = $"{config.Endpoint}/{config.Bucket}/{remoteKey}";
             var client = SharedHttpClient.StorageInstance;
 
             using var fileStream = File.OpenRead(localFilePath);
@@ -221,8 +239,56 @@ namespace SteamPluginManager
                 throw new HttpRequestException($"R2 Upload failed with status {response.StatusCode}: {errorBody}");
             }
 
-            InvalidateListCache();
-            return $"{R2Endpoint}/{R2Bucket}/{remoteKey}";
+            InvalidateListCache(config);
+            return $"{config.Endpoint}/{config.Bucket}/{remoteKey}";
+        }
+
+        public static async Task<string> UploadBytesAsync(
+            string key,
+            byte[] data,
+            string contentType = "application/octet-stream",
+            CancellationToken cancellationToken = default,
+            CloudflareR2Settings? settings = null)
+        {
+            ArgumentNullException.ThrowIfNull(data);
+
+            var config = settings ?? ServiceConfiguration.Current.CloudflareR2;
+            var service = "s3";
+            var region = "auto";
+            var host = new Uri(config.Endpoint).Host;
+            var now = DateTime.UtcNow;
+            var amzDate = now.ToString("yyyyMMddTHHmmssZ");
+            var dateStamp = now.ToString("yyyyMMdd");
+            var canonicalUri = $"/{config.Bucket}/{key}";
+            var payloadHash = "UNSIGNED-PAYLOAD";
+            var canonicalHeaders = $"content-type:{contentType}\nhost:{host}\nx-amz-content-sha256:{payloadHash}\nx-amz-date:{amzDate}\n";
+            var signedHeaders = "content-type;host;x-amz-content-sha256;x-amz-date";
+            var canonicalRequest = $"PUT\n{canonicalUri}\n\n{canonicalHeaders}\n{signedHeaders}\n{payloadHash}";
+            var algorithm = "AWS4-HMAC-SHA256";
+            var credentialScope = $"{dateStamp}/{region}/{service}/aws4_request";
+            var stringToSign = $"{algorithm}\n{amzDate}\n{credentialScope}\n{AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HashSHA256(canonicalRequest))}";
+            var signingKey = AwsSigV4Crypto.GetSignatureKey(config.SecretKey, dateStamp, region, service);
+            var signature = AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HmacSHA256(signingKey, stringToSign));
+            var authorizationHeader = $"{algorithm} Credential={config.AccessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
+            var url = $"{config.Endpoint}/{config.Bucket}/{key}";
+            var client = SharedHttpClient.StorageInstance;
+
+            using var content = new ByteArrayContent(data);
+            content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+            using var req = new HttpRequestMessage(HttpMethod.Put, url) { Content = content };
+            req.Headers.Add("x-amz-date", amzDate);
+            req.Headers.Add("x-amz-content-sha256", payloadHash);
+            req.Headers.TryAddWithoutValidation("Authorization", authorizationHeader);
+
+            using var response = await client.SendAsync(req, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                throw new HttpRequestException($"R2 UploadBytesAsync failed with status {response.StatusCode}: {errorBody}");
+            }
+
+            InvalidateListCache(config);
+            return url;
         }
 
         // Download streaming file dari R2 langsung ke path lokal di disk
@@ -231,15 +297,17 @@ namespace SteamPluginManager
             string destinationFilePath,
             IProgress<int>? progress = null,
             CancellationToken cancellationToken = default,
-            Func<Task>? pauseCheck = null)
+            Func<Task>? pauseCheck = null,
+            CloudflareR2Settings? settings = null)
         {
+            var config = settings ?? ServiceConfiguration.Current.CloudflareR2;
             var service = "s3";
             var region = "auto";
-            var host = new Uri(R2Endpoint).Host;
+            var host = new Uri(config.Endpoint).Host;
             var now = DateTime.UtcNow;
             var amzDate = now.ToString("yyyyMMddTHHmmssZ");
             var dateStamp = now.ToString("yyyyMMdd");
-            var canonicalUri = $"/{R2Bucket}/{key}";
+            var canonicalUri = $"/{config.Bucket}/{key}";
             var canonicalQueryString = "";
             var canonicalHeaders = $"host:{host}\nx-amz-date:{amzDate}\n";
             var signedHeaders = "host;x-amz-date";
@@ -248,10 +316,10 @@ namespace SteamPluginManager
             var algorithm = "AWS4-HMAC-SHA256";
             var credentialScope = $"{dateStamp}/{region}/{service}/aws4_request";
             var stringToSign = $"{algorithm}\n{amzDate}\n{credentialScope}\n{AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HashSHA256(canonicalRequest))}";
-            var signingKey = AwsSigV4Crypto.GetSignatureKey(R2SecretKey, dateStamp, region, service);
+            var signingKey = AwsSigV4Crypto.GetSignatureKey(config.SecretKey, dateStamp, region, service);
             var signature = AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HmacSHA256(signingKey, stringToSign));
-            var authorizationHeader = $"{algorithm} Credential={R2AccessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
-            var url = $"{R2Endpoint}/{R2Bucket}/{key}";
+            var authorizationHeader = $"{algorithm} Credential={config.AccessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
+            var url = $"{config.Endpoint}/{config.Bucket}/{key}";
             var client = SharedHttpClient.StorageInstance;
 
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
@@ -328,15 +396,16 @@ namespace SteamPluginManager
         }
 
         // Download file dari R2
-        public static async Task<byte[]> DownloadFileAsync(string key, IProgress<int>? progress = null, CancellationToken cancellationToken = default, Func<Task>? pauseCheck = null)
+        public static async Task<byte[]> DownloadFileAsync(string key, IProgress<int>? progress = null, CancellationToken cancellationToken = default, Func<Task>? pauseCheck = null, CloudflareR2Settings? settings = null)
         {
+            var config = settings ?? ServiceConfiguration.Current.CloudflareR2;
             var service = "s3";
             var region = "auto"; // Cloudflare R2: region 'auto'
-            var host = new Uri(R2Endpoint).Host;
+            var host = new Uri(config.Endpoint).Host;
             var now = DateTime.UtcNow;
             var amzDate = now.ToString("yyyyMMddTHHmmssZ");
             var dateStamp = now.ToString("yyyyMMdd");
-            var canonicalUri = $"/{R2Bucket}/{key}";
+            var canonicalUri = $"/{config.Bucket}/{key}";
             var canonicalQueryString = "";
             var canonicalHeaders = $"host:{host}\nx-amz-date:{amzDate}\n";
             var signedHeaders = "host;x-amz-date";
@@ -345,10 +414,10 @@ namespace SteamPluginManager
             var algorithm = "AWS4-HMAC-SHA256";
             var credentialScope = $"{dateStamp}/{region}/{service}/aws4_request";
             var stringToSign = $"{algorithm}\n{amzDate}\n{credentialScope}\n{AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HashSHA256(canonicalRequest))}";
-            var signingKey = AwsSigV4Crypto.GetSignatureKey(R2SecretKey, dateStamp, region, service);
+            var signingKey = AwsSigV4Crypto.GetSignatureKey(config.SecretKey, dateStamp, region, service);
             var signature = AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HmacSHA256(signingKey, stringToSign));
-            var authorizationHeader = $"{algorithm} Credential={R2AccessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
-            var url = $"{R2Endpoint}/{R2Bucket}/{key}";
+            var authorizationHeader = $"{algorithm} Credential={config.AccessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
+            var url = $"{config.Endpoint}/{config.Bucket}/{key}";
             var client = SharedHttpClient.Instance;
             var req = new HttpRequestMessage(HttpMethod.Get, url);
             req.Headers.Add("x-amz-date", amzDate);
@@ -401,17 +470,18 @@ namespace SteamPluginManager
         }
 
         // Hapus file dari R2
-        public static async Task<bool> DeleteFileAsync(string key, CancellationToken cancellationToken = default)
+        public static async Task<bool> DeleteFileAsync(string key, CancellationToken cancellationToken = default, CloudflareR2Settings? settings = null)
         {
             try
             {
+                var config = settings ?? ServiceConfiguration.Current.CloudflareR2;
                 var service = "s3";
                 var region = "auto";
-                var host = new Uri(R2Endpoint).Host;
+                var host = new Uri(config.Endpoint).Host;
                 var now = DateTime.UtcNow;
                 var amzDate = now.ToString("yyyyMMddTHHmmssZ");
                 var dateStamp = now.ToString("yyyyMMdd");
-                var canonicalUri = $"/{R2Bucket}/{key}";
+                var canonicalUri = $"/{config.Bucket}/{key}";
                 var canonicalQueryString = "";
                 var payloadHash = AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HashSHA256(""));
                 var canonicalHeaders = $"host:{host}\nx-amz-content-sha256:{payloadHash}\nx-amz-date:{amzDate}\n";
@@ -420,10 +490,10 @@ namespace SteamPluginManager
                 var algorithm = "AWS4-HMAC-SHA256";
                 var credentialScope = $"{dateStamp}/{region}/{service}/aws4_request";
                 var stringToSign = $"{algorithm}\n{amzDate}\n{credentialScope}\n{AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HashSHA256(canonicalRequest))}";
-                var signingKey = AwsSigV4Crypto.GetSignatureKey(R2SecretKey, dateStamp, region, service);
+                var signingKey = AwsSigV4Crypto.GetSignatureKey(config.SecretKey, dateStamp, region, service);
                 var signature = AwsSigV4Crypto.ToHex(AwsSigV4Crypto.HmacSHA256(signingKey, stringToSign));
-                var authorizationHeader = $"{algorithm} Credential={R2AccessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
-                var url = $"{R2Endpoint}/{R2Bucket}/{key}";
+                var authorizationHeader = $"{algorithm} Credential={config.AccessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
+                var url = $"{config.Endpoint}/{config.Bucket}/{key}";
                 var client = SharedHttpClient.Instance;
 
                 using var req = new HttpRequestMessage(HttpMethod.Delete, url);
@@ -434,7 +504,7 @@ namespace SteamPluginManager
                 var response = await client.SendAsync(req, cancellationToken);
                 if (response.IsSuccessStatusCode)
                 {
-                    InvalidateListCache();
+                    InvalidateListCache(config);
                 }
                 return response.IsSuccessStatusCode;
             }

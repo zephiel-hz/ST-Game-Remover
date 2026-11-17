@@ -10,18 +10,16 @@ using System.Text.Json;
 
 using System.Text.Json.Serialization;
 
-using System.Text.RegularExpressions;
 
 using System.Diagnostics;
 
 using System.Windows;
-
+using System.Windows.Automation;
 using System.Windows.Controls;
 
 using System.Windows.Controls.Primitives;
-
 using System.Windows.Data;
-
+using System.Windows.Documents;
 using System.Windows.Input;
 
 using System.Windows.Media;
@@ -45,11 +43,9 @@ using System.Threading.Tasks;
 using System.Management;
 
 using System.Linq;
-
 using System.Net.NetworkInformation;
-
 using SteamPluginManager.Models;
-
+using SteamPluginManager.Services.API;
 using SteamPluginManager.Services.Security;
 
 
@@ -107,7 +103,9 @@ namespace SteamPluginManager.Views
 
         private DispatcherTimer? _slideAutoAdvanceTimer;
 
-        private bool _isSliderHovered = false;
+        private bool _isSliderHovered;
+
+        private bool _isSlideAutoAdvancePaused;
 
         private bool _isImageAActive = true;
 
@@ -191,9 +189,6 @@ namespace SteamPluginManager.Views
         private bool _lastLoadedAllow18PlusContent = false;
 
         private long _navigationGeneration = 0;
-
-
-
         public DashboardView()
 
         {
@@ -305,7 +300,6 @@ namespace SteamPluginManager.Views
             Allow18PlusContentPreferences.Allow18PlusContentChanged += Allow18PlusContentPreferences_Changed;
 
         }
-
 
 
         private bool IsManifestDataFresh()
@@ -891,18 +885,9 @@ namespace SteamPluginManager.Views
 
             }
 
+            _slideAutoAdvanceTimer?.Stop();
 
-
-            if (_slideAutoAdvanceTimer != null)
-
-            {
-
-                _slideAutoAdvanceTimer.Stop();
-
-                _slideAutoAdvanceTimer = null;
-
-            }
-
+            _slideAutoAdvanceTimer = null;
 
 
             // BUG-1.1: Detach active opacity animation clocks from carousel images on unload
@@ -1291,10 +1276,7 @@ namespace SteamPluginManager.Views
 
                 ShowSlide(_currentSlideIndex, animate: false);
 
-
-
                 StartSlideAutoAdvanceTimer();
-
 
 
                 // Prefetch artworks in background for all carousel games (same cache as GameLibraryDetailView)
@@ -1418,43 +1400,41 @@ namespace SteamPluginManager.Views
 
 
             for (int i = 0; i < _mostDownloadedManifests.Count; i++)
-
             {
 
                 int index = i;
 
                 var dotBorder = new Border
-
                 {
-
                     Height = 8,
-
                     Width = (i == _currentSlideIndex) ? 26 : 8,
-
                     CornerRadius = new CornerRadius(4),
-
-                    Margin = new Thickness(4, 0, 4, 0),
-
-                    Cursor = Cursors.Hand,
-
                     Background = (i == _currentSlideIndex)
-
                         ? (Application.Current.Resources["AccentBrush"] as Brush ?? new SolidColorBrush(Color.FromRgb(59, 130, 246)))
-
                         : new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)),
-
                     SnapsToDevicePixels = true
-
                 };
 
-
-
-                dotBorder.MouseLeftButtonUp += (s, e) =>
-
+                var dotButton = new Button
                 {
+                    Width = 28,
+                    Height = 28,
+                    Margin = new Thickness(2, 0, 2, 0),
+                    Padding = new Thickness(0),
+                    Background = Brushes.Transparent,
+                    BorderBrush = Brushes.Transparent,
+                    BorderThickness = new Thickness(1),
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                    VerticalContentAlignment = VerticalAlignment.Center,
+                    Content = dotBorder,
+                    Cursor = Cursors.Hand
+                };
+                AutomationProperties.SetName(dotButton, $"Show featured game {_mostDownloadedManifests[i].Name}");
+                AutomationProperties.SetHelpText(dotButton, "Select this featured game");
 
+                dotButton.Click += (s, e) =>
+                {
                     e.Handled = true;
-
                     if (_currentSlideIndex != index)
 
                     {
@@ -1463,18 +1443,16 @@ namespace SteamPluginManager.Views
 
                         ShowSlide(_currentSlideIndex, animate: true);
 
-                        RestartSlideAutoAdvanceTimer();
-
                     }
 
                 };
 
 
 
-                SliderDotsPanel.Children.Add(dotBorder);
-
+                SliderDotsPanel.Children.Add(dotButton);
             }
 
+            SetSliderNavButtonsVisible(FeaturedSliderCard.IsMouseOver);
         }
 
 
@@ -1489,7 +1467,7 @@ namespace SteamPluginManager.Views
 
             {
 
-                if (SliderDotsPanel.Children[i] is Border dot)
+                if (SliderDotsPanel.Children[i] is Button dotButton && dotButton.Content is Border dot)
 
                 {
 
@@ -2075,8 +2053,6 @@ namespace SteamPluginManager.Views
 
             ShowSlide(_currentSlideIndex, animate: true);
 
-            RestartSlideAutoAdvanceTimer();
-
         }
 
 
@@ -2093,13 +2069,11 @@ namespace SteamPluginManager.Views
 
             ShowSlide(_currentSlideIndex, animate: true);
 
-            RestartSlideAutoAdvanceTimer();
-
         }
 
 
 
-        private void FeaturedSliderCard_Click(object sender, MouseButtonEventArgs e)
+        private void FeaturedSliderCard_Click(object sender, RoutedEventArgs e)
 
         {
 
@@ -2161,7 +2135,29 @@ namespace SteamPluginManager.Views
 
             RestartSlideAutoAdvanceTimer();
 
-            SetSliderNavButtonsVisible(false);
+            SetSliderNavButtonsVisible(FeaturedSliderCard.IsMouseOver);
+
+        }
+
+        private void FeaturedSlider_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+
+        {
+
+            _slideAutoAdvanceTimer?.Stop();
+
+            SetSliderNavButtonsVisible(true);
+
+        }
+
+        private void FeaturedSlider_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+
+        {
+
+            if (FeaturedSliderCard.IsKeyboardFocusWithin) return;
+
+            RestartSlideAutoAdvanceTimer();
+
+            SetSliderNavButtonsVisible(FeaturedSliderCard.IsMouseOver);
 
         }
 
@@ -2175,118 +2171,118 @@ namespace SteamPluginManager.Views
 
 
 
-            bool shouldShow = visible && _mostDownloadedManifests != null && _mostDownloadedManifests.Count > 1;
+            bool hasMultipleSlides = _mostDownloadedManifests?.Count > 1;
+            bool shouldShow = hasMultipleSlides && (visible || FeaturedSliderCard.IsKeyboardFocusWithin);
 
-
+            SliderPrevButton.IsEnabled = hasMultipleSlides;
+            SliderNextButton.IsEnabled = hasMultipleSlides;
+            SliderAutoAdvanceButton.IsEnabled = hasMultipleSlides;
 
             SliderPrevButton.IsHitTestVisible = shouldShow;
-
             SliderNextButton.IsHitTestVisible = shouldShow;
-
-
+            SliderAutoAdvanceButton.IsHitTestVisible = shouldShow;
 
             double targetOpacity = shouldShow ? 1.0 : 0.0;
-
             var anim = new System.Windows.Media.Animation.DoubleAnimation(targetOpacity, TimeSpan.FromMilliseconds(200));
-
-
 
             SliderPrevButton.BeginAnimation(UIElement.OpacityProperty, anim);
 
             SliderNextButton.BeginAnimation(UIElement.OpacityProperty, anim);
 
+            SliderAutoAdvanceButton.BeginAnimation(UIElement.OpacityProperty, anim);
+
         }
 
+        private void SliderAutoAdvanceButton_Click(object sender, RoutedEventArgs e)
 
+        {
+
+            _isSlideAutoAdvancePaused = !_isSlideAutoAdvancePaused;
+
+            bool isPaused = _isSlideAutoAdvancePaused;
+            SliderAutoAdvanceButton.Content = isPaused ? "\uE768" : "\uE769";
+            SliderAutoAdvanceButton.ToolTip = isPaused ? "Resume carousel" : "Pause carousel";
+            AutomationProperties.SetName(SliderAutoAdvanceButton, isPaused ? "Resume carousel" : "Pause carousel");
+
+            if (isPaused)
+            {
+                _slideAutoAdvanceTimer?.Stop();
+            }
+            else
+            {
+                RestartSlideAutoAdvanceTimer();
+            }
+
+            e.Handled = true;
+
+        }
 
         private void StartSlideAutoAdvanceTimer()
 
         {
 
             if (_slideAutoAdvanceTimer == null)
-
             {
-
                 _slideAutoAdvanceTimer = new DispatcherTimer
-
                 {
-
                     Interval = TimeSpan.FromSeconds(5)
-
                 };
 
                 _slideAutoAdvanceTimer.Tick += (s, e) =>
-
                 {
-
-                    if (_isSliderHovered || _mostDownloadedManifests.Count <= 1)
-
+                    if (_isSlideAutoAdvancePaused
+                        || _isSliderHovered
+                        || FeaturedSliderCard.IsKeyboardFocusWithin
+                        || _mostDownloadedManifests.Count <= 1
+                        || FeaturedSliderCard.Visibility != Visibility.Visible
+                        || DashboardScrollViewer.VerticalOffset > 350)
+                    {
                         return;
-
-
+                    }
 
                     _currentSlideIndex = (_currentSlideIndex + 1) % _mostDownloadedManifests.Count;
-
                     ShowSlide(_currentSlideIndex, animate: true);
-
                 };
-
             }
 
             _slideAutoAdvanceTimer.Stop();
 
-            _slideAutoAdvanceTimer.Start();
+            if (!_isSlideAutoAdvancePaused
+                && !_isSliderHovered
+                && !FeaturedSliderCard.IsKeyboardFocusWithin
+                && _mostDownloadedManifests.Count > 1
+                && FeaturedSliderCard.Visibility == Visibility.Visible
+                && DashboardScrollViewer.VerticalOffset <= 350)
+            {
+                _slideAutoAdvanceTimer.Start();
+            }
 
         }
-
-
 
         private void RestartSlideAutoAdvanceTimer()
 
         {
 
-            if (!_isSliderHovered && _slideAutoAdvanceTimer != null)
-
+            if (!_isSliderHovered && !FeaturedSliderCard.IsKeyboardFocusWithin)
             {
-
-                _slideAutoAdvanceTimer.Stop();
-
-                _slideAutoAdvanceTimer.Start();
-
+                StartSlideAutoAdvanceTimer();
             }
 
         }
-
-
 
         private void DashboardScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
 
         {
 
-            if (e.VerticalChange != 0)
+            if (e.VerticalChange == 0) return;
 
+            if (DashboardScrollViewer.VerticalOffset > 350)
             {
-
-                // If hero slider is scrolled completely out of view (offset > 350), pause the timer
-
-                if (DashboardScrollViewer.VerticalOffset > 350)
-
-                {
-
-                    _slideAutoAdvanceTimer?.Stop();
-
-                }
-
-                else
-
-                {
-
-                    // Delay auto-advance while user is actively scrolling
-
-                    RestartSlideAutoAdvanceTimer();
-
-                }
-
+                _slideAutoAdvanceTimer?.Stop();
+            }
+            else
+            {
+                RestartSlideAutoAdvanceTimer();
             }
 
         }
@@ -2773,15 +2769,15 @@ namespace SteamPluginManager.Views
 
             {
 
-                var b2Files = await SteamPluginManager.B2Config.ListFilesAsync("onlinefix/", forceRefresh: forceRefresh);
+                var onlineFixFiles = await SteamPluginManager.OnlineFixR2Config.ListFilesAsync("onlinefix/", forceRefresh: forceRefresh);
 
-                if (b2Files == null || b2Files.Count == 0)
+                if (onlineFixFiles == null || onlineFixFiles.Count == 0)
 
                     return new List<OnlineFixFile>();
 
 
 
-                var newestB2 = b2Files
+                var newestOnlineFix = onlineFixFiles
 
                     .Where(f => !string.IsNullOrWhiteSpace(f.Key) && !f.Key.EndsWith("/"))
 
@@ -2801,13 +2797,13 @@ namespace SteamPluginManager.Views
 
                 var list = new List<OnlineFixFile>();
 
-                foreach (var b2file in newestB2)
+                foreach (var onlineFixFile in newestOnlineFix)
 
                 {
 
-                    string b2FileName = System.IO.Path.GetFileName(b2file.Key);
+                    string onlineFixFileName = System.IO.Path.GetFileName(onlineFixFile.Key);
 
-                    int? appId = ExtractAppId(b2FileName);
+                    int? appId = ExtractAppId(onlineFixFileName);
 
 
 
@@ -2815,7 +2811,7 @@ namespace SteamPluginManager.Views
 
                         (appId != null && m.AppId == appId) ||
 
-                        string.Equals(m.FileName, b2FileName, StringComparison.OrdinalIgnoreCase));
+                        string.Equals(m.FileName, onlineFixFileName, StringComparison.OrdinalIgnoreCase));
 
 
 
@@ -2897,7 +2893,7 @@ namespace SteamPluginManager.Views
 
                     {
 
-                        displayName = System.IO.Path.GetFileNameWithoutExtension(b2FileName);
+                        displayName = System.IO.Path.GetFileNameWithoutExtension(onlineFixFileName);
 
                     }
 
@@ -2907,9 +2903,9 @@ namespace SteamPluginManager.Views
 
                     {
 
-                        FileName = b2file.Key,
+                        FileName = onlineFixFile.Key,
 
-                        FileUrl = b2file.Url,
+                        FileUrl = onlineFixFile.Url,
 
                         Name = displayName,
 
@@ -2921,9 +2917,9 @@ namespace SteamPluginManager.Views
 
                         Genre = genre,
 
-                        FileSize = b2file.Size >= 0 ? FormatFileSize(b2file.Size) : string.Empty,
+                        FileSize = onlineFixFile.Size >= 0 ? FormatFileSize(onlineFixFile.Size) : string.Empty,
 
-                        CreatedAt = b2file.LastModified
+                        CreatedAt = onlineFixFile.LastModified
 
                     };
 

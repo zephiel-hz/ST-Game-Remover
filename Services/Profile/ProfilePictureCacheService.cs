@@ -10,7 +10,7 @@ namespace SteamPluginManager.Services.Profile
 {
     /// <summary>
     /// Layanan caching dan manajemen foto profil (PFP) untuk pengguna.
-    /// Menyimpan cache di disk dan memory untuk loading instan, serta mengunggah/mengunduh dari Backblaze B2 (folder pfp/).
+    /// Menyimpan cache di disk dan memory untuk loading instan, serta mengunggah/mengunduh dari Cloudflare R2 OnlineFix account (folder pfp/).
     /// </summary>
     public static class ProfilePictureCacheService
     {
@@ -84,7 +84,7 @@ namespace SteamPluginManager.Services.Profile
         /// Mengambil foto profil pengguna:
         /// 1. Cek Memory Cache (0ms)
         /// 2. Cek Disk Cache
-        /// 3. Download dari Backblaze B2 (folder pfp/{userId}.jpg) dan simpan ke disk & memory cache.
+        /// 3. Download dari Cloudflare R2 (folder pfp/{userId}.jpg) dan simpan ke disk & memory cache.
         /// </summary>
         public static async Task<ImageSource?> GetAvatarAsync(int? userId, string? avatarUrl = null, bool forceRefresh = false)
         {
@@ -135,11 +135,11 @@ namespace SteamPluginManager.Services.Profile
                     }
                 }
 
-                // 3. Download from Backblaze B2 (pfp/{userId}.jpg)
+                // 3. Download from the OnlineFix Cloudflare R2 account (pfp/{userId}.jpg)
                 string remoteKey = !string.IsNullOrWhiteSpace(avatarUrl) ? avatarUrl.TrimStart('/') : $"pfp/{uid}.jpg";
                 try
                 {
-                    var data = await B2Config.DownloadFileAsync(remoteKey);
+                    var data = await OnlineFixR2Config.DownloadFileAsync(remoteKey);
                     if (data != null && data.Length > 0)
                     {
                         // Save to disk
@@ -175,7 +175,7 @@ namespace SteamPluginManager.Services.Profile
         /// Menyimpan foto profil yang baru di-crop:
         /// 1. Simpan ke local disk cache
         /// 2. Update memory cache
-        /// 3. Upload ke Backblaze B2 (pfp/{userId}.jpg)
+        /// 3. Upload ke Cloudflare R2 (pfp/{userId}.jpg)
         /// 4. Picu event OnAvatarUpdated
         /// </summary>
         public static async Task<bool> SaveAndUploadAvatarAsync(int userId, byte[] imageBytes)
@@ -197,11 +197,11 @@ namespace SteamPluginManager.Services.Profile
                 }
                 _negativeCache.TryRemove(userId, out _);
 
-                // Upload to Backblaze B2 (folder pfp/{userId}.jpg)
+                // Upload to the OnlineFix Cloudflare R2 account (folder pfp/{userId}.jpg)
                 string remoteKey = $"pfp/{userId}.jpg";
-                await B2Config.UploadBytesAsync(remoteKey, imageBytes, "image/jpeg");
+                await OnlineFixR2Config.UploadBytesAsync(remoteKey, imageBytes, "image/jpeg");
 
-                Logger.Log($"[ProfilePictureCache] Successfully uploaded avatar for user {userId} to B2: {remoteKey}");
+                Logger.Log($"[ProfilePictureCache] Successfully uploaded avatar for user {userId} to Cloudflare R2: {remoteKey}");
 
                 // Notify UI
                 OnAvatarUpdated?.Invoke(userId, img);
@@ -215,7 +215,7 @@ namespace SteamPluginManager.Services.Profile
         }
 
         /// <summary>
-        /// Menghapus foto profil pengguna dari cache lokal dan Backblaze B2.
+        /// Menghapus foto profil pengguna dari cache lokal dan Cloudflare R2.
         /// </summary>
         public static async Task<bool> DeleteAvatarAsync(int userId)
         {
@@ -232,11 +232,11 @@ namespace SteamPluginManager.Services.Profile
                 _memoryCache.TryRemove(userId, out _);
                 _negativeCache[userId] = DateTime.UtcNow;
 
-                // Delete from B2
+                // Delete from the OnlineFix Cloudflare R2 account
                 string remoteKey = $"pfp/{userId}.jpg";
-                await B2Config.DeleteFileAsync(remoteKey);
+                await OnlineFixR2Config.DeleteFileAsync(remoteKey);
 
-                Logger.Log($"[ProfilePictureCache] Deleted avatar for user {userId} from B2 and cache.");
+                Logger.Log($"[ProfilePictureCache] Deleted avatar for user {userId} from Cloudflare R2 and cache.");
 
                 // Notify UI
                 OnAvatarUpdated?.Invoke(userId, null);

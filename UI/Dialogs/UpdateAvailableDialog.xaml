@@ -54,7 +54,7 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="root" Property="Background" Value="{DynamicResource DangerButtonBrush}"/>
-                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="Foreground" Value="#0B1017"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="root" Property="Opacity" Value="0.85"/>
@@ -100,7 +100,7 @@
         <!-- Primary Action Button (Download & Install) -->
         <Style x:Key="PrimaryActionButton" BasedOn="{StaticResource DialogButton}" TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="#0B1017"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="18,6"/>
             <Setter Property="Template">
@@ -124,14 +124,11 @@
     </Window.Resources>
 
     <Grid Margin="12">
-        <Border Background="{DynamicResource CardBackgroundBrush}" 
+        <Border Background="{DynamicResource CardBackgroundBrush}"
                 BorderBrush="{DynamicResource BorderBrush}" 
                 BorderThickness="1" 
-                CornerRadius="16" 
+                CornerRadius="8"
                 ClipToBounds="True">
-            <Border.Effect>
-                <DropShadowEffect Color="#000000" BlurRadius="32" ShadowDepth="12" Opacity="0.45"/>
-            </Border.Effect>
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="50"/> <!-- Header -->

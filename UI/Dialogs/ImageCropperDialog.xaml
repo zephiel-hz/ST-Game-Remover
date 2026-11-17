@@ -22,7 +22,7 @@
             <Setter Property="Padding" Value="16,8"/>
             <Setter Property="FontSize" Value="12.5"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -31,7 +31,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="10"
+                                CornerRadius="6"
                                 Padding="{TemplateBinding Padding}"
                                 SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -53,12 +53,9 @@
     <Border Background="{DynamicResource CardBackgroundBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="1"
-            CornerRadius="18"
+            CornerRadius="8"
             Padding="24,20"
             SnapsToDevicePixels="True">
-        <Border.Effect>
-            <DropShadowEffect Color="#000000" BlurRadius="36" ShadowDepth="12" Opacity="0.55"/>
-        </Border.Effect>
 
         <Grid>
             <Grid.RowDefinitions>
@@ -76,7 +73,7 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10"
+                <Border Grid.Column="0" Width="38" Height="38" CornerRadius="6"
                         Background="{DynamicResource ButtonBackgroundBrush}"
                         BorderBrush="{DynamicResource BorderBrush}"
                         BorderThickness="1" Margin="0,0,12,0" VerticalAlignment="Center">
@@ -118,7 +115,7 @@
             <Border Grid.Row="1" Background="#0A0E17"
                     BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1"
-                    CornerRadius="12"
+                    CornerRadius="6"
                     ClipToBounds="True"
                     Height="330"
                     VerticalAlignment="Center">
@@ -156,9 +153,6 @@
                              HorizontalAlignment="Center"
                              VerticalAlignment="Center"
                              IsHitTestVisible="False">
-                        <Ellipse.Effect>
-                            <DropShadowEffect Color="#3B82F6" BlurRadius="10" ShadowDepth="0" Opacity="0.5"/>
-                        </Ellipse.Effect>
                     </Ellipse>
 
                     <!-- Subtle Helper Label -->
@@ -252,6 +246,7 @@
                             Content="Apply"
                             MinWidth="115"
                             Style="{StaticResource CropperActionButtonStyle}"
+                            Foreground="#0B1017"
                             Background="{DynamicResource AccentBrush}"
                             Click="ApplyButton_Click"/>
                 </StackPanel>

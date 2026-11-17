@@ -40,6 +40,7 @@ namespace SteamPluginManager.Views
         private readonly List<CustomLaunchTutorial> _allTutorials = new();
         private readonly ObservableCollection<CustomLaunchTutorial> _filteredTutorials = new();
         private readonly ObservableCollection<TutorialStep> _editingSteps = new();
+        private List<SidebarFeatureVisibility> _sidebarVisibilitySettings = new();
         private CustomLaunchTutorial? _selectedTutorial;
         private string _selectedTutorialPlatformFilter = "ALL";
 
@@ -100,6 +101,7 @@ namespace SteamPluginManager.Views
                     LoadBlockedDevicesAsync(),
                     LoadUsersAsync(),
                     LoadActiveBroadcastAsync(),
+                    LoadSidebarVisibilityAsync(),
                     LoadStorageDataAsync(),
                     LoadTutorialsAsync()
                 );
@@ -113,6 +115,56 @@ namespace SteamPluginManager.Views
             finally
             {
                 RefreshAllButton.IsEnabled = true;
+            }
+        }
+
+        private async Task LoadSidebarVisibilityAsync()
+        {
+            try
+            {
+                _sidebarVisibilitySettings = await SidebarVisibilityConfigService.LoadAsync();
+                SidebarVisibilityItemsControl.ItemsSource = _sidebarVisibilitySettings;
+                SidebarSettingsStatusText.Text = "Loaded current global sidebar settings.";
+                SaveSidebarSettingsButton.IsEnabled = _currentAdminProfile?.IsAdmin == true;
+            }
+            catch (Exception ex)
+            {
+                SidebarSettingsStatusText.Text = $"Unable to load global sidebar settings: {ex.Message}";
+                SaveSidebarSettingsButton.IsEnabled = false;
+                LogConsole($"[Sidebar] Failed to load global settings: {ex.Message}");
+            }
+        }
+
+        private async void RefreshSidebarSettings_Click(object sender, RoutedEventArgs e)
+        {
+            await LoadSidebarVisibilityAsync();
+        }
+
+        private async void SaveSidebarSettings_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentAdminProfile?.IsAdmin != true)
+            {
+                SidebarSettingsStatusText.Text = "Only an administrator can save global sidebar settings.";
+                return;
+            }
+
+            SaveSidebarSettingsButton.IsEnabled = false;
+            RefreshSidebarSettingsButton.IsEnabled = false;
+            try
+            {
+                await SidebarVisibilityConfigService.SaveAsync(_sidebarVisibilitySettings);
+                SidebarSettingsStatusText.Text = "Saved. Changes are active here now and will reach other running clients within two minutes.";
+                LogConsole("[Sidebar] Global button visibility settings saved.");
+            }
+            catch (Exception ex)
+            {
+                SidebarSettingsStatusText.Text = $"Unable to save global sidebar settings: {ex.Message}";
+                LogConsole($"[Sidebar] Failed to save global settings: {ex.Message}");
+            }
+            finally
+            {
+                SaveSidebarSettingsButton.IsEnabled = true;
+                RefreshSidebarSettingsButton.IsEnabled = true;
             }
         }
 
@@ -430,7 +482,7 @@ namespace SteamPluginManager.Views
             prompt.AppendLine("Components to be deleted:");
             if (doDb) prompt.AppendLine("  [✓] 1. Database Catalog (hzmanifest_files & games_dlc)");
             if (doStorage) prompt.AppendLine("  [✓] 2. Supabase Storage (Folder {appId}/)");
-            if (doOnlineFix) prompt.AppendLine("  [✓] 3. Backblaze B2 (onlinefix/{appId}.zip)");
+            if (doOnlineFix) prompt.AppendLine("  [✓] 3. Cloudflare R2 OnlineFix account (onlinefix/{appId}.zip)");
             if (doGameBypass) prompt.AppendLine("  [✓] 4. Cloudflare R2 (gamebypass/{appId}.zip)");
 
             bool confirm = ModernMessageBox.ShowConfirm(
@@ -528,11 +580,11 @@ namespace SteamPluginManager.Views
                         }
                     }
 
-                    // 3. Backblaze B2 OnlineFix Purge
+                    // 3. Cloudflare R2 OnlineFix Purge
                     if (doOnlineFix)
                     {
-                        bool b2Res = await B2Config.DeleteFileAsync($"onlinefix/{appId}.zip");
-                        LogConsole($"  - Backblaze B2 delete onlinefix/{appId}.zip: {b2Res}");
+                        bool onlineFixRes = await OnlineFixR2Config.DeleteFileAsync($"onlinefix/{appId}.zip");
+                        LogConsole($"  - Cloudflare R2 OnlineFix delete onlinefix/{appId}.zip: {onlineFixRes}");
                     }
 
                     // 4. Cloudflare R2 GameBypass Purge
@@ -1483,15 +1535,15 @@ namespace SteamPluginManager.Views
         {
             try
             {
-                LogConsole("[DevConsole] Fetching Cloudflare R2 and Backblaze B2 storage file catalogs...");
+                LogConsole("[DevConsole] Fetching Cloudflare R2 GameBypass and OnlineFix storage file catalogs...");
 
                 var r2Task = R2Config.ListFilesAsync("gamebypass/");
-                var b2Task = B2Config.ListFilesAsync("onlinefix/");
+                var onlineFixR2Task = OnlineFixR2Config.ListFilesAsync("onlinefix/");
 
-                await Task.WhenAll(r2Task, b2Task);
+                await Task.WhenAll(r2Task, onlineFixR2Task);
 
                 var r2Files = await r2Task;
-                var b2Files = await b2Task;
+                var onlineFixFiles = await onlineFixR2Task;
 
                 var gameDict = _allGames.GroupBy(g => g.AppId).ToDictionary(g => g.Key, g => g.First());
 
@@ -1533,7 +1585,7 @@ namespace SteamPluginManager.Views
                 }
 
                 _allOnlineFixFiles.Clear();
-                foreach (var bf in b2Files)
+                foreach (var bf in onlineFixFiles)
                 {
                     string fileName = Path.GetFileName(bf.Key);
                     int? appId = TryParseAppId(fileName);
@@ -1683,7 +1735,7 @@ namespace SteamPluginManager.Views
                     await LoadStorageDataAsync();
 
                     // Auto-refresh views and caches so newly uploaded bypass/onlinefix appears immediately with real name
-                    B2Config.InvalidateListCache();
+                    OnlineFixR2Config.InvalidateListCache();
                     R2Config.InvalidateListCache();
                     GameBypassView.InvalidateCache();
                     OnlineFixView.InvalidateCache();
@@ -1726,7 +1778,7 @@ namespace SteamPluginManager.Views
                             }
                             else
                             {
-                                await B2Config.DownloadFileToPathAsync(item.Key, targetPath);
+                                await OnlineFixR2Config.DownloadFileToPathAsync(item.Key, targetPath);
                             }
 
                             LogConsole($"[DevConsole] Download complete: '{targetPath}'");
@@ -1762,7 +1814,7 @@ namespace SteamPluginManager.Views
                         }
                         else
                         {
-                            url = $"{B2Config.B2Endpoint}/{B2Config.B2Bucket}/{item.Key}";
+                            url = $"{OnlineFixR2Config.Endpoint}/{OnlineFixR2Config.Bucket}/{item.Key}";
                         }
                     }
 
@@ -1783,7 +1835,7 @@ namespace SteamPluginManager.Views
             {
                 try
                 {
-                    string providerName = item.StorageProvider == "gamebypass" ? "Cloudflare R2 (gamebypass/)" : "Backblaze B2 (onlinefix/)";
+                    string providerName = item.StorageProvider == "gamebypass" ? "Cloudflare R2 (GameBypass account)" : "Cloudflare R2 (OnlineFix account)";
                     bool confirm = ModernMessageBox.ShowConfirm(
                         $"Are you sure you want to PERMANENTLY delete '{item.Key}' ({item.FormattedSize}) from {providerName}?\n\nThis cannot be undone.",
                         "Delete Cloud File",
@@ -1803,7 +1855,7 @@ namespace SteamPluginManager.Views
                     }
                     else
                     {
-                        deleted = await B2Config.DeleteFileAsync(item.Key);
+                        deleted = await OnlineFixR2Config.DeleteFileAsync(item.Key);
                     }
 
                     if (deleted)
@@ -1813,7 +1865,7 @@ namespace SteamPluginManager.Views
                         await LoadStorageDataAsync();
 
                         // Auto-refresh views and list caches so deleted file immediately disappears
-                        B2Config.InvalidateListCache();
+                        OnlineFixR2Config.InvalidateListCache();
                         R2Config.InvalidateListCache();
                         GameBypassView.InvalidateCache();
                         OnlineFixView.InvalidateCache();
@@ -1876,33 +1928,33 @@ namespace SteamPluginManager.Views
 
         private async void ScanOrphanStorage_Click(object sender, RoutedEventArgs e)
         {
-            StorageLogsTextBox.Text = "=== STORAGE ORPHAN SCANNER STARTED ===\r\nScanning Backblaze B2 and Cloudflare R2 files...\r\n";
+            StorageLogsTextBox.Text = "=== STORAGE ORPHAN SCANNER STARTED ===\r\nScanning OnlineFix and GameBypass Cloudflare R2 accounts...\r\n";
             try
             {
                 var knownAppIds = new HashSet<int>(_allGames.Select(g => g.AppId));
-                var orphanB2 = new List<string>();
+                var orphanOnlineFix = new List<string>();
                 var orphanR2 = new List<string>();
 
-                // 1. Scan Backblaze B2 onlinefix/
+                // 1. Scan Cloudflare R2 OnlineFix
                 try
                 {
-                    var b2Files = await B2Config.ListFilesAsync("onlinefix/");
-                    StorageLogsTextBox.AppendText($"\r\n[Backblaze B2] Found {b2Files.Count} files in 'onlinefix/'\r\n");
-                    foreach (var f in b2Files)
+                    var onlineFixFiles = await OnlineFixR2Config.ListFilesAsync("onlinefix/");
+                    StorageLogsTextBox.AppendText($"\r\n[Cloudflare R2 OnlineFix] Found {onlineFixFiles.Count} files in 'onlinefix/'\r\n");
+                    foreach (var f in onlineFixFiles)
                     {
                         string fileName = Path.GetFileNameWithoutExtension(f.Key);
                         if (int.TryParse(fileName, out int aid))
                         {
                             if (!knownAppIds.Contains(aid))
                             {
-                                orphanB2.Add(f.Key);
+                                orphanOnlineFix.Add(f.Key);
                             }
                         }
                     }
                 }
-                catch (Exception b2Ex)
+                catch (Exception onlineFixEx)
                 {
-                    StorageLogsTextBox.AppendText($"[Backblaze B2] Scan error: {b2Ex.Message}\r\n");
+                    StorageLogsTextBox.AppendText($"[Cloudflare R2 OnlineFix] Scan error: {onlineFixEx.Message}\r\n");
                 }
 
                 // 2. Scan Cloudflare R2 gamebypass/
@@ -1928,8 +1980,8 @@ namespace SteamPluginManager.Views
                 }
 
                 StorageLogsTextBox.AppendText("\r\n=== SCAN RESULTS ===\r\n");
-                StorageLogsTextBox.AppendText($"Orphan B2 OnlineFix files (no DB entry): {orphanB2.Count}\r\n");
-                foreach (var o in orphanB2) StorageLogsTextBox.AppendText($"  • {o}\r\n");
+                StorageLogsTextBox.AppendText($"Orphan R2 OnlineFix files (no DB entry): {orphanOnlineFix.Count}\r\n");
+                foreach (var o in orphanOnlineFix) StorageLogsTextBox.AppendText($"  • {o}\r\n");
 
                 StorageLogsTextBox.AppendText($"\r\nOrphan R2 GameBypass files (no DB entry): {orphanR2.Count}\r\n");
                 foreach (var o in orphanR2) StorageLogsTextBox.AppendText($"  • {o}\r\n");
@@ -1996,7 +2048,7 @@ namespace SteamPluginManager.Views
             }
 
             bool confirm = ModernMessageBox.ShowConfirm(
-                $"Are you sure you want to pin this broadcast announcement at the top of Community Chat for all users?\n\nTitle: {title}\n\nMessage:\n{body}",
+                $"Are you sure you want to display this broadcast announcement beneath the MainShell header for users with an active token?\n\nTitle: {title}\n\nMessage:\n{body}",
                 "Confirm Announcement"
             );
 
@@ -2087,9 +2139,9 @@ namespace SteamPluginManager.Views
                     sw.Stop();
                     return resp.IsSuccessStatusCode ? sw.ElapsedMilliseconds : throw new Exception($"HTTP {(int)resp.StatusCode}");
                 }),
-                ("Backblaze B2 S3 Endpoint", async () => {
+                ("Cloudflare R2 OnlineFix Endpoint", async () => {
                     var sw = Stopwatch.StartNew();
-                    await B2Config.ListFilesAsync("test_ping/");
+                    await OnlineFixR2Config.ListFilesAsync("test_ping/");
                     sw.Stop();
                     return sw.ElapsedMilliseconds;
                 }),

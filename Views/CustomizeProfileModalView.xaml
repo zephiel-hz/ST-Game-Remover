@@ -24,7 +24,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="10"
+                                CornerRadius="6"
                                 Padding="{TemplateBinding Padding}"
                                 SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -63,7 +63,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="10">
+                                CornerRadius="6">
                             <ScrollViewer x:Name="PART_ContentHost" Margin="0" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -95,7 +95,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="10">
+                                CornerRadius="6">
                             <ScrollViewer x:Name="PART_ContentHost" Margin="0"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -115,15 +115,11 @@
     <Border Background="{DynamicResource CardBackgroundBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="1"
-            CornerRadius="18"
+            CornerRadius="8"
             Width="470"
             MaxWidth="500"
             Padding="24,22"
             SnapsToDevicePixels="True">
-        <Border.Effect>
-            <DropShadowEffect Color="#000000" BlurRadius="36" ShadowDepth="12" Opacity="0.45"/>
-        </Border.Effect>
-
         <StackPanel>
             <!-- Header Section (Icon, Title, Subtitle, Close Button) -->
             <Grid Margin="0,0,0,18">
@@ -134,7 +130,7 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Icon Badge -->
-                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                <Border Grid.Column="0" Width="38" Height="38" CornerRadius="6"
                         Background="{DynamicResource ButtonBackgroundBrush}"
                         BorderBrush="{DynamicResource BorderBrush}"
                         BorderThickness="1" Margin="0,0,14,0" VerticalAlignment="Center">
@@ -178,7 +174,7 @@
             <Border Background="{DynamicResource InputBackgroundBrush}"
                     BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1"
-                    CornerRadius="14"
+                    CornerRadius="8"
                     Padding="14,14"
                     Margin="0,0,0,16">
                 <Grid>
@@ -192,19 +188,10 @@
                     <Grid Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
                         <!-- Outer Shadow & Background Circle -->
                         <Border x:Name="AvatarBorderContainer" Width="64" Height="64" CornerRadius="32"
+                                Background="{DynamicResource AccentBrush}"
                                 ClipToBounds="True" Cursor="Hand"
                                 ToolTip="Click to select and crop profile picture"
                                 MouseLeftButtonDown="ChangePhoto_Click">
-                            <Border.Background>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                    <GradientStop Color="#8B5CF6" Offset="0"/>
-                                    <GradientStop Color="#EC4899" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Border.Background>
-                            <Border.Effect>
-                                <DropShadowEffect Color="#8B5CF6" BlurRadius="12" ShadowDepth="0" Opacity="0.35"/>
-                            </Border.Effect>
-                            
                             <Grid>
                                 <!-- Initial Text Fallback -->
                                 <TextBlock x:Name="AvatarPreviewInitial" Text="U"

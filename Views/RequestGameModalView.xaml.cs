@@ -313,7 +313,7 @@ namespace SteamPluginManager.Views
                                 if (result.Success)
                                 {
                                     onlineFixFound = true;
-                                    onlineFixDetail = "Online-Fix archive successfully repacked and uploaded to Backblaze B2.";
+                                    onlineFixDetail = "Online-Fix archive successfully repacked and uploaded to its Cloudflare R2 account.";
                                     Logger.Log($"[RequestGameModalView] Companion resource successfully processed and uploaded to B2: {result.RemoteStorageKey}");
                                 }
                                 else if (result.FinalStage == WorkflowStage.NotFound)

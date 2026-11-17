@@ -2,6 +2,24 @@
 
 ---
 
+## [3.1.8] - 2026-11-17
+
+### Added
+* **Related Fix and Bypass Availability:** HZManifestDetailView now indicates when a matching Online Fix or Bypass is available for the game.
+* **Admin Custom Launch After Apply:** Applying an Online Fix or Bypass automatically applies the matching admin-configured Custom Launch when available, then opens that game's GameLibraryDetailView.
+
+### Changed
+* **Online Fix and Profile Picture Storage Migration:** Migrated Online Fix archives and profile picture storage to dedicated Cloudflare R2 accounts. GameBypass remains on its separate R2 account.
+* **Pinned Broadcast Display:** Shows active broadcast announcements beneath the MainShell header only on devices with an active token, retaining admin publish/delete controls and realtime updates.
+* **Global Sidebar Visibility:** Administrators can hide or show feature buttons for all users from the Dev Console; active clients refresh the settings periodically.
+
+### Improved
+* **Consistent Catalog Pagination:** HZManifestView, GameLibraryView, OnlineFixView, and GameBypassView now display 10 rows per page.
+* **Catalog Card Layout:** Aligned thumbnail clipping and card spacing across catalog views, including the spacing between cards and the scrollbar.
+* **Slightly Refined UI:** Applied small visual refinements across the application.
+
+---
+
 ## [3.1.7] - 2026-11-14
 
 ### Added

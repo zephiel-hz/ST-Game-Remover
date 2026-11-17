@@ -72,11 +72,10 @@ namespace SteamPluginManager
             config.CloudflareR2.SecretKey = GetSetting(Environment.GetEnvironmentVariable("R2_SECRET_KEY"), config.CloudflareR2.SecretKey);
             config.CloudflareR2.Bucket = GetSetting(Environment.GetEnvironmentVariable("R2_BUCKET"), config.CloudflareR2.Bucket);
 
-            config.BackblazeB2.Endpoint = GetSetting(Environment.GetEnvironmentVariable("B2_ENDPOINT"), config.BackblazeB2.Endpoint);
-            config.BackblazeB2.AccessKey = GetSetting(Environment.GetEnvironmentVariable("B2_KEY_ID"), config.BackblazeB2.AccessKey);
-            config.BackblazeB2.SecretKey = GetSetting(Environment.GetEnvironmentVariable("B2_APPLICATION_KEY"), config.BackblazeB2.SecretKey);
-            config.BackblazeB2.Bucket = GetSetting(Environment.GetEnvironmentVariable("B2_BUCKET_NAME"), config.BackblazeB2.Bucket);
-            config.BackblazeB2.Region = GetSetting(Environment.GetEnvironmentVariable("B2_REGION"), config.BackblazeB2.Region);
+            config.OnlineFixCloudflareR2.Endpoint = GetSetting(Environment.GetEnvironmentVariable("ONLINEFIX_R2_ENDPOINT"), config.OnlineFixCloudflareR2.Endpoint);
+            config.OnlineFixCloudflareR2.AccessKey = GetSetting(Environment.GetEnvironmentVariable("ONLINEFIX_R2_ACCESS_KEY"), config.OnlineFixCloudflareR2.AccessKey);
+            config.OnlineFixCloudflareR2.SecretKey = GetSetting(Environment.GetEnvironmentVariable("ONLINEFIX_R2_SECRET_KEY"), config.OnlineFixCloudflareR2.SecretKey);
+            config.OnlineFixCloudflareR2.Bucket = GetSetting(Environment.GetEnvironmentVariable("ONLINEFIX_R2_BUCKET"), config.OnlineFixCloudflareR2.Bucket);
 
             config.Discord.GameRequestWebhookUrl = GetSetting(Environment.GetEnvironmentVariable("DISCORD_GAME_REQUEST_WEBHOOK_URL"), config.Discord.GameRequestWebhookUrl);
             config.Discord.BugReportWebhookUrl = GetSetting(Environment.GetEnvironmentVariable("DISCORD_BUG_REPORT_WEBHOOK_URL"), config.Discord.BugReportWebhookUrl);
@@ -147,7 +146,7 @@ namespace SteamPluginManager
     {
         public SupabaseSettings Supabase { get; set; } = new();
         public CloudflareR2Settings CloudflareR2 { get; set; } = new();
-        public BackblazeB2Settings BackblazeB2 { get; set; } = new();
+        public CloudflareR2Settings OnlineFixCloudflareR2 { get; set; } = new();
         public DiscordSettings Discord { get; set; } = new();
         public HubcapSettings Hubcap { get; set; } = new();
         public ResourceSourceSettings ResourceSource { get; set; } = new();
@@ -184,15 +183,6 @@ namespace SteamPluginManager
         public string AccessKey { get; set; } = string.Empty;
         public string SecretKey { get; set; } = string.Empty;
         public string Bucket { get; set; } = string.Empty;
-    }
-
-    public class BackblazeB2Settings
-    {
-        public string Endpoint { get; set; } = string.Empty;
-        public string AccessKey { get; set; } = string.Empty;
-        public string SecretKey { get; set; } = string.Empty;
-        public string Bucket { get; set; } = string.Empty;
-        public string Region { get; set; } = string.Empty; // e.g. "us-east-005"
     }
 
     public class DiscordSettings

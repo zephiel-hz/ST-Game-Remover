@@ -20,6 +20,7 @@ namespace SteamPluginManager.Services.Steam
         private static readonly string _localCacheFile = Path.Combine(_localCacheDirectory, "cached_tutorials.json");
 
         private static List<CustomLaunchTutorial>? _inMemoryTutorials;
+        private static bool _isUsingDefaultFallbackTutorials;
         private static DateTime _lastFetchTime = DateTime.MinValue;
         private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(10);
 
@@ -50,6 +51,7 @@ namespace SteamPluginManager.Services.Steam
                         lock (_lock)
                         {
                             _inMemoryTutorials = list;
+                            _isUsingDefaultFallbackTutorials = false;
                             _lastFetchTime = DateTime.UtcNow;
                         }
 
@@ -86,6 +88,7 @@ namespace SteamPluginManager.Services.Steam
                         lock (_lock)
                         {
                             _inMemoryTutorials = localList;
+                            _isUsingDefaultFallbackTutorials = false;
                         }
                         return localList;
                     }
@@ -95,7 +98,11 @@ namespace SteamPluginManager.Services.Steam
 
             lock (_lock)
             {
-                _inMemoryTutorials ??= GetDefaultFallbackTutorials();
+                if (_inMemoryTutorials == null)
+                {
+                    _inMemoryTutorials = GetDefaultFallbackTutorials();
+                    _isUsingDefaultFallbackTutorials = true;
+                }
             }
 
             return _inMemoryTutorials;
@@ -119,6 +126,46 @@ namespace SteamPluginManager.Services.Steam
             }
 
             return tutorial;
+        }
+
+        public static async Task<bool> ApplyAdminConfiguredTutorialToLocalGameAsync(
+            int appId,
+            string platform,
+            string gameInstallPath)
+        {
+            if (appId <= 0 || string.IsNullOrWhiteSpace(gameInstallPath) || !Directory.Exists(gameInstallPath))
+                return false;
+
+            var allTutorials = await GetAllTutorialsAsync();
+            bool isFallback;
+            lock (_lock)
+            {
+                isFallback = _isUsingDefaultFallbackTutorials;
+            }
+
+            if (isFallback)
+                return false;
+
+            var tutorial = allTutorials.FirstOrDefault(t =>
+                t.AppId == appId &&
+                (string.IsNullOrWhiteSpace(platform) ||
+                 string.Equals(t.ApplicableTo, "ALL", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(t.ApplicableTo, platform, StringComparison.OrdinalIgnoreCase)));
+
+            if (tutorial == null)
+                return false;
+
+            if (string.IsNullOrWhiteSpace(tutorial.RecommendedExecutable))
+            {
+                Logger.Log($"[CustomLaunchTutorialService] Admin tutorial for AppID {appId} has no recommended executable; automatic Custom Launch was skipped.");
+                return false;
+            }
+
+            bool applied = ApplyTutorialToLocalGame(appId, tutorial, gameInstallPath);
+            if (!applied)
+                Logger.Log($"[CustomLaunchTutorialService] Failed to apply admin Custom Launch tutorial for AppID {appId}.");
+
+            return applied;
         }
 
         /// <summary>
@@ -156,6 +203,7 @@ namespace SteamPluginManager.Services.Steam
                 lock (_lock)
                 {
                     _inMemoryTutorials = all;
+                    _isUsingDefaultFallbackTutorials = false;
                     _lastFetchTime = DateTime.UtcNow;
                 }
 
@@ -201,6 +249,7 @@ namespace SteamPluginManager.Services.Steam
                 lock (_lock)
                 {
                     _inMemoryTutorials = all;
+                    _isUsingDefaultFallbackTutorials = false;
                     _lastFetchTime = DateTime.UtcNow;
                 }
 

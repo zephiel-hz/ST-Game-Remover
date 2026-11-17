@@ -41,7 +41,7 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="root" Property="Background" Value="{DynamicResource DangerButtonBrush}"/>
-                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="Foreground" Value="#0B1017"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="root" Property="Opacity" Value="0.85"/>
@@ -86,7 +86,7 @@
 
         <Style x:Key="PrimaryDialogButton" BasedOn="{StaticResource DialogButton}" TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="#0B1017"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Template">
@@ -110,7 +110,7 @@
 
         <Style x:Key="DangerDialogButton" BasedOn="{StaticResource DialogButton}" TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource DangerButtonBrush}"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="#0B1017"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Template">
@@ -134,10 +134,7 @@
     </Window.Resources>
 
     <Grid Margin="12">
-        <Border Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="16" ClipToBounds="True">
-            <Border.Effect>
-                <DropShadowEffect Color="#000000" BlurRadius="28" ShadowDepth="10" Opacity="0.35"/>
-            </Border.Effect>
+        <Border Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="46"/>

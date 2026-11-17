@@ -72,12 +72,12 @@
 
   <sys:String x:Key="Welcome.Title">Welcome to HZ Lua Manager</sys:String>
   <sys:String x:Key="Welcome.Subtitle">Manage and backup your Steam games with ease.</sys:String>
-  <sys:String x:Key="Welcome.Description">Powerful game management for Steam — fast, safe, and reliable.</sys:String>
-  <sys:String x:Key="Welcome.Feature1">Smart backup and restore for games</sys:String>
-  <sys:String x:Key="Welcome.Feature2">Fix online issues and bypass game protections</sys:String>
-  <sys:String x:Key="Welcome.Feature3">Handle manifest files and manage game data</sys:String>
-  <sys:String x:Key="Welcome.DontShowAgain">Don't show this welcome screen again — hides it on next startup.</sys:String>
-  <sys:String x:Key="Welcome.GetStarted">Get Started</sys:String>
+  <sys:String x:Key="Welcome.Description">Browse the library and manage supported fixes, manifests, and launch files.</sys:String>
+  <sys:String x:Key="Welcome.Feature1">Back up and restore supported game files</sys:String>
+  <sys:String x:Key="Welcome.Feature2">Manage OnlineFix and GameBypass data</sys:String>
+  <sys:String x:Key="Welcome.Feature3">Review manifests and installation details</sys:String>
+  <sys:String x:Key="Welcome.DontShowAgain">Don't show this welcome screen again. It will stay hidden on later startups.</sys:String>
+  <sys:String x:Key="Welcome.GetStarted">Open dashboard</sys:String>
 
   <sys:String x:Key="Header.GameDetails">Game Details</sys:String>
   <sys:String x:Key="Label.Description">Description</sys:String>

@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -37,6 +40,7 @@ namespace SteamPluginManager.Views
         private FileSystemWatcher? _unlockerWatcher;
         private DispatcherTimer? _unlockerDebounceTimer;
         private bool _isSyncingUnlockerToggle;
+        private bool _hasActiveDeviceToken;
         private FileSystemWatcher? _configLuaWatcher;
         private FileSystemWatcher? _depotcacheWatcher;
         private DispatcherTimer? _libraryWatcherDebounceTimer;
@@ -45,6 +49,10 @@ namespace SteamPluginManager.Views
         // Theme switching cycle
         private static readonly string[] AvailableThemeList = new[] { "Dark", "DarkBlue", "DarkPurple", "DarkGreen", "DarkRed", "DarkPink", "DarkYellow" };
         private int _currentThemeIndex = 0;
+        private BroadcastAnnouncement? _activeMainShellBroadcast;
+        private static readonly Regex MainShellBroadcastUrlRegex = new(
+            @"(https?://[^\s]+|www\.[^\s]+)",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         public MainShell(bool? startupLicenseVerified = null)
         {
@@ -167,6 +175,8 @@ namespace SteamPluginManager.Views
                 _systemTrayService?.Dispose();
                 _systemTrayService = null;
                 CommunityChatRealtimeClient.OnMessageReceived -= HandleChatNotification;
+                CommunityChatRealtimeClient.OnMessageReceived -= HandleMainShellBroadcastReceived;
+                CommunityChatRealtimeClient.OnMessageDeleted -= HandleMainShellBroadcastDeleted;
                 _notificationToastTimer?.Stop();
                 _steamMonitorTimer?.Stop();
                 _libraryWatcherDebounceTimer?.Stop();
@@ -232,6 +242,10 @@ namespace SteamPluginManager.Views
             StartLibraryWatcher();
             UpdateUnlockerToggleState();
             InitializeChatNotificationListener();
+            CommunityChatRealtimeClient.OnMessageReceived -= HandleMainShellBroadcastReceived;
+            CommunityChatRealtimeClient.OnMessageReceived += HandleMainShellBroadcastReceived;
+            CommunityChatRealtimeClient.OnMessageDeleted -= HandleMainShellBroadcastDeleted;
+            CommunityChatRealtimeClient.OnMessageDeleted += HandleMainShellBroadcastDeleted;
 
             ProfilePictureCacheService.OnAvatarUpdated -= HandleAvatarUpdated;
             ProfilePictureCacheService.OnAvatarUpdated += HandleAvatarUpdated;
@@ -279,6 +293,9 @@ namespace SteamPluginManager.Views
         {
             Dispatcher.Invoke(() =>
             {
+                bool wasActive = _hasActiveDeviceToken;
+                _hasActiveDeviceToken = isVisible;
+
                 if (HeaderProfilePill != null)
                 {
                     HeaderProfilePill.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
@@ -297,7 +314,123 @@ namespace SteamPluginManager.Views
                         GlobalChatWidget.Collapse();
                     }
                 }
+
+                if (!isVisible)
+                {
+                    _activeMainShellBroadcast = null;
+                    MainShellBroadcastCard.Visibility = Visibility.Collapsed;
+                }
+                else if (!wasActive)
+                {
+                    _ = RefreshMainShellBroadcastAsync();
+                }
             });
+        }
+
+        private void HandleMainShellBroadcastReceived(ChatMessage message)
+        {
+            if (!string.Equals(message.DeviceId, "SYSTEM_BROADCAST", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            Dispatcher.BeginInvoke(new Action(() => _ = RefreshMainShellBroadcastAsync()));
+        }
+
+        private void HandleMainShellBroadcastDeleted(long deletedId)
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (_activeMainShellBroadcast?.Id != deletedId)
+                    return;
+
+                _activeMainShellBroadcast = null;
+                MainShellBroadcastCard.Visibility = Visibility.Collapsed;
+            }));
+        }
+
+        private async Task RefreshMainShellBroadcastAsync()
+        {
+            try
+            {
+                if (!await DashboardView.CheckDeviceTokenAsync())
+                {
+                    UpdateHeaderProfileVisibility(false);
+                    return;
+                }
+
+                var announcement = await CommunityChatService.GetActiveBroadcastAsync();
+                _activeMainShellBroadcast = announcement;
+                RenderMainShellBroadcastMessage(announcement?.Title ?? string.Empty, announcement?.Message ?? string.Empty);
+                MainShellBroadcastTimeText.Text = announcement?.FormattedTime ?? string.Empty;
+                MainShellBroadcastCard.Visibility =
+                    _hasActiveDeviceToken && announcement != null ? Visibility.Visible : Visibility.Collapsed;
+            }
+            catch (Exception ex)
+            {
+                MainShellBroadcastCard.Visibility = Visibility.Collapsed;
+                Logger.Log($"[MainShell] Error loading pinned announcement: {ex.Message}");
+            }
+        }
+
+        private void RenderMainShellBroadcastMessage(string title, string message)
+        {
+            MainShellBroadcastText.Inlines.Clear();
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                MainShellBroadcastText.Inlines.Add(new Run(title) { FontWeight = FontWeights.SemiBold });
+                if (!string.IsNullOrWhiteSpace(message))
+                    MainShellBroadcastText.Inlines.Add(new Run(" — "));
+            }
+
+            foreach (var part in MainShellBroadcastUrlRegex.Split(message))
+            {
+                if (string.IsNullOrEmpty(part))
+                    continue;
+
+                if (part.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                    part.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                    part.StartsWith("www.", StringComparison.OrdinalIgnoreCase))
+                {
+                    string cleanUrl = part;
+                    string trailingPunctuation = string.Empty;
+                    while (cleanUrl.Length > 0 && ".,;:!?)'\"".IndexOf(cleanUrl[^1]) >= 0)
+                    {
+                        trailingPunctuation = cleanUrl[^1] + trailingPunctuation;
+                        cleanUrl = cleanUrl.Substring(0, cleanUrl.Length - 1);
+                    }
+
+                    if (cleanUrl.Length > 0)
+                    {
+                        string navigationUrl = cleanUrl.StartsWith("www.", StringComparison.OrdinalIgnoreCase)
+                            ? "https://" + cleanUrl
+                            : cleanUrl;
+                        var hyperlink = new Hyperlink(new Run(cleanUrl))
+                        {
+                            Foreground = Application.Current?.TryFindResource("AccentBrush") as Brush,
+                            Cursor = Cursors.Hand,
+                            ToolTip = $"Open link: {navigationUrl}"
+                        };
+                        hyperlink.Click += (_, _) =>
+                        {
+                            try
+                            {
+                                Process.Start(new ProcessStartInfo(navigationUrl) { UseShellExecute = true });
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Log($"[MainShell] Failed to open announcement URL '{navigationUrl}': {ex.Message}");
+                            }
+                        };
+                        MainShellBroadcastText.Inlines.Add(hyperlink);
+                    }
+
+                    if (!string.IsNullOrEmpty(trailingPunctuation))
+                        MainShellBroadcastText.Inlines.Add(new Run(trailingPunctuation));
+                }
+                else
+                {
+                    MainShellBroadcastText.Inlines.Add(new Run(part));
+                }
+            }
         }
 
         public async Task LoadUserProfileHeaderAsync()

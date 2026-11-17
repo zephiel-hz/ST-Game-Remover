@@ -1,26 +1,92 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 using SteamPluginManager;
+using SteamPluginManager.Services.API;
 
 namespace SteamPluginManager.Views
 {
     public partial class Sidebar : UserControl
     {
         private bool _isSyncingUnlockerToggle;
+        private readonly DispatcherTimer _visibilityRefreshTimer;
 
         public Sidebar()
         {
             InitializeComponent();
+            _visibilityRefreshTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMinutes(2)
+            };
+            _visibilityRefreshTimer.Tick += SidebarVisibilityRefreshTimer_Tick;
             Loaded += Sidebar_Loaded;
+            Unloaded += Sidebar_Unloaded;
         }
 
         private void Sidebar_Loaded(object sender, RoutedEventArgs e)
         {
-            Loaded -= Sidebar_Loaded;
             LoadUnlockerToggleState();
+            SidebarVisibilityConfigService.SettingsChanged -= HandleSidebarSettingsChanged;
+            SidebarVisibilityConfigService.SettingsChanged += HandleSidebarSettingsChanged;
+            _visibilityRefreshTimer.Start();
+            _ = RefreshFeatureVisibilityAsync();
+        }
+
+        private void Sidebar_Unloaded(object sender, RoutedEventArgs e)
+        {
+            _visibilityRefreshTimer.Stop();
+            SidebarVisibilityConfigService.SettingsChanged -= HandleSidebarSettingsChanged;
+        }
+
+        private async void SidebarVisibilityRefreshTimer_Tick(object? sender, EventArgs e)
+        {
+            await RefreshFeatureVisibilityAsync();
+        }
+
+        private async Task RefreshFeatureVisibilityAsync()
+        {
+            try
+            {
+                var settings = await SidebarVisibilityConfigService.LoadAsync();
+                ApplyFeatureVisibility(settings.ToDictionary(item => item.Key, item => item.IsVisible));
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[Sidebar] Failed to refresh global button visibility: {ex.Message}");
+            }
+        }
+
+        private void HandleSidebarSettingsChanged(IReadOnlyDictionary<string, bool> settings)
+        {
+            Dispatcher.BeginInvoke(new Action(() => ApplyFeatureVisibility(settings)));
+        }
+
+        private void ApplyFeatureVisibility(IReadOnlyDictionary<string, bool> settings)
+        {
+            bool IsVisible(string key) => !settings.TryGetValue(key, out bool isVisible) || isVisible;
+
+            HZManifestButton.Visibility = IsVisible(SidebarVisibilityConfigService.ManifestKey)
+                ? Visibility.Visible : Visibility.Collapsed;
+            GameBypassButton.Visibility = IsVisible(SidebarVisibilityConfigService.GameBypassKey)
+                ? Visibility.Visible : Visibility.Collapsed;
+            OnlineFixButton.Visibility = IsVisible(SidebarVisibilityConfigService.OnlineFixKey)
+                ? Visibility.Visible : Visibility.Collapsed;
+            LibraryButton.Visibility = IsVisible(SidebarVisibilityConfigService.LibraryKey)
+                ? Visibility.Visible : Visibility.Collapsed;
+            ToolsButton.Visibility = IsVisible(SidebarVisibilityConfigService.ToolsKey)
+                ? Visibility.Visible : Visibility.Collapsed;
+            SaweriaButton.Visibility = IsVisible(SidebarVisibilityConfigService.SaweriaKey)
+                ? Visibility.Visible : Visibility.Collapsed;
+            FeatureSeparator.Visibility = new[]
+            {
+                HZManifestButton, GameBypassButton, OnlineFixButton, LibraryButton, ToolsButton
+            }.Any(button => button.Visibility == Visibility.Visible) ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void Expander_Expanded(object sender, RoutedEventArgs e)
@@ -237,7 +303,7 @@ namespace SteamPluginManager.Views
                     // Apply selected visuals using dynamic resources defined in themes
                     select.SetResourceReference(BackgroundProperty, "SelectedBrush");
                     select.SetResourceReference(BorderBrushProperty, "AccentBrush");
-                    select.BorderThickness = new Thickness(1);
+                    select.BorderThickness = new Thickness(3, 0, 0, 0);
                 }
             });
         }

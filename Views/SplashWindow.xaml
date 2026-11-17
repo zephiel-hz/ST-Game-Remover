@@ -19,74 +19,26 @@
                              From="0"
                              To="1"
                              Duration="0:0:0.35" />
-            <DoubleAnimation Storyboard.TargetName="RootGrid"
-                             Storyboard.TargetProperty="RenderTransform.(ScaleTransform.ScaleX)"
-                             From="0.96"
-                             To="1"
-                             Duration="0:0:0.35">
-                <DoubleAnimation.EasingFunction>
-                    <CubicEase EasingMode="EaseOut"/>
-                </DoubleAnimation.EasingFunction>
-            </DoubleAnimation>
-            <DoubleAnimation Storyboard.TargetName="RootGrid"
-                             Storyboard.TargetProperty="RenderTransform.(ScaleTransform.ScaleY)"
-                             From="0.96"
-                             To="1"
-                             Duration="0:0:0.35">
-                <DoubleAnimation.EasingFunction>
-                    <CubicEase EasingMode="EaseOut"/>
-                </DoubleAnimation.EasingFunction>
-            </DoubleAnimation>
-            <DoubleAnimation Storyboard.TargetName="LogoGlow"
-                             Storyboard.TargetProperty="Opacity"
-                             From="0.25"
-                             To="0.65"
-                             Duration="0:0:1.2"
-                             AutoReverse="True"
-                             RepeatBehavior="Forever" />
         </Storyboard>
     </Window.Resources>
 
     <Grid x:Name="RootGrid" Opacity="0">
-        <Grid.RenderTransform>
-            <ScaleTransform ScaleX="0.96" ScaleY="0.96" />
-        </Grid.RenderTransform>
-
-        <!-- Ambient Backdrop Shadow & Card Wrapper -->
         <Border Margin="14"
-                CornerRadius="22"
+                CornerRadius="8"
                 Background="{DynamicResource BackgroundBrush}"
                 BorderBrush="{DynamicResource BorderBrush}"
                 BorderThickness="1"
                 ClipToBounds="True">
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="36" ShadowDepth="10" Color="#000000" Opacity="0.5" />
-            </Border.Effect>
-
             <Grid>
                 <!-- Top Accent Highlight Line -->
                 <Border Height="2.5" Background="{DynamicResource AccentBrush}" VerticalAlignment="Top"/>
 
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,4,0,0">
-                    <!-- Brand Icon with Ambient Aura -->
+                    <!-- Brand icon -->
                     <Grid Width="70" Height="70" HorizontalAlignment="Center" Margin="0,0,0,14">
-                        <!-- Breathing Ambient Glow -->
-                        <Ellipse x:Name="LogoGlow"
-                                 Width="68"
-                                 Height="68"
-                                 Fill="{DynamicResource AccentBrush}"
-                                 Opacity="0.25"
-                                 HorizontalAlignment="Center"
-                                 VerticalAlignment="Center">
-                            <Ellipse.Effect>
-                                <BlurEffect Radius="30"/>
-                            </Ellipse.Effect>
-                        </Ellipse>
-
-                        <!-- Sleek Rounded Tile -->
                         <Border Width="56"
                                 Height="56"
-                                CornerRadius="16"
+                                CornerRadius="6"
                                 Background="{DynamicResource CardBackgroundBrush}"
                                 BorderBrush="{DynamicResource BorderBrush}"
                                 BorderThickness="1.5"

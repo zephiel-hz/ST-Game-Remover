@@ -17,7 +17,7 @@
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="border"
                                 Background="{TemplateBinding Background}"
-                                CornerRadius="12"
+                                CornerRadius="4"
                                 SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
@@ -61,30 +61,16 @@
     </UserControl.Resources>
 
     <Grid>
-        <!-- Ambient Glowing Aura Behind Card -->
-        <Canvas HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
-            <Ellipse Width="540" Height="280" Fill="{DynamicResource AccentBrush}" Opacity="0.08"
-                     Canvas.Left="-270" Canvas.Top="-140">
-                <Ellipse.Effect>
-                    <BlurEffect Radius="110"/>
-                </Ellipse.Effect>
-            </Ellipse>
-        </Canvas>
-
         <!-- Centered Card Container -->
         <Border HorizontalAlignment="Center"
                 VerticalAlignment="Center"
                 Width="500"
                 MaxWidth="500"
-                CornerRadius="20"
+                CornerRadius="8"
                 Background="{DynamicResource CardBackgroundBrush}"
                 BorderBrush="{DynamicResource BorderBrush}"
                 BorderThickness="1"
                 ClipToBounds="True">
-            <Border.Effect>
-                <DropShadowEffect Color="#000000" BlurRadius="40" ShadowDepth="14" Opacity="0.4"/>
-            </Border.Effect>
-
             <Grid>
                 <!-- Top Accent Line -->
                 <Border Height="3" Background="{DynamicResource AccentBrush}" VerticalAlignment="Top"/>
@@ -93,15 +79,12 @@
                     <!-- Brand Avatar with Glowing Aura -->
                     <Border Width="68"
                             Height="68"
-                            CornerRadius="20"
+                            CornerRadius="8"
                             HorizontalAlignment="Center"
                             Margin="0,0,0,16"
                             Background="{DynamicResource ButtonBackgroundBrush}"
                             BorderBrush="{DynamicResource BorderBrush}"
                             BorderThickness="1.5">
-                        <Border.Effect>
-                            <DropShadowEffect Color="#000000" BlurRadius="12" ShadowDepth="4" Opacity="0.25"/>
-                        </Border.Effect>
                         <Image x:Name="VerifyLogoImage" Source="/Config/SGR.ico" Width="36" Height="36" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </Border>
 
@@ -110,7 +93,7 @@
                         <Border Background="{DynamicResource InputBackgroundBrush}"
                                 BorderBrush="{DynamicResource BorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="8"
+                                CornerRadius="4"
                                 Padding="10,3"
                                 Margin="0,0,0,10"
                                 HorizontalAlignment="Center">
@@ -138,7 +121,7 @@
                     <Border Background="{DynamicResource ButtonBackgroundBrush}"
                             BorderBrush="{DynamicResource BorderBrush}"
                             BorderThickness="1"
-                            CornerRadius="8"
+                            CornerRadius="4"
                             Padding="10,5"
                             HorizontalAlignment="Center"
                             Margin="0,0,0,16">
@@ -153,7 +136,7 @@
                             Background="{DynamicResource InputBackgroundBrush}"
                             BorderBrush="{DynamicResource BorderBrush}"
                             BorderThickness="1"
-                            CornerRadius="12"
+                            CornerRadius="6"
                             Height="50"
                             Margin="0,0,0,14">
                         <Grid>

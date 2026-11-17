@@ -29,6 +29,8 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 
 using System.Globalization;
+using SteamPluginManager.Helpers;
+using SteamPluginManager.UI.Controls;
 
 
 
@@ -201,7 +203,9 @@ namespace SteamPluginManager.Views
 
         private int _currentPage = 0;
 
-        private const int PAGE_SIZE = 50;
+        private const int ROWS_PER_PAGE = 10;
+
+        private int _pageSize = ROWS_PER_PAGE;
 
         private List<BypassFile> _lastFilteredFiles = new();
 
@@ -2725,21 +2729,7 @@ namespace SteamPluginManager.Views
 
         {
 
-            // PERF-8.8A: Do NOT assign non-rectangular RectangleGeometry clips.
-
-            // In MilCore / DirectX, non-rectangular geometric clips force intermediate offscreen render target surfaces
-
-            // and alpha mask composition passes for every card, causing GPU stalls and scrolling lag.
-
-            // Border.CornerRadius="13,13,0,0" with ClipToBounds="True" handles rectangular clipping natively.
-
-            if (border.Clip != null)
-
-            {
-
-                border.Clip = null;
-
-            }
+            ThumbnailClipHelper.ApplyTopRoundedClip(border, width, height, 9);
 
         }
 
@@ -2821,7 +2811,7 @@ namespace SteamPluginManager.Views
 
             int totalFiles = _lastFilteredFiles?.Count ?? _allFiles.Count;
 
-            int totalPages = Math.Max(1, (int)Math.Ceiling((double)totalFiles / PAGE_SIZE));
+            int totalPages = Math.Max(1, (int)Math.Ceiling((double)totalFiles / _pageSize));
 
             if (_currentPage < totalPages - 1)
 
@@ -2838,6 +2828,16 @@ namespace SteamPluginManager.Views
         }
 
 
+
+        private void PaginationFooter_PageChanged(object? sender, PageChangedEventArgs e)
+        {
+            if (_currentPage == e.PageIndex)
+                return;
+
+            _currentPage = e.PageIndex;
+            DisplayCurrentPage();
+            CardsScrollViewer?.ScrollToTop();
+        }
 
         private void PreviousPage_Click(object sender, RoutedEventArgs e)
 
@@ -2875,7 +2875,7 @@ namespace SteamPluginManager.Views
 
             int totalFiles = _lastFilteredFiles?.Count ?? 0;
 
-            int totalPages = Math.Max(1, (int)Math.Ceiling((double)totalFiles / PAGE_SIZE));
+            int totalPages = Math.Max(1, (int)Math.Ceiling((double)totalFiles / _pageSize));
 
             _currentPage = Math.Clamp(_currentPage, 0, totalPages - 1);
 
@@ -2883,9 +2883,9 @@ namespace SteamPluginManager.Views
 
             var pageItems = (_lastFilteredFiles ?? _allFiles)
 
-                .Skip(_currentPage * PAGE_SIZE)
+                .Skip(_currentPage * _pageSize)
 
-                .Take(PAGE_SIZE)
+                .Take(_pageSize)
 
                 .ToList();
 
@@ -2903,69 +2903,7 @@ namespace SteamPluginManager.Views
 
 
 
-            bool hasMultiplePages = totalPages > 1;
-
-            if (FindName("PreviousPageButton") is Button prevBtn)
-
-            {
-
-                prevBtn.Visibility = hasMultiplePages ? Visibility.Visible : Visibility.Collapsed;
-
-                prevBtn.IsEnabled = _currentPage > 0;
-
-                prevBtn.Opacity = _currentPage > 0 ? 1.0 : 0.4;
-
-            }
-
-            if (FindName("NextPageButton") is Button nextBtn)
-
-            {
-
-                nextBtn.Visibility = hasMultiplePages ? Visibility.Visible : Visibility.Collapsed;
-
-                nextBtn.IsEnabled = _currentPage < totalPages - 1;
-
-                nextBtn.Opacity = _currentPage < totalPages - 1 ? 1.0 : 0.4;
-
-            }
-
-            if (FindName("PageIndicator") is TextBlock pageIndicator)
-
-            {
-
-                pageIndicator.Visibility = Visibility.Visible;
-
-                bool hasSearch = !string.IsNullOrWhiteSpace(SearchBox?.Text);
-
-                bool isAllCat = string.Equals(_selectedCategory, "ALL", StringComparison.OrdinalIgnoreCase);
-
-                string catSuffix = isAllCat ? "" : $" ({_selectedCategory})";
-
-                if (hasMultiplePages)
-
-                {
-
-                    pageIndicator.Text = hasSearch
-
-                        ? $"Page {_currentPage + 1} / {totalPages} ({totalFiles} matching{catSuffix})"
-
-                        : $"Page {_currentPage + 1} / {totalPages} ({totalFiles} files{catSuffix})";
-
-                }
-
-                else
-
-                {
-
-                    pageIndicator.Text = hasSearch
-
-                        ? $"Found {totalFiles} matching files{catSuffix}"
-
-                        : $"Total: {totalFiles} files{catSuffix}";
-
-                }
-
-            }
+            PaginationFooter.UpdatePage(_currentPage, totalFiles, _pageSize, "files");
 
 
 
@@ -3308,14 +3246,25 @@ namespace SteamPluginManager.Views
                 double usableWidth = Math.Max(targetCardWidth + cardMarginRight, availableWidth - rightClearance);
 
                 int columns = Math.Max(1, (int)(usableWidth / (targetCardWidth + cardMarginRight)));
-
-                double computedWidth = Math.Floor(usableWidth / columns);
-
-
+                double computedWidth = Math.Floor(Math.Max(usableWidth, availableWidth) / columns);
+                int pageSize = columns * ROWS_PER_PAGE;
+                bool pageSizeChanged = pageSize != _pageSize;
+                _pageSize = pageSize;
 
                 CardPanel.ItemWidth = computedWidth;
 
-                CardPanel.ItemHeight = 272; // 260 card height + 12 bottom margin
+                CardPanel.ItemHeight = 274; // 260 card height + 14 bottom margin
+
+                if (pageSizeChanged)
+                {
+                    int totalFiles = _lastFilteredFiles.Count;
+                    int totalPages = Math.Max(1, (int)Math.Ceiling((double)totalFiles / _pageSize));
+                    _currentPage = Math.Clamp(_currentPage, 0, totalPages - 1);
+                    if (totalFiles > 0)
+                        DisplayCurrentPage();
+                    else
+                        PaginationFooter.UpdatePage(0, 0, _pageSize, "files");
+                }
 
             }
 

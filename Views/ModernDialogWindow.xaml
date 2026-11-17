@@ -15,9 +15,6 @@
         KeyDown="Window_KeyDown">
 
     <Window.Resources>
-        <SolidColorBrush x:Key="SecondaryButtonBrush" Color="#1E2638"/>
-        <SolidColorBrush x:Key="SecondaryButtonBorderBrush" Color="#2E384D"/>
-
         <!-- Modern Dialog Button Base Style (Modeled from Request Modal) -->
         <Style x:Key="ModernDialogButton" TargetType="Button">
             <Setter Property="MinWidth" Value="105"/>
@@ -26,7 +23,6 @@
             <Setter Property="FontSize" Value="12.5"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -34,7 +30,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="9"
+                                CornerRadius="6"
                                 Padding="{TemplateBinding Padding}"
                                 SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -57,10 +53,10 @@
 
         <!-- Secondary Button Style -->
         <Style x:Key="SecondaryDialogButton" TargetType="Button" BasedOn="{StaticResource ModernDialogButton}">
-            <Setter Property="Background" Value="{StaticResource SecondaryButtonBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource SecondaryButtonBorderBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Foreground" Value="#FFFFFF"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
         </Style>
 
         <!-- Primary Action Button Style -->
@@ -68,7 +64,7 @@
             <Setter Property="MinWidth" Value="110"/>
             <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="#FFFFFF"/>
+            <Setter Property="Foreground" Value="#0B1017"/>
         </Style>
 
         <!-- Danger / Destructive Action Button Style -->
@@ -76,7 +72,7 @@
             <Setter Property="MinWidth" Value="110"/>
             <Setter Property="Background" Value="#EF4444"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="#FFFFFF"/>
+            <Setter Property="Foreground" Value="#0B1017"/>
         </Style>
 
         <!-- Close Icon Button Style -->
@@ -89,7 +85,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="btnBorder" Background="Transparent" CornerRadius="6">
+                        <Border x:Name="btnBorder" Background="Transparent" CornerRadius="4">
                             <TextBlock Text="✕" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource MutedForegroundBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -108,10 +104,7 @@
             Background="{DynamicResource CardBackgroundBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="1"
-            CornerRadius="16">
-        <Border.Effect>
-            <DropShadowEffect Color="#000000" BlurRadius="28" ShadowDepth="8" Opacity="0.6"/>
-        </Border.Effect>
+            CornerRadius="8">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/> <!-- Header -->
@@ -124,7 +117,7 @@
                     Background="{DynamicResource HeaderBackgroundBrush}"
                     BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="0,0,0,1"
-                    CornerRadius="15,15,0,0"
+                    CornerRadius="7,7,0,0"
                     Padding="18,14"
                     MouseLeftButtonDown="Header_MouseLeftButtonDown">
                 <Grid>
@@ -138,9 +131,9 @@
                     <Border x:Name="IconBadgeBorder"
                             Grid.Column="0"
                             Width="34" Height="34"
-                            CornerRadius="10"
-                            Background="#226366F1"
-                            BorderBrush="#446366F1"
+                            CornerRadius="6"
+                            Background="{DynamicResource ButtonBackgroundBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
                             BorderThickness="1"
                             Margin="0,0,12,0"
                             VerticalAlignment="Center">
@@ -148,7 +141,7 @@
                                    Text="&#xE897;"
                                    FontFamily="Segoe MDL2 Assets"
                                    FontSize="15"
-                                   Foreground="#818CF8"
+                                   Foreground="{DynamicResource AccentBrush}"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"/>
                     </Border>
@@ -191,7 +184,7 @@
                     Background="{DynamicResource HeaderBackgroundBrush}"
                     BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="0,1,0,0"
-                    CornerRadius="0,0,15,15"
+                    CornerRadius="0,0,7,7"
                     Padding="20,16">
                 <StackPanel x:Name="ButtonsPanel"
                             Orientation="Horizontal"

@@ -20,7 +20,7 @@
     <WindowChrome.WindowChrome>
         <wc:WindowChrome CaptionHeight="0"
                           ResizeBorderThickness="6"
-                          CornerRadius="18"
+                          CornerRadius="12"
                           GlassFrameThickness="0"
                           UseAeroCaptionButtons="False"/>
     </WindowChrome.WindowChrome>
@@ -114,7 +114,7 @@
         </Style>
     </Window.Resources>
 
-    <Border x:Name="MainShellBorder" Margin="8" Background="{DynamicResource BackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="18" ClipToBounds="True" SizeChanged="MainShellBorder_SizeChanged">
+    <Border x:Name="MainShellBorder" Margin="8" Background="{DynamicResource BackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12" ClipToBounds="True" SizeChanged="MainShellBorder_SizeChanged">
         <!-- PERF-8.1A Diagnostic: DropShadowEffect temporarily disabled to isolate root off-screen render target
         <Border.Effect>
             <DropShadowEffect Color="#000000" BlurRadius="32" ShadowDepth="12" Opacity="0.45"/>
@@ -122,7 +122,8 @@
         -->
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="58"/>
+                <RowDefinition Height="54"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
@@ -132,7 +133,7 @@
                     Background="{DynamicResource HeaderBackgroundBrush}"
                     BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="0,0,0,1"
-                    CornerRadius="18,18,0,0"
+                    CornerRadius="12,12,0,0"
                     wc:WindowChrome.IsHitTestVisibleInChrome="True"
                     MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                 <Grid Margin="16,0">
@@ -144,7 +145,7 @@
 
                     <!-- App Brand Section -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border Width="28" Height="28" CornerRadius="8" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" ClipToBounds="True">
+                        <Border Width="28" Height="28" CornerRadius="6" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" ClipToBounds="True">
                             <Image x:Name="MainShellLogoImage" Source="/Config/SGR.ico" Width="20" Height="20" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <StackPanel Margin="10,0,0,0" Orientation="Horizontal" VerticalAlignment="Center">
@@ -171,7 +172,7 @@
                                 Background="{DynamicResource CardBackgroundBrush}"
                                 BorderBrush="{DynamicResource BorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="8"
+                                CornerRadius="6"
                                 Padding="8,4"
                                 Margin="0,0,8,0"
                                 Cursor="Hand"
@@ -189,7 +190,7 @@
                                 Background="{DynamicResource CardBackgroundBrush}"
                                 BorderBrush="{DynamicResource BorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="8"
+                                CornerRadius="6"
                                 Padding="8,4"
                                 Margin="0,0,8,0"
                                 Cursor="Hand"
@@ -271,8 +272,47 @@
                 </Grid>
             </Border>
 
+            <Border x:Name="MainShellBroadcastCard"
+                    Grid.Row="1"
+                    Margin="18,5,18,5"
+                    Padding="12,6"
+                    Background="{DynamicResource CardBackgroundBrush}"
+                    BorderBrush="{DynamicResource AccentBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    ToolTip="Pinned announcement"
+                    Visibility="Collapsed">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="&#xEC42;"
+                               FontFamily="Segoe MDL2 Assets"
+                               FontSize="14"
+                               Foreground="{DynamicResource AccentBrush}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,9,0"/>
+                    <TextBlock x:Name="MainShellBroadcastText"
+                               Grid.Column="1"
+                               FontSize="12"
+                               Foreground="{DynamicResource ForegroundBrush}"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center"/>
+                    <TextBlock x:Name="MainShellBroadcastTimeText"
+                               Grid.Column="2"
+                               FontSize="10"
+                               Foreground="{DynamicResource MutedForegroundBrush}"
+                               VerticalAlignment="Center"
+                               Margin="12,0,0,0"/>
+                </Grid>
+            </Border>
+
             <!-- Main Content Area with Navigation Rail & Master-Detail Inspector Drawer -->
-            <Grid Grid.Row="1" x:Name="MainContentGrid">
+            <Grid Grid.Row="2" x:Name="MainContentGrid">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="74" x:Name="NavRailColumn"/>
                     <ColumnDefinition Width="*" x:Name="MainViewColumn"/>
@@ -347,7 +387,7 @@
 
             <!-- Community Chat drawer, toggled from the fixed header shortcut -->
             <views:CommunityChatWidget x:Name="GlobalChatWidget"
-                                       Grid.Row="1"
+                                       Grid.Row="2"
                                        Width="340"
                                        Height="480"
                                        HorizontalAlignment="Right"
@@ -358,7 +398,7 @@
 
             <!-- In-App Notification Toast for Community Chat Mentions & Replies -->
             <Border x:Name="InAppNotificationToast"
-                    Grid.Row="1"
+                    Grid.Row="2"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Top"
                     Margin="0,16,24,0"
@@ -366,14 +406,14 @@
                     Background="{DynamicResource CardBackgroundBrush}"
                     BorderBrush="{DynamicResource AccentBrush}"
                     BorderThickness="1.5"
-                    CornerRadius="12"
+                    CornerRadius="8"
                     Padding="12,10"
                     Panel.ZIndex="150"
                     Visibility="Collapsed"
                     Cursor="Hand"
                     MouseLeftButtonDown="InAppNotificationToast_MouseLeftButtonDown">
                 <Border.Effect>
-                    <DropShadowEffect Color="#000000" BlurRadius="24" ShadowDepth="6" Opacity="0.45"/>
+                    <DropShadowEffect Color="#000000" BlurRadius="12" ShadowDepth="2" Opacity="0.2"/>
                 </Border.Effect>
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -421,7 +461,7 @@
 
             <!-- Standalone Centered Global Modal Host (Dead center in MainShell, covers entire window including split mode) -->
             <Grid x:Name="GlobalModalHost"
-                  Grid.Row="0" Grid.RowSpan="2"
+                  Grid.Row="0" Grid.RowSpan="3"
                   Background="#99000000"
                   Visibility="Collapsed"
                   Panel.ZIndex="999">

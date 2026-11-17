@@ -740,7 +740,7 @@ namespace SteamPluginManager.UI.Dialogs
 
             bool isGameBypass = TargetGameBypassRadio.IsChecked == true;
 
-            string targetProvider = isGameBypass ? "Cloudflare R2 (gamebypass/)" : "Backblaze B2 (onlinefix/)";
+            string targetProvider = isGameBypass ? "Cloudflare R2 (GameBypass)" : "Cloudflare R2 (OnlineFix account)";
 
 
 
@@ -810,7 +810,7 @@ namespace SteamPluginManager.UI.Dialogs
 
                 {
 
-                    uploadedUrl = await B2Config.UploadFileAsync(_selectedFilePath, key, "application/zip", progress);
+                    uploadedUrl = await OnlineFixR2Config.UploadFileAsync(_selectedFilePath, key, "application/zip", progress);
 
                 }
 

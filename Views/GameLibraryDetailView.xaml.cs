@@ -248,14 +248,11 @@ namespace SteamPluginManager.Views
                 InstalledStatusBadge.BorderBrush = new SolidColorBrush(Color.FromRgb(234, 179, 8));
                 InstalledStatusText.Text = "DOWNLOAD PAUSED";
                 InstalledStatusText.Foreground = new SolidColorBrush(Color.FromRgb(250, 204, 21));
-                InstalledStatusIcon.Text = "⏸";
+                InstalledStatusIcon.Text = "\uE769";
                 InstalledStatusIcon.Foreground = new SolidColorBrush(Color.FromRgb(250, 204, 21));
 
-                DownloadStatusIcon.Text = "⏸";
-                DownloadStatusIcon.Foreground = new SolidColorBrush(Color.FromRgb(250, 204, 21));
-                DownloadStatusLabel.Text = "DOWNLOAD PAUSED ON STEAM";
-                DownloadStatusLabel.Foreground = new SolidColorBrush(Color.FromRgb(250, 204, 21));
-                DownloadProgressPanel.BorderBrush = new SolidColorBrush(Color.FromRgb(234, 179, 8));
+                DownloadStatusIcon.Text = "\uE769";
+                DownloadStatusLabel.Text = "Download paused on Steam";
             }
             else if (state == SteamAppState.Validating)
             {
@@ -263,14 +260,11 @@ namespace SteamPluginManager.Views
                 InstalledStatusBadge.BorderBrush = new SolidColorBrush(Color.FromRgb(168, 85, 247));
                 InstalledStatusText.Text = "VALIDATING FILES";
                 InstalledStatusText.Foreground = new SolidColorBrush(Color.FromRgb(192, 132, 252));
-                InstalledStatusIcon.Text = "🔄";
+                InstalledStatusIcon.Text = "\uE72C";
                 InstalledStatusIcon.Foreground = new SolidColorBrush(Color.FromRgb(192, 132, 252));
 
-                DownloadStatusIcon.Text = "🔄";
-                DownloadStatusIcon.Foreground = new SolidColorBrush(Color.FromRgb(192, 132, 252));
-                DownloadStatusLabel.Text = "VALIDATING FILES ON STEAM...";
-                DownloadStatusLabel.Foreground = new SolidColorBrush(Color.FromRgb(192, 132, 252));
-                DownloadProgressPanel.BorderBrush = new SolidColorBrush(Color.FromRgb(168, 85, 247));
+                DownloadStatusIcon.Text = "\uE72C";
+                DownloadStatusLabel.Text = "Validating files on Steam...";
             }
             else
             {
@@ -278,14 +272,11 @@ namespace SteamPluginManager.Views
                 InstalledStatusBadge.BorderBrush = new SolidColorBrush(Color.FromRgb(2, 132, 199));
                 InstalledStatusText.Text = "DOWNLOADING";
                 InstalledStatusText.Foreground = new SolidColorBrush(Color.FromRgb(56, 189, 248));
-                InstalledStatusIcon.Text = "📥";
+                InstalledStatusIcon.Text = "\uE896";
                 InstalledStatusIcon.Foreground = new SolidColorBrush(Color.FromRgb(56, 189, 248));
 
-                DownloadStatusIcon.Text = "📥";
-                DownloadStatusIcon.Foreground = new SolidColorBrush(Color.FromRgb(56, 189, 248));
-                DownloadStatusLabel.Text = "DOWNLOADING VIA STEAM...";
-                DownloadStatusLabel.Foreground = new SolidColorBrush(Color.FromRgb(56, 189, 248));
-                DownloadProgressPanel.BorderBrush = new SolidColorBrush(Color.FromRgb(2, 132, 199));
+                DownloadStatusIcon.Text = "\uE896";
+                DownloadStatusLabel.Text = "Downloading via Steam...";
             }
         }
 
@@ -871,7 +862,7 @@ namespace SteamPluginManager.Views
                     PlayButton.Style = stopStyle;
                 }
                 PlayButtonIcon.Text = "⏹";
-                PlayButtonText.Text = "STOP";
+                PlayButtonText.Text = "Stop";
                 PlayButton.ToolTip = "Stop running game";
                 PlayButton.IsEnabled = true;
 
@@ -896,7 +887,7 @@ namespace SteamPluginManager.Views
                     PlayButton.Style = playStyle;
                 }
                 PlayButtonIcon.Text = "▶";
-                PlayButtonText.Text = "PLAY";
+                PlayButtonText.Text = "Play";
                 PlayButton.IsEnabled = true;
 
                 // Restore actions when game stops
@@ -931,7 +922,7 @@ namespace SteamPluginManager.Views
             {
                 // Stop the game
                 PlayButton.IsEnabled = false;
-                PlayButtonText.Text = "STOPPING...";
+                PlayButtonText.Text = "Stopping...";
 
                 // Immediately stop background monitoring timer to prevent UI thread contention while killing processes
                 StopGameRunningMonitor();
@@ -958,7 +949,7 @@ namespace SteamPluginManager.Views
             {
                 // Launch the game
                 PlayButton.IsEnabled = false;
-                PlayButtonText.Text = "LAUNCHING...";
+                PlayButtonText.Text = "Launching...";
 
                 var (success, msg, proc) = await Task.Run(() =>
                     CustomLaunchService.LaunchGameWithProcess(_game.AppId, _game.InstallationPath));
@@ -1094,7 +1085,7 @@ namespace SteamPluginManager.Views
                 {
                     string fileName = Path.GetFileName(config!.ExecutablePath);
                     CustomLaunchIndicatorBadge.Visibility = Visibility.Visible;
-                    CustomLaunchBadgeText.Text = $"CUSTOM: {fileName}";
+                    CustomLaunchBadgeText.Text = $"Custom: {fileName}";
                     CustomLaunchActiveDot.Visibility = Visibility.Visible;
                     CustomLaunchBtnText.Text = "Custom Launch";
 

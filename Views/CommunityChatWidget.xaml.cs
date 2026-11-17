@@ -61,10 +61,6 @@ namespace SteamPluginManager.Views
         private static readonly Regex _mentionOrUrlRegex = new(
             @"(@[a-zA-Z0-9_.-]+|https?://[^\s]+|www\.[^\s]+)", 
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
-        private static readonly Regex _urlRegex = new(
-            @"(https?://[^\s]+|www\.[^\s]+)",
-            RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
         /// <summary>
         /// Sisipkan zero-width space (\u200B) pada URL atau token panjang agar line wrapping WPF tidak meluap ke samping.
         /// </summary>
@@ -166,28 +162,6 @@ namespace SteamPluginManager.Views
             }
         }
 
-        private static void RenderAnnouncementInlines(TextBlock textBlock, string text)
-        {
-            textBlock.Inlines.Clear();
-            Brush textBrush = textBlock.Foreground;
-            foreach (var part in _urlRegex.Split(text))
-            {
-                if (string.IsNullOrEmpty(part))
-                    continue;
-
-                if (part.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-                    part.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
-                    part.StartsWith("www.", StringComparison.OrdinalIgnoreCase))
-                {
-                    AddUrlInlines(textBlock, part, Application.Current?.TryFindResource("AccentBrush") as Brush ?? textBrush, textBrush);
-                }
-                else
-                {
-                    textBlock.Inlines.Add(new Run(InsertSoftBreaks(part)) { Foreground = textBrush });
-                }
-            }
-        }
-
         private static void AddUrlInlines(TextBlock textBlock, string urlWithPunctuation, Brush urlBrush, Brush textBrush)
         {
             string cleanUrl = urlWithPunctuation;
@@ -241,8 +215,6 @@ namespace SteamPluginManager.Views
         private UserProfile? _currentProfile;
         private string _currentDeviceId = string.Empty;
         private ChatMessage? _activeReplyMessage;
-        private BroadcastAnnouncement? _activeAnnouncement;
-        private Storyboard? _marqueeStoryboard;
         private bool _isSending;
         private bool _isLoading;
         private bool _isUpdatingMentionList;
@@ -466,12 +438,8 @@ namespace SteamPluginManager.Views
             {
                 if (msg == null || msg.Id <= 0) return;
 
-                // If message is a system broadcast, update the pinned announcement banner instead of adding to chat list
                 if (string.Equals(msg.DeviceId, "SYSTEM_BROADCAST", StringComparison.OrdinalIgnoreCase))
-                {
-                    _ = RefreshBroadcastAnnouncementAsync();
                     return;
-                }
 
                 if (_messages.Any(m => m.Id == msg.Id)) return;
 
@@ -737,13 +705,6 @@ namespace SteamPluginManager.Views
         {
             Dispatcher.Invoke(() =>
             {
-                if (_activeAnnouncement != null && _activeAnnouncement.Id == deletedId)
-                {
-                    _activeAnnouncement = null;
-                    _marqueeStoryboard?.Stop();
-                    PinnedAnnouncementBanner.Visibility = Visibility.Collapsed;
-                }
-
                 var existing = _messages.FirstOrDefault(m => m.Id == deletedId);
                 if (existing != null)
                 {
@@ -751,112 +712,6 @@ namespace SteamPluginManager.Views
                     EmptyChatText.Visibility = _messages.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
                 }
             });
-        }
-
-        private async Task RefreshBroadcastAnnouncementAsync()
-        {
-            try
-            {
-                var announcement = await CommunityChatService.GetActiveBroadcastAsync();
-                Dispatcher.Invoke(() =>
-                {
-                    if (announcement != null)
-                    {
-                        bool isNew = _activeAnnouncement == null || _activeAnnouncement.Id != announcement.Id || _activeAnnouncement.Message != announcement.Message;
-                        _activeAnnouncement = announcement;
-
-                        string cleanMessage = announcement.Message.Replace("\r\n", " ").Replace("\n", " ");
-                        string combinedText = string.IsNullOrWhiteSpace(announcement.Title)
-                            ? cleanMessage
-                            : $"{announcement.Title}  •  {cleanMessage}";
-
-                        RenderAnnouncementInlines(PinnedMarqueeTextBlock, combinedText);
-                        PinnedAnnouncementBanner.ToolTip = string.IsNullOrWhiteSpace(announcement.Title)
-                            ? announcement.Message
-                            : $"📢 {announcement.Title}\n{announcement.Message}";
-                        PinnedAnnouncementBanner.Visibility = Visibility.Visible;
-
-                        if (isNew)
-                        {
-                            Dispatcher.InvokeAsync(StartMarqueeAnimation, DispatcherPriority.Loaded);
-                        }
-                    }
-                    else
-                    {
-                        _activeAnnouncement = null;
-                        _marqueeStoryboard?.Stop();
-                        PinnedAnnouncementBanner.Visibility = Visibility.Collapsed;
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"[CommunityChatWidget] RefreshBroadcastAnnouncementAsync error: {ex.Message}");
-            }
-        }
-
-        private void StartMarqueeAnimation()
-        {
-            try
-            {
-                if (PinnedAnnouncementBanner.Visibility != Visibility.Visible || _activeAnnouncement == null)
-                    return;
-
-                PinnedMarqueeTextBlock.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-                double textWidth = PinnedMarqueeTextBlock.DesiredSize.Width;
-                double canvasWidth = MarqueeCanvas.ActualWidth;
-
-                if (canvasWidth <= 0) canvasWidth = 230;
-
-                // Duration based on text length + canvas width so speed is smooth and readable (~55 px/sec)
-                double totalDistance = canvasWidth + textWidth + 30;
-                double durationSec = Math.Max(7, totalDistance / 55.0);
-
-                var animation = new DoubleAnimation
-                {
-                    From = canvasWidth,
-                    To = -(textWidth + 20),
-                    Duration = new Duration(TimeSpan.FromSeconds(durationSec)),
-                    RepeatBehavior = RepeatBehavior.Forever
-                };
-
-                _marqueeStoryboard?.Stop();
-                _marqueeStoryboard = new Storyboard();
-                Storyboard.SetTarget(animation, PinnedMarqueeTextBlock);
-                Storyboard.SetTargetProperty(animation, new PropertyPath("(UIElement.RenderTransform).(TranslateTransform.X)"));
-                _marqueeStoryboard.Children.Add(animation);
-                _marqueeStoryboard.Begin();
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"[CommunityChatWidget] StartMarqueeAnimation error: {ex.Message}");
-            }
-        }
-
-        private void MarqueeCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            if (PinnedAnnouncementBanner.Visibility == Visibility.Visible && _activeAnnouncement != null)
-            {
-                StartMarqueeAnimation();
-            }
-        }
-
-        private void PinnedAnnouncementBanner_MouseEnter(object sender, MouseEventArgs e)
-        {
-            try
-            {
-                _marqueeStoryboard?.Pause();
-            }
-            catch { }
-        }
-
-        private void PinnedAnnouncementBanner_MouseLeave(object sender, MouseEventArgs e)
-        {
-            try
-            {
-                _marqueeStoryboard?.Resume();
-            }
-            catch { }
         }
 
         private void HandleOnlineUsersChanged(HashSet<string> onlineUsers)
@@ -1002,8 +857,6 @@ namespace SteamPluginManager.Views
                 }
                 StartLoadingAnimation();
 
-                _ = RefreshBroadcastAnnouncementAsync();
-
                 var fetched = await CommunityChatService.GetRecentMessagesAsync(_currentDeviceId);
                 _messages.Clear();
                 foreach (var msg in fetched)
@@ -1046,8 +899,6 @@ namespace SteamPluginManager.Views
         {
             try
             {
-                _ = RefreshBroadcastAnnouncementAsync();
-
                 var fetched = await CommunityChatService.GetRecentMessagesAsync(_currentDeviceId);
                 if (fetched == null || fetched.Count == 0) return;
 

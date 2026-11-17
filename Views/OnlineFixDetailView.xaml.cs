@@ -437,6 +437,7 @@ namespace SteamPluginManager.Views
         {
             string? tempZip = null;
             string? extractDir = null;
+            GameEntry? gameToOpen = null;
             try
             {
                 if (_currentFile == null)
@@ -508,7 +509,7 @@ namespace SteamPluginManager.Views
                     return;
                 }
 
-                // Download file dari Backblaze B2
+                // Download file dari akun Cloudflare R2 khusus OnlineFix
                 string r2Key = _currentFile.FileName;
                 tempZip = Path.Combine(Path.GetTempPath(), $"onlinefix_{Guid.NewGuid()}.zip");
                 ShowLoadingState(true, "Downloading Online-Fix archive...", GetCurrentFileSizeDetail());
@@ -540,7 +541,7 @@ namespace SteamPluginManager.Views
                         });
                     });
 
-                    await SteamPluginManager.B2Config.DownloadFileToPathAsync(r2Key, tempZip, progress);
+                    await SteamPluginManager.OnlineFixR2Config.DownloadFileToPathAsync(r2Key, tempZip, progress);
                 }
                 catch
                 {
@@ -629,6 +630,29 @@ namespace SteamPluginManager.Views
                 UpdateProgressStep(4, true);
                 Dispatcher.Invoke(() => ShowResultNotification(true, $"✓ Successfully applied Online-Fix to '{_currentFile?.Name ?? "Steam Game"}'!"));
                 await Task.Delay(1600);
+
+                try
+                {
+                    if (_currentFile?.AppId is int appId &&
+                        await CustomLaunchTutorialService.ApplyAdminConfiguredTutorialToLocalGameAsync(
+                            appId,
+                            "ONLINEFIX",
+                            gameFolder!))
+                    {
+                        gameToOpen = new GameEntry
+                        {
+                            AppId = appId,
+                            Name = _currentFile.Name ?? "Game",
+                            InstallationPath = gameFolder!,
+                            IsInstalled = true
+                        };
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[OnlineFixDetailView] Online-Fix applied, but automatic Custom Launch setup failed: {ex.Message}");
+                }
+
                 ShowLoadingState(false);
             }
             catch
@@ -654,6 +678,9 @@ namespace SteamPluginManager.Views
                 }
                 CheckSteamValidationState();
             }
+
+            if (gameToOpen != null)
+                WindowNavigator.NavigateToGameLibraryDetail(gameToOpen);
         }
 
         private async void RestoreGame_Click(object sender, RoutedEventArgs e)
@@ -809,7 +836,7 @@ namespace SteamPluginManager.Views
                 }
                 else
                 {
-                    // Fallback: If no manifest exists, try to inspect the archive from B2
+                    // Fallback: If no manifest exists, try to inspect the archive from R2
                     if (!string.IsNullOrWhiteSpace(_currentFile.FileName))
                     {
                         try
@@ -835,7 +862,7 @@ namespace SteamPluginManager.Views
                                     });
                                 });
 
-                                await SteamPluginManager.B2Config.DownloadFileToPathAsync(_currentFile.FileName, tempZip, progress);
+                                await SteamPluginManager.OnlineFixR2Config.DownloadFileToPathAsync(_currentFile.FileName, tempZip, progress);
 
                                 inspectExtractDir = Path.Combine(Path.GetTempPath(), $"onlinefix_inspect_ext_{Guid.NewGuid()}");
                                 Directory.CreateDirectory(inspectExtractDir);

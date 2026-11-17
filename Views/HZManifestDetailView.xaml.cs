@@ -1028,6 +1028,7 @@ namespace SteamPluginManager.Views
                 // Check if this game is already in user's library
                 UpdateAddToLibraryButton();
 
+                _ = LoadRelatedAvailabilityAsync();
                 _ = LoadDlcListAsync();
 
                 _ = LoadDlcListAsync();
@@ -1036,6 +1037,56 @@ namespace SteamPluginManager.Views
             {
                 Logger.Log($"[HZManifestDetailView] Error displaying details: {ex.Message}");
                 ModernMessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task LoadRelatedAvailabilityAsync()
+        {
+            if (FindName("OnlineFixAvailableBadge") is Border onlineFixBadge)
+                onlineFixBadge.Visibility = Visibility.Collapsed;
+            if (FindName("BypassAvailableBadge") is Border bypassBadge)
+                bypassBadge.Visibility = Visibility.Collapsed;
+
+            if (_currentFile?.AppId is not int appId || appId <= 0)
+                return;
+
+            try
+            {
+                var bypassFilesTask = SteamPluginManager.R2Config.ListFilesAsync(forceRefresh: false);
+                var onlineFixFilesTask = SteamPluginManager.OnlineFixR2Config.ListFilesAsync("onlinefix/");
+                var recordsTask = SteamPluginManager.SteamDataUpdater.GetAllRecordsAsync();
+
+                await Task.WhenAll(new Task[] { bypassFilesTask, onlineFixFilesTask, recordsTask });
+                var records = recordsTask.Result;
+
+                int? ResolveAppId(string key)
+                {
+                    string fileName = Path.GetFileName(key);
+                    int? parsedAppId = SteamPluginManager.SteamManifestHelper.ExtractAppIdFromFilename(fileName);
+                    var metadata = records.FirstOrDefault(record =>
+                        (parsedAppId.HasValue && record.AppId == parsedAppId.Value) ||
+                        string.Equals(record.FileName, fileName, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(record.FileName, key, StringComparison.OrdinalIgnoreCase));
+
+                    return metadata?.AppId > 0 ? metadata.AppId : parsedAppId;
+                }
+
+                bool hasBypass = bypassFilesTask.Result.Any(file =>
+                    file.Key.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+                    ResolveAppId(file.Key) == appId);
+                bool hasOnlineFix = onlineFixFilesTask.Result.Any(file => ResolveAppId(file.Key) == appId);
+
+                if (_currentFile?.AppId != appId)
+                    return;
+
+                if (FindName("OnlineFixAvailableBadge") is Border onlineFixStatus)
+                    onlineFixStatus.Visibility = hasOnlineFix ? Visibility.Visible : Visibility.Collapsed;
+                if (FindName("BypassAvailableBadge") is Border bypassStatus)
+                    bypassStatus.Visibility = hasBypass ? Visibility.Visible : Visibility.Collapsed;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[HZManifestDetailView] Error checking Online Fix/Bypass availability: {ex.Message}");
             }
         }
 

@@ -9,12 +9,12 @@
         WindowStartupLocation="CenterOwner"
         WindowStyle="None"
         AllowsTransparency="False"
-        Background="#16181F"
+        Background="{DynamicResource BackgroundBrush}"
         ResizeMode="CanResizeWithGrip">
     <WindowChrome.WindowChrome>
         <wc:WindowChrome CaptionHeight="0"
                           ResizeBorderThickness="6"
-                          CornerRadius="12"
+                          CornerRadius="8"
                           GlassFrameThickness="0"
                           UseAeroCaptionButtons="False"/>
     </WindowChrome.WindowChrome>
@@ -24,7 +24,7 @@
         </Storyboard>
     </Window.Resources>
 
-    <Border Background="#16181F" BorderBrush="#2C303F" BorderThickness="1.5" CornerRadius="12">
+    <Border Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -33,7 +33,7 @@
             </Grid.RowDefinitions>
 
             <!-- Window Header -->
-            <Border Grid.Row="0" Background="#1D202B" CornerRadius="11,11,0,0" Padding="18,12" MouseLeftButtonDown="Header_MouseLeftButtonDown">
+            <Border Grid.Row="0" Background="{DynamicResource HeaderBackgroundBrush}" CornerRadius="7,7,0,0" Padding="18,12" MouseLeftButtonDown="Header_MouseLeftButtonDown">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -42,20 +42,20 @@
 
                     <StackPanel Grid.Column="0">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="Hubcap Manifest Authorization" FontSize="15" FontWeight="SemiBold" Foreground="#FFFFFF"/>
+                            <TextBlock Text="Hubcap Manifest Authorization" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}"/>
                             <Border Background="#5865F2" CornerRadius="4" Padding="6,2" Margin="10,0,0,0">
                                 <TextBlock Text="Discord Login Required" FontSize="11" FontWeight="Medium" Foreground="#FFFFFF"/>
                             </Border>
                         </StackPanel>
-                        <TextBlock Text="Log in with your Discord account to automatically authorize and fetch the Hubcap API Key."
-                                   FontSize="12" Foreground="#8E95A5" Margin="0,3,0,0"/>
+                        <TextBlock Text="Log in with your Discord account to authorize access to the Hubcap API."
+                                   FontSize="12" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,3,0,0"/>
                     </StackPanel>
 
                     <Button Grid.Column="1" Click="CloseButton_Click" Background="Transparent" BorderThickness="0" Cursor="Hand" Width="30" Height="30" VerticalAlignment="Top">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
                                 <Border x:Name="btnBorder" Background="Transparent" CornerRadius="6">
-                                    <TextBlock Text="✕" FontSize="14" FontWeight="Bold" Foreground="#8E95A5" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <TextBlock Text="✕" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource MutedForegroundBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
@@ -74,7 +74,7 @@
                 <wv2:WebView2 x:Name="Browser" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
 
                 <!-- Loading / Initializing Overlay -->
-                <Border x:Name="LoadingOverlay" Background="#16181F" Visibility="Visible">
+                <Border x:Name="LoadingOverlay" Background="{DynamicResource CardBackgroundBrush}" Visibility="Visible">
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                         <Border Width="40" Height="40" RenderTransformOrigin="0.5,0.5">
                             <Border.RenderTransform>
@@ -85,15 +85,15 @@
                                     <BeginStoryboard Storyboard="{StaticResource RotateStoryboard}"/>
                                 </EventTrigger>
                             </Border.Triggers>
-                            <Path Data="M 20 2 A 18 18 0 0 1 38 20" Stroke="#5865F2" StrokeThickness="3.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                            <Path Data="M 20 2 A 18 18 0 0 1 38 20" Stroke="{DynamicResource AccentBrush}" StrokeThickness="3.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
                         </Border>
-                        <TextBlock x:Name="LoadingStatusText" Text="Initializing secure browser session..." FontSize="13" Foreground="#B0B7C6" Margin="0,16,0,0" HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="LoadingStatusText" Text="Initializing browser session..." FontSize="13" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,16,0,0" HorizontalAlignment="Center"/>
                     </StackPanel>
                 </Border>
             </Grid>
 
             <!-- Bottom Status Footer -->
-            <Border Grid.Row="2" Background="#191B24" CornerRadius="0,0,11,11" Padding="16,10" BorderBrush="#242836" BorderThickness="0,1,0,0">
+            <Border Grid.Row="2" Background="{DynamicResource HeaderBackgroundBrush}" CornerRadius="0,0,7,7" Padding="16,10" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -101,7 +101,7 @@
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock x:Name="StatusText" Text="Waiting for Discord authentication..." FontSize="12" Foreground="#8E95A5" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="StatusText" Text="Waiting for Discord authentication..." FontSize="12" Foreground="{DynamicResource MutedForegroundBrush}" VerticalAlignment="Center"/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal">

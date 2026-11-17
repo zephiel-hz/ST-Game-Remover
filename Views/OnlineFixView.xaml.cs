@@ -27,6 +27,8 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 
 using System.Globalization;
+using SteamPluginManager.Helpers;
+using SteamPluginManager.UI.Controls;
 
 
 
@@ -174,7 +176,7 @@ namespace SteamPluginManager.Views
 
             _forceRefreshOnNextLoad = true;
 
-            SteamPluginManager.B2Config.InvalidateListCache();
+            SteamPluginManager.OnlineFixR2Config.InvalidateListCache();
 
         }
 
@@ -214,7 +216,9 @@ namespace SteamPluginManager.Views
 
         private int _currentPage = 0;
 
-        private const int PAGE_SIZE = 50;
+        private const int ROWS_PER_PAGE = 10;
+
+        private int _pageSize = ROWS_PER_PAGE;
 
         private List<OnlineFixFile> _lastFilteredFiles = new();
 
@@ -788,21 +792,7 @@ namespace SteamPluginManager.Views
 
             {
 
-                // PERF-8.8A: Do NOT assign non-rectangular RectangleGeometry clips.
-
-                // In MilCore / DirectX, non-rectangular geometric clips force intermediate offscreen render target surfaces
-
-                // and alpha mask composition passes for every card, causing GPU stalls and scrolling lag.
-
-                // Border.CornerRadius="13,13,0,0" with ClipToBounds="True" handles rectangular clipping natively.
-
-                if (border.Clip != null)
-
-                {
-
-                    border.Clip = null;
-
-                }
+                ThumbnailClipHelper.ApplyTopRoundedClip(border, width, height, 9);
 
             }
 
@@ -1336,9 +1326,8 @@ namespace SteamPluginManager.Views
 
 
 
-                // Ambil file list dari Backblaze B2 (onlinefix/ folder)
-
-                var onlineFixFiles = await SteamPluginManager.B2Config.ListFilesAsync("onlinefix/", forceRefresh: forceRefresh);
+                // Ambil file list dari Cloudflare R2 khusus OnlineFix (onlinefix/ folder)
+                var onlineFixFiles = await SteamPluginManager.OnlineFixR2Config.ListFilesAsync("onlinefix/", forceRefresh: forceRefresh);
 
 
 
@@ -1352,15 +1341,15 @@ namespace SteamPluginManager.Views
 
 
 
-                foreach (var b2file in onlineFixFiles)
+                foreach (var onlineFixFile in onlineFixFiles)
 
                 {
 
-                    string b2FileName = System.IO.Path.GetFileName(b2file.Key);
+                    string onlineFixFileName = System.IO.Path.GetFileName(onlineFixFile.Key);
 
-                    int? appId = SteamPluginManager.SteamManifestHelper.ExtractAppIdFromFilename(b2FileName);
+                    int? appId = SteamPluginManager.SteamManifestHelper.ExtractAppIdFromFilename(onlineFixFileName);
 
-                    var meta = supabaseRecords.FirstOrDefault(m => (appId != null && m.AppId == appId) || string.Equals(m.FileName, b2FileName, StringComparison.OrdinalIgnoreCase));
+                    var meta = supabaseRecords.FirstOrDefault(m => (appId != null && m.AppId == appId) || string.Equals(m.FileName, onlineFixFileName, StringComparison.OrdinalIgnoreCase));
 
                     if (meta != null && meta.AppId > 0)
 
@@ -1370,9 +1359,8 @@ namespace SteamPluginManager.Views
 
                     {
 
-                        FileName = b2file.Key,
-
-                        FileUrl = b2file.Url,
+                        FileName = onlineFixFile.Key,
+                        FileUrl = onlineFixFile.Url,
 
                         Name = !string.IsNullOrWhiteSpace(meta?.Name) && !long.TryParse(meta.Name.Trim(), out _) && !meta.Name.StartsWith("App ") 
 
@@ -1382,7 +1370,7 @@ namespace SteamPluginManager.Views
 
                                 ? CacheManager.GetGameName(appId.Value)! 
 
-                                : System.IO.Path.GetFileNameWithoutExtension(b2FileName)),
+                                : System.IO.Path.GetFileNameWithoutExtension(onlineFixFileName)),
 
                         AppId = appId,
 
@@ -1392,9 +1380,8 @@ namespace SteamPluginManager.Views
 
                         Genre = meta?.Genre ?? string.Empty,
 
-                        FileSize = b2file.Size >= 0 ? FormatFileSize(b2file.Size) : string.Empty,
-
-                        CreatedAt = b2file.LastModified
+                        FileSize = onlineFixFile.Size >= 0 ? FormatFileSize(onlineFixFile.Size) : string.Empty,
+                        CreatedAt = onlineFixFile.LastModified
 
                     };
 
@@ -1879,14 +1866,24 @@ namespace SteamPluginManager.Views
                 double usableWidth = Math.Max(targetCardWidth + cardMarginRight, availableWidth - rightClearance);
 
                 int columns = Math.Max(1, (int)(usableWidth / (targetCardWidth + cardMarginRight)));
-
-                double computedWidth = Math.Floor(usableWidth / columns);
-
-
+                double computedWidth = Math.Floor(Math.Max(usableWidth, availableWidth) / columns);
+                int pageSize = columns * ROWS_PER_PAGE;
+                bool pageSizeChanged = pageSize != _pageSize;
+                _pageSize = pageSize;
 
                 CardPanel.ItemWidth = computedWidth;
 
-                CardPanel.ItemHeight = 272; // 260 card height + 12 bottom margin
+                CardPanel.ItemHeight = 274; // 260 card height + 14 bottom margin
+
+                if (pageSizeChanged)
+                {
+                    int totalPages = Math.Max(1, (int)Math.Ceiling((double)_lastFilteredFiles.Count / _pageSize));
+                    _currentPage = Math.Clamp(_currentPage, 0, totalPages - 1);
+                    if (_lastFilteredFiles.Count > 0)
+                        DisplayCurrentPage();
+                    else
+                        PaginationFooter.UpdatePage(0, 0, _pageSize, "files");
+                }
 
             }
 
@@ -2044,6 +2041,16 @@ namespace SteamPluginManager.Views
 
 
 
+        private void PaginationFooter_PageChanged(object? sender, PageChangedEventArgs e)
+        {
+            if (_currentPage == e.PageIndex)
+                return;
+
+            _currentPage = e.PageIndex;
+            DisplayCurrentPage();
+            CardsScrollViewer?.ScrollToTop();
+        }
+
         private void PreviousPage_Click(object sender, RoutedEventArgs e)
 
         {
@@ -2070,7 +2077,7 @@ namespace SteamPluginManager.Views
 
             int totalFiles = _lastFilteredFiles?.Count ?? _allFiles.Count;
 
-            int totalPages = Math.Max(1, (int)Math.Ceiling((double)totalFiles / PAGE_SIZE));
+            int totalPages = Math.Max(1, (int)Math.Ceiling((double)totalFiles / _pageSize));
 
             if (_currentPage < totalPages - 1)
 
@@ -2310,7 +2317,7 @@ namespace SteamPluginManager.Views
 
             int totalFiles = _lastFilteredFiles?.Count ?? 0;
 
-            int totalPages = Math.Max(1, (int)Math.Ceiling((double)totalFiles / PAGE_SIZE));
+            int totalPages = Math.Max(1, (int)Math.Ceiling((double)totalFiles / _pageSize));
 
             _currentPage = Math.Clamp(_currentPage, 0, totalPages - 1);
 
@@ -2318,9 +2325,9 @@ namespace SteamPluginManager.Views
 
             var pageItems = (_lastFilteredFiles ?? _allFiles)
 
-                .Skip(_currentPage * PAGE_SIZE)
+                .Skip(_currentPage * _pageSize)
 
-                .Take(PAGE_SIZE)
+                .Take(_pageSize)
 
                 .ToList();
 
@@ -2338,65 +2345,7 @@ namespace SteamPluginManager.Views
 
 
 
-            bool hasMultiplePages = totalPages > 1;
-
-            if (FindName("PreviousPageButton") is Button prevBtn)
-
-            {
-
-                prevBtn.Visibility = hasMultiplePages ? Visibility.Visible : Visibility.Collapsed;
-
-                prevBtn.IsEnabled = _currentPage > 0;
-
-                prevBtn.Opacity = _currentPage > 0 ? 1.0 : 0.4;
-
-            }
-
-            if (FindName("NextPageButton") is Button nextBtn)
-
-            {
-
-                nextBtn.Visibility = hasMultiplePages ? Visibility.Visible : Visibility.Collapsed;
-
-                nextBtn.IsEnabled = _currentPage < totalPages - 1;
-
-                nextBtn.Opacity = _currentPage < totalPages - 1 ? 1.0 : 0.4;
-
-            }
-
-            if (FindName("PageIndicator") is TextBlock pageIndicator)
-
-            {
-
-                pageIndicator.Visibility = Visibility.Visible;
-
-                bool hasSearch = !string.IsNullOrWhiteSpace(SearchBox?.Text);
-
-                if (hasMultiplePages)
-
-                {
-
-                    pageIndicator.Text = hasSearch
-
-                        ? $"Page {_currentPage + 1} / {totalPages} ({totalFiles} matching)"
-
-                        : $"Page {_currentPage + 1} / {totalPages} ({totalFiles} files)";
-
-                }
-
-                else
-
-                {
-
-                    pageIndicator.Text = hasSearch
-
-                        ? $"Found {totalFiles} matching files"
-
-                        : $"Total: {totalFiles} files";
-
-                }
-
-            }
+            PaginationFooter.UpdatePage(_currentPage, totalFiles, _pageSize, "files");
 
             SetupLazyThumbnailLoading();
 
