@@ -20,7 +20,6 @@ namespace SteamPluginManager.Views
             "SteamPluginManager", "ThumbnailCache");
 
         private OnlineFixFile? _currentFile;
-        private CustomLaunchTutorial? _currentTutorial;
         private System.Windows.Threading.DispatcherTimer? _validationMonitorTimer;
         private bool _isActionInProgress = false;
         
@@ -149,7 +148,6 @@ namespace SteamPluginManager.Views
                     return;
                 }
                 _ = LoadBannerAsync();
-                _ = LoadTutorialAsync();
                 if (FindName("GameNameDetail") is TextBlock gameNameDetail)
                     gameNameDetail.Text = _currentFile.Name ?? "Unknown Fix";
                 if (FindName("GenreDetail") is TextBlock genreDetail)
@@ -395,18 +393,126 @@ namespace SteamPluginManager.Views
             catch { }
         }
 
-        private void UpdateProgressStep(int stepNumber, bool completed = false)
+        private void UpdateCustomLaunchLoadingStatus(string status, string detail)
+        {
+            var modal = WindowNavigator.GetProgressModal();
+            if (modal != null)
+            {
+                modal.SetProgressIndicatorVisibility(false);
+                modal.UpdateStatus(status, detail);
+                return;
+            }
+
+            Dispatcher.Invoke(() =>
+            {
+                if (FindName("ProgressStatus") is TextBlock statusText)
+                    statusText.Text = status;
+                if (FindName("ProgressDetail") is TextBlock detailText)
+                {
+                    detailText.Text = detail;
+                    detailText.Visibility = string.IsNullOrWhiteSpace(detail) ? Visibility.Collapsed : Visibility.Visible;
+                }
+                if (FindName("ProgressBar") is ProgressBar progressBar)
+                    progressBar.Visibility = Visibility.Collapsed;
+                if (FindName("ProgressPercentageText") is TextBlock percentageText)
+                    percentageText.Visibility = Visibility.Collapsed;
+            });
+        }
+
+        private void BeginCustomLaunchWorkflow(int appId, string executable, string arguments)
+        {
+            string launchDetails = $"Executable: {executable}\nArguments: {(string.IsNullOrWhiteSpace(arguments) ? "(None)" : arguments)}";
+            var modal = WindowNavigator.GetProgressModal();
+            if (modal != null)
+            {
+                modal.Configure(
+                    "Applying Custom Launch",
+                    "Close Steam",
+                    "Save Options",
+                    "Restart Steam",
+                    "Complete",
+                    "\uE7BE",
+                    _currentFile?.Name,
+                    appId.ToString());
+                modal.SetProgressIndicatorVisibility(false);
+                modal.UpdateStatus("Preparing custom launch...", launchDetails);
+                return;
+            }
+
+            Dispatcher.Invoke(() =>
+            {
+                if (FindName("ProgressTitle") is TextBlock title)
+                    title.Text = "Applying Custom Launch...";
+                if (FindName("Step1Text") is TextBlock step1)
+                    step1.Text = "Close Steam";
+                if (FindName("Step2Text") is TextBlock step2)
+                    step2.Text = "Save Options";
+                if (FindName("Step3Text") is TextBlock step3)
+                    step3.Text = "Restart Steam";
+                if (FindName("Step4Text") is TextBlock step4)
+                    step4.Text = "Complete";
+                UpdateProgressStep(1);
+                if (FindName("ProgressBar") is ProgressBar progressBar)
+                    progressBar.Visibility = Visibility.Collapsed;
+                if (FindName("ProgressPercentageText") is TextBlock percentageText)
+                    percentageText.Visibility = Visibility.Collapsed;
+                if (FindName("ProgressStatus") is TextBlock statusText)
+                    statusText.Text = "Preparing custom launch...";
+                if (FindName("ProgressDetail") is TextBlock detailText)
+                {
+                    detailText.Text = launchDetails;
+                    detailText.Visibility = Visibility.Visible;
+                }
+            });
+        }
+
+        private void UpdateCustomLaunchLoadingStatus(SteamLaunchProgress progress, string executable, string arguments)
+        {
+            string launchDetails = $"Executable: {executable}\nArguments: {(string.IsNullOrWhiteSpace(arguments) ? "(None)" : arguments)}";
+            string detail = string.IsNullOrWhiteSpace(progress.Detail)
+                ? launchDetails
+                : $"{progress.Detail}\n\n{launchDetails}";
+
+            var modal = WindowNavigator.GetProgressModal();
+            if (modal != null)
+            {
+                modal.UpdateProgressStep(progress.StepNumber, progress.Completed, progress.Failed);
+                modal.SetProgressIndicatorVisibility(false);
+                modal.UpdateStatus(progress.Status, detail, progress.Failed);
+                return;
+            }
+
+            Dispatcher.Invoke(() =>
+            {
+                UpdateProgressStep(progress.StepNumber, progress.Completed, progress.Failed);
+                if (FindName("ProgressStatus") is TextBlock statusText)
+                {
+                    statusText.Text = progress.Status;
+                    statusText.Foreground = progress.Failed
+                        ? FindResource("DangerButtonBrush") as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.Crimson
+                        : FindResource("ForegroundBrush") as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.White;
+                }
+                if (FindName("ProgressDetail") is TextBlock detailText)
+                {
+                    detailText.Text = detail;
+                    detailText.Visibility = Visibility.Visible;
+                }
+            });
+        }
+
+        private void UpdateProgressStep(int stepNumber, bool completed = false, bool failed = false)
         {
             try
             {
                 var modal = WindowNavigator.GetProgressModal();
                 if (modal != null)
                 {
-                    modal.UpdateProgressStep(stepNumber, completed);
+                    modal.UpdateProgressStep(stepNumber, completed, failed);
                     return;
                 }
 
                 string[] stepIcons = new[] { "Step1Icon", "Step2Icon", "Step3Icon", "Step4Icon" };
+                var dangerBrush = FindResource("DangerButtonBrush") as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.Crimson;
 
                 for (int i = 1; i <= 4; i++)
                 {
@@ -416,6 +522,11 @@ namespace SteamPluginManager.Views
                         {
                             stepIcon.Text = "\uE73E";
                             stepIcon.Foreground = FindResource("SuccessButtonBrush") as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.Green;
+                        }
+                        else if (i == stepNumber && failed)
+                        {
+                            stepIcon.Text = "\uE711";
+                            stepIcon.Foreground = dangerBrush;
                         }
                         else if (i == stepNumber && stepNumber <= 4)
                         {
@@ -437,7 +548,6 @@ namespace SteamPluginManager.Views
         {
             string? tempZip = null;
             string? extractDir = null;
-            GameEntry? gameToOpen = null;
             try
             {
                 if (_currentFile == null)
@@ -627,31 +737,55 @@ namespace SteamPluginManager.Views
                 try { File.Delete(tempZip); } catch { }
                 try { Directory.Delete(extractDir, true); } catch { }
 
-                UpdateProgressStep(4, true);
-                Dispatcher.Invoke(() => ShowResultNotification(true, $"✓ Successfully applied Online-Fix to '{_currentFile?.Name ?? "Steam Game"}'!"));
-                await Task.Delay(1600);
-
+                string? customLaunchIssue = null;
+                string? launchExecutable = null;
+                string? launchArguments = null;
                 try
                 {
-                    if (_currentFile?.AppId is int appId &&
-                        await CustomLaunchTutorialService.ApplyAdminConfiguredTutorialToLocalGameAsync(
-                            appId,
-                            "ONLINEFIX",
-                            gameFolder!))
+                    if (_currentFile?.AppId is int appId)
                     {
-                        gameToOpen = new GameEntry
-                        {
-                            AppId = appId,
-                            Name = _currentFile.Name ?? "Game",
-                            InstallationPath = gameFolder!,
-                            IsInstalled = true
-                        };
+                        UpdateCustomLaunchLoadingStatus(
+                            "Checking for admin custom launch...",
+                            "Looking for admin-recommended Steam launch options.");
+
+                        await CustomLaunchTutorialService.ApplyAdminConfiguredTutorialToLocalGameAsync(
+                                appId,
+                                "ONLINEFIX",
+                                gameFolder!,
+                                onTutorialFound: tutorial =>
+                                {
+                                    launchExecutable = tutorial.RecommendedExecutable;
+                                    launchArguments = tutorial.RecommendedArguments;
+                                    BeginCustomLaunchWorkflow(appId, launchExecutable, launchArguments);
+                                },
+                                onProgress: progress =>
+                                {
+                                    if (progress.Failed)
+                                        customLaunchIssue = progress.Detail;
+                                    UpdateCustomLaunchLoadingStatus(progress, launchExecutable ?? string.Empty, launchArguments ?? string.Empty);
+                                });
                     }
                 }
                 catch (Exception ex)
                 {
-                    Logger.Log($"[OnlineFixDetailView] Online-Fix applied, but automatic Custom Launch setup failed: {ex.Message}");
+                    customLaunchIssue = ex.Message;
+                    if (launchExecutable != null)
+                    {
+                        UpdateCustomLaunchLoadingStatus(
+                            new SteamLaunchProgress(2, false, "Could not apply custom launch", ex.Message, Failed: true),
+                            launchExecutable,
+                            launchArguments ?? string.Empty);
+                    }
+                    Logger.Log($"[OnlineFixDetailView] Online-Fix applied, but recommended Steam launch options could not be applied: {ex.Message}");
                 }
+
+                if (customLaunchIssue == null)
+                    UpdateProgressStep(4, true);
+                string successMessage = $"✓ Successfully applied Online-Fix to '{_currentFile?.Name ?? "Steam Game"}'!";
+                if (!string.IsNullOrWhiteSpace(customLaunchIssue))
+                    successMessage += $"\n\nCustom launch issue: {customLaunchIssue}";
+                ShowResultNotification(true, successMessage);
+                await Task.Delay(1600);
 
                 ShowLoadingState(false);
             }
@@ -679,8 +813,6 @@ namespace SteamPluginManager.Views
                 CheckSteamValidationState();
             }
 
-            if (gameToOpen != null)
-                WindowNavigator.NavigateToGameLibraryDetail(gameToOpen);
         }
 
         private async void RestoreGame_Click(object sender, RoutedEventArgs e)
@@ -756,7 +888,7 @@ namespace SteamPluginManager.Views
                 }
 
                 // Check if game is running
-                if (CustomLaunchService.IsGameRunning(appId, null, gameFolder))
+                if (GameProcessService.IsGameRunning(appId, null, gameFolder))
                 {
                     ModernMessageBox.Show(
                         "The game is currently running.\n\nPlease close the game first before restoring original game files.",
@@ -771,7 +903,7 @@ namespace SteamPluginManager.Views
                     $"Restore original game files for '{gameTitle}'?\n\n" +
                     "This operation will:\n" +
                     "• Remove all Online-Fix files and modifications from your game folder\n" +
-                    "• Reset any Custom Launch configurations\n" +
+                    "• Restore the original Steam launch options when applicable\n" +
                     "• Open Steam to verify file integrity and re-acquire official clean files\n\n" +
                     "Do you want to proceed?",
                     "Restore Original Game",
@@ -965,11 +1097,17 @@ namespace SteamPluginManager.Views
                 // Clean empty directories in gameFolder
                 OnlineFixTrackerService.CleanEmptySubdirectories(gameFolder!);
 
-                // Reset Custom Launch if configured
-                if (CustomLaunchService.IsCustomLaunchConfigured(appId, gameFolder!))
+                if (SteamLaunchOptionsService.Shared.IsModified(appId))
                 {
-                    CustomLaunchService.RemoveConfig(appId);
-                    Logger.Log($"[OnlineFixDetailView] Reset Custom Launch configuration for AppID {appId}");
+                    var restoreResult = await Task.Run(() => SteamLaunchOptionsService.Shared.Restore(appId));
+                    if (!restoreResult.Success)
+                    {
+                        ModernMessageBox.Show(
+                            $"The Online Fix files were removed, but Steam launch options could not be restored: {restoreResult.Error}",
+                            "Launch Options Restore Failed",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                    }
                 }
 
                 // Clean tracking record
@@ -1424,171 +1562,5 @@ namespace SteamPluginManager.Views
             return false;
         }
 
-        #region Custom Launch Tutorial Integration
-
-        private async Task LoadTutorialAsync()
-        {
-            try
-            {
-                if (_currentFile == null || !_currentFile.AppId.HasValue || _currentFile.AppId.Value <= 0)
-                {
-                    Dispatcher.Invoke(() =>
-                    {
-                        if (FindName("TutorialCard") is Border card) card.Visibility = Visibility.Collapsed;
-                    });
-                    return;
-                }
-
-                int appId = _currentFile.AppId.Value;
-                var tutorial = await CustomLaunchTutorialService.GetTutorialForAppAsync(appId, "ONLINEFIX");
-                _currentTutorial = tutorial;
-
-                Dispatcher.Invoke(() =>
-                {
-                    if (FindName("TutorialCard") is not Border card) return;
-
-                    if (tutorial != null)
-                    {
-                        if (FindName("TutorialSummaryText") is TextBlock summaryText)
-                            summaryText.Text = string.IsNullOrWhiteSpace(tutorial.Summary)
-                                ? "This game has recommended custom launch configurations to ensure optimal gameplay."
-                                : tutorial.Summary;
-
-                        if (FindName("TutorialExeText") is TextBlock exeText)
-                            exeText.Text = string.IsNullOrWhiteSpace(tutorial.RecommendedExecutable)
-                                ? "(Default Executable)"
-                                : tutorial.RecommendedExecutable;
-
-                        if (FindName("TutorialArgsText") is TextBlock argsText)
-                            argsText.Text = string.IsNullOrWhiteSpace(tutorial.RecommendedArguments)
-                                ? "(None)"
-                                : tutorial.RecommendedArguments;
-
-                        if (FindName("TutorialStepsList") is ItemsControl stepsList)
-                            stepsList.ItemsSource = tutorial.Steps;
-
-                        if (FindName("TutorialNotesBorder") is Border notesBorder && FindName("TutorialNotesText") is TextBlock notesText)
-                        {
-                            if (!string.IsNullOrWhiteSpace(tutorial.Notes))
-                            {
-                                notesText.Text = tutorial.Notes;
-                                notesBorder.Visibility = Visibility.Visible;
-                            }
-                            else
-                            {
-                                notesBorder.Visibility = Visibility.Collapsed;
-                            }
-                        }
-
-                        card.Visibility = Visibility.Visible;
-                    }
-                    else
-                    {
-                        card.Visibility = Visibility.Collapsed;
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"[OnlineFixDetailView] Error loading tutorial: {ex.Message}");
-                Dispatcher.Invoke(() =>
-                {
-                    if (FindName("TutorialCard") is Border card) card.Visibility = Visibility.Collapsed;
-                });
-            }
-        }
-
-        private void CopyExe_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (_currentTutorial != null && !string.IsNullOrWhiteSpace(_currentTutorial.RecommendedExecutable))
-                {
-                    Clipboard.SetText(_currentTutorial.RecommendedExecutable);
-                    ModernMessageBox.Show($"Executable path copied to clipboard:\n{_currentTutorial.RecommendedExecutable}", "Copied to Clipboard", MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-            }
-            catch { }
-        }
-
-        private void CopyArgs_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (_currentTutorial != null && !string.IsNullOrWhiteSpace(_currentTutorial.RecommendedArguments))
-                {
-                    Clipboard.SetText(_currentTutorial.RecommendedArguments);
-                    ModernMessageBox.Show($"Launch arguments copied to clipboard:\n{_currentTutorial.RecommendedArguments}", "Copied to Clipboard", MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-            }
-            catch { }
-        }
-
-        private void ApplyTutorialButton_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (_currentFile == null || !_currentFile.AppId.HasValue || _currentTutorial == null)
-                {
-                    ModernMessageBox.Show("Tutorial configuration data is not available.", "Notice", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                int appId = _currentFile.AppId.Value;
-                string? gamePath = SteamHelper.GetGameInstallationPath(appId, _currentFile.Name);
-
-                if (string.IsNullOrEmpty(gamePath) || !Directory.Exists(gamePath))
-                {
-                    ModernMessageBox.Show("This game is not currently installed in your local Steam library.\n\nPlease install the game first before applying automatic Custom Launch settings.", "Game Not Installed", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                bool success = CustomLaunchTutorialService.ApplyTutorialToLocalGame(appId, _currentTutorial, gamePath);
-                if (success)
-                {
-                    ModernMessageBox.Show($"Custom Launch configuration for '{_currentFile.Name}' has been applied successfully!\n\n• Target: {_currentTutorial.RecommendedExecutable}\n• Arguments: {_currentTutorial.RecommendedArguments}\n\nYou can now launch the game directly via PLAY in your Game Library.", "Applied Successfully", MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-                else
-                {
-                    ModernMessageBox.Show("Failed to apply Custom Launch configuration. Please verify that the game directory exists.", "Application Failed", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-            }
-            catch (Exception ex)
-            {
-                ModernMessageBox.Show($"An unexpected error occurred: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void OpenGameInLibrary_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (_currentFile == null || !_currentFile.AppId.HasValue)
-                {
-                    WindowNavigator.NavigateToGameLibrary();
-                    return;
-                }
-
-                int appId = _currentFile.AppId.Value;
-                string? gamePath = SteamHelper.GetGameInstallationPath(appId, _currentFile.Name);
-
-                var gameEntry = new GameEntry
-                {
-                    AppId = appId,
-                    Name = _currentFile.Name ?? "Game",
-                    InstallationPath = gamePath ?? string.Empty,
-                    IsInstalled = !string.IsNullOrEmpty(gamePath) && Directory.Exists(gamePath)
-                };
-
-                WindowNavigator.NavigateToGameLibraryDetail(gameEntry);
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"[OnlineFixDetailView] Error navigating to game library: {ex.Message}");
-                WindowNavigator.NavigateToGameLibrary();
-            }
-        }
-
-        #endregion
     }
 }

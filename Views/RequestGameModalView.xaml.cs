@@ -16,6 +16,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using SteamPluginManager.Helpers;
 using SteamPluginManager.Services;
+using SteamPluginManager.Services.API;
 using SteamPluginManager.Services.ResourcePipeline;
 using SteamPluginManager.Services.Security;
 
@@ -159,17 +160,6 @@ namespace SteamPluginManager.Views
                     return;
                 }
 
-                // Check if display name is set
-                var displayName = await DashboardView.GetCurrentDisplayNameAsync();
-                Logger.Log($"[RequestGameModalView] Display name check: '{displayName}'");
-                if (string.IsNullOrWhiteSpace(displayName))
-                {
-                    SubmitRequestButton.IsEnabled = true;
-                    CancelRequestButton.IsEnabled = true;
-                    ShowRequestValidation("Display name must be set before requesting a game. Please set your display name in the Dashboard.");
-                    return;
-                }
-
                 int appId = 0;
                 string steamUrl = string.Empty;
 
@@ -206,6 +196,25 @@ namespace SteamPluginManager.Views
                     return;
                 }
 
+                SetRequestStage(1, "Checking for an existing request...");
+                var duplicateRequest = await GetPendingRequestFromSupabaseAsync(appId);
+                if (duplicateRequest != null)
+                {
+                    var requesterLabel = string.IsNullOrWhiteSpace(duplicateRequest.Requester)
+                        ? "another user"
+                        : duplicateRequest.Requester;
+                    ShowRequestValidation($"This game has already been requested by {requesterLabel}.");
+                    return;
+                }
+
+                var displayName = await DashboardView.GetCurrentDisplayNameAsync();
+                Logger.Log($"[RequestGameModalView] Display name check: '{displayName}'");
+                if (string.IsNullOrWhiteSpace(displayName))
+                {
+                    ShowRequestValidation("Display name must be set before requesting a game. Please set your display name in the Dashboard.");
+                    return;
+                }
+
                 // Collapse guide card during progress to keep view focused on the live stages
                 if (RequestFlowGuideContent != null)
                 {
@@ -214,56 +223,47 @@ namespace SteamPluginManager.Views
                         GuideToggleChevron.Text = "\uE70D";
                 }
 
-                // Stage 1: Verify AppID is valid and exists on Steam Store or SteamDB
-                SetRequestStage(1, $"Verifying AppID {appId} on Steam...");
+                // Stage 2: Verify AppID is valid and exists on Steam Store or SteamDB
+                SetRequestStage(2, $"Verifying AppID {appId} on Steam...");
                 var (isValidApp, verifiedGameName) = await ValidateSteamAppIdAsync(appId);
                 if (!isValidApp)
                 {
                     HideRequestProgress();
-                    SubmitRequestButton.IsEnabled = true;
-                    CancelRequestButton.IsEnabled = true;
                     ShowRequestValidation($"AppID {appId} was not found on Steam Store or SteamDB. Please verify the AppID and try again.");
                     return;
                 }
 
-                // Stage 2: Early Hubcap Authentication & Session Preparation (Mandatory before DRM check)
-                SetRequestStage(2, "Verifying Hubcap session...");
-                string? apiKey = await HubcapManifestService.EnsureValidApiKeyAsync(
-                    owner: Window.GetWindow(this),
-                    statusCallback: status => Dispatcher.Invoke(() => SetRequestStage(2, status)));
-
-                if (string.IsNullOrWhiteSpace(apiKey))
+                RequestSourceDownloadResult sourceResult;
+                try
                 {
-                    Logger.Log($"[RequestGameModalView] Hubcap authorization not completed for AppID {appId}. Aborting request.");
+                    sourceResult = await RequestSourceService.DownloadAsync(
+                        appId,
+                        verifiedGameName,
+                        status => Dispatcher.Invoke(() => SetRequestStage(3, status)));
+                }
+                catch (RequestSourceCredentialException ex)
+                {
+                    Logger.Log($"[RequestGameModalView] {ex.SourceName} credential rejected for AppID {appId}.");
+                    SetRequestStage(4, $"Notifying admin about invalid {ex.SourceName} credentials...");
+                    bool alertSent = await SendCredentialFailureDiscordAsync(
+                        appId,
+                        verifiedGameName,
+                        steamUrl,
+                        displayName,
+                        ex.SourceName);
                     HideRequestProgress();
-                    SubmitRequestButton.IsEnabled = true;
-                    CancelRequestButton.IsEnabled = true;
-                    ShowRequestValidation("Hubcap authorization is required to verify DRM status and process game requests.");
+                    ShowRequestValidation(alertSent
+                        ? $"{ex.Message} The admin has been notified."
+                        : $"{ex.Message} The admin notification could not be sent.");
                     return;
                 }
 
-                // Stage 2 (cont): Single Denuvo Detection via Hubcap (with Steam Store fallback)
-                SetRequestStage(2, "Checking Denuvo status via Hubcap...");
-                bool isDenuvo = await ManifestHubService.DetectDenuvoAsync(appId, status => Dispatcher.Invoke(() => SetRequestStage(2, status)));
-                Logger.Log($"[RequestGameModalView] AppID {appId} - Denuvo check result: {isDenuvo}");
-
-                // Stage 3: Search ManifestHub (executes directly with isDenuvo, no re-checking)
-                SetRequestStage(3, "Searching ManifestHub...");
-                var downloadedFiles = await ManifestHubService.FindAndDownloadFilesAsync(appId, isDenuvo, status =>
-                {
-                    Dispatcher.Invoke(() => SetRequestStage(3, status));
-                });
-
-                // Stage 3 (cont): Fallback to Hubcap Manifest if not found on ManifestHub
-                if (downloadedFiles == null || downloadedFiles.Count == 0)
-                {
-                    Logger.Log($"[RequestGameModalView] AppID {appId} not found in ManifestHub. Checking Hubcap Manifest...");
-                    SetRequestStage(3, "Searching Hubcap Manifest...");
-                    downloadedFiles = await HubcapManifestService.FindAndDownloadFilesAsync(
-                        appId,
-                        isDenuvo,
-                        status => Dispatcher.Invoke(() => SetRequestStage(3, status)));
-                }
+                List<DownloadedGameFile>? downloadedFiles = sourceResult.NotFound
+                    ? null
+                    : sourceResult.Files;
+                string? requestSourceResult = sourceResult.NotFound
+                    ? $"Game not found in {sourceResult.Source}."
+                    : null;
 
                 // Stage 4: Deploy / Discord
                 if (downloadedFiles != null && downloadedFiles.Count > 0)
@@ -366,26 +366,16 @@ namespace SteamPluginManager.Views
                     }
                     else
                     {
-                        Logger.Log($"[RequestGameModalView] Upload to Supabase failed: {uploadMsg}. Proceeding with Discord webhook fallback.");
+                        requestSourceResult = $"Files found in {sourceResult.Source}, but cloud upload failed: {uploadMsg}";
+                        Logger.Log($"[RequestGameModalView] Upload to Supabase failed: {uploadMsg}. Proceeding with Discord request.");
                     }
                 }
-                else
+                else if (sourceResult.NotFound)
                 {
-                    Logger.Log($"[RequestGameModalView] Game {appId} not found in ManifestHub or Hubcap Manifest. Proceeding with Discord webhook fallback.");
+                    Logger.Log($"[RequestGameModalView] Game {appId} not found in {sourceResult.Source}. Proceeding with Discord request.");
                 }
 
-                // Fallback to Discord Webhook
-                SetRequestStage(4, "Checking pending queue...");
-                var alreadyRequested = await GetPendingRequestsFromSupabaseAsync();
-                var duplicateRequest = alreadyRequested.FirstOrDefault(r => r.AppId == appId);
-                if (duplicateRequest != null)
-                {
-                    HideRequestProgress();
-                    var requesterLabel = string.IsNullOrWhiteSpace(duplicateRequest.Requester) ? "another user" : duplicateRequest.Requester;
-                    ShowRequestValidation($"This game has already been requested by {requesterLabel}.");
-                    return;
-                }
-
+                // One request webhook carries both the source result and the admin request.
                 var webhookUrl = DiscordWebhookUrl;
                 if (string.IsNullOrWhiteSpace(webhookUrl))
                 {
@@ -395,11 +385,15 @@ namespace SteamPluginManager.Views
                 }
 
                 SetRequestStage(4, "Sending request to Discord Admin...");
-                var (success, messageId) = await SendDiscordRequestAsync(steamUrl, appId, webhookUrl);
+                var (success, messageId) = await SendDiscordRequestAsync(
+                    steamUrl,
+                    appId,
+                    webhookUrl,
+                    requestSourceResult ?? $"Files found in {sourceResult.Source}, but could not be added automatically.");
                 HideRequestProgress();
                 if (success)
                 {
-                    ModernMessageBox.Show("Game was not found automatically on ManifestHub or Hubcap Manifest.\n\nYour game request has been successfully sent to the Discord Admin.", "Request Submitted", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ModernMessageBox.Show("Your request has been sent to the Discord Admin.", "Request Submitted", MessageBoxButton.OK, MessageBoxImage.Information);
                     HideModal();
                 }
                 else
@@ -875,7 +869,11 @@ namespace SteamPluginManager.Views
             return !string.IsNullOrWhiteSpace(appName);
         }
 
-        private async Task<(bool success, string? messageId)> SendDiscordRequestAsync(string steamUrl, int appId, string webhookUrl)
+        private async Task<(bool success, string? messageId)> SendDiscordRequestAsync(
+            string steamUrl,
+            int appId,
+            string webhookUrl,
+            string sourceResult)
         {
             try
             {
@@ -897,6 +895,7 @@ namespace SteamPluginManager.Views
                             {
                                 new { name = "Requester", value = displayName, inline = true },
                                 new { name = "AppID", value = appId.ToString(), inline = true },
+                                new { name = "Source result", value = sourceResult, inline = false },
                                 new { name = "Steam URL", value = steamUrl, inline = false },
                                 new { name = "Time", value = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), inline = true }
                             },
@@ -948,6 +947,69 @@ namespace SteamPluginManager.Views
             {
                 Logger.Log($"[RequestGameModalView] SendDiscordRequestAsync failed: {ex.Message}");
                 return (false, null);
+            }
+        }
+
+        private async Task<bool> SendCredentialFailureDiscordAsync(
+            int appId,
+            string gameName,
+            string steamUrl,
+            string requester,
+            string sourceName)
+        {
+            var webhookUrl = DiscordWebhookUrl;
+            if (string.IsNullOrWhiteSpace(webhookUrl))
+            {
+                Logger.Log("[RequestGameModalView] Cannot notify admin because the game request webhook is not configured.");
+                return false;
+            }
+
+            var payload = new
+            {
+                content = "<@&958992653591117854>",
+                embeds = new[]
+                {
+                    new
+                    {
+                        title = "Request source credential rejected",
+                        description = $"A game request was stopped because the {sourceName} credential is invalid or expired.",
+                        color = 0xE67E22,
+                        fields = new[]
+                        {
+                            new { name = "Source", value = sourceName, inline = true },
+                            new { name = "Game", value = gameName, inline = true },
+                            new { name = "AppID", value = appId.ToString(), inline = true },
+                            new { name = "Requester", value = requester, inline = true },
+                            new { name = "Steam URL", value = steamUrl, inline = false }
+                        },
+                        footer = new { text = "HZ Lua Manager" }
+                    }
+                }
+            };
+
+            try
+            {
+                var webhookEndpoint = webhookUrl.Contains("?")
+                    ? $"{webhookUrl}&wait=true"
+                    : $"{webhookUrl}?wait=true";
+                using var request = new HttpRequestMessage(HttpMethod.Post, webhookEndpoint)
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+                };
+                using var response = await _httpClient.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    Logger.Log($"[RequestGameModalView] Credential failure webhook returned HTTP {(int)response.StatusCode}.");
+                    return false;
+                }
+
+                Logger.Log($"[RequestGameModalView] Admin notified about rejected {sourceName} credentials.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[RequestGameModalView] Failed to send credential failure webhook: {ex.Message}");
+                return false;
             }
         }
 
@@ -1018,32 +1080,33 @@ namespace SteamPluginManager.Views
             }
         }
 
-        private async Task<List<ManifestRequestRecord>> GetPendingRequestsFromSupabaseAsync()
+        private async Task<ManifestRequestRecord?> GetPendingRequestFromSupabaseAsync(int appId)
         {
-            try
+            if (string.IsNullOrWhiteSpace(SupabaseConfig.SupabaseUrl) ||
+                string.IsNullOrWhiteSpace(SupabaseConfig.SupabaseKey))
             {
-                string url = $"{SupabaseConfig.SupabaseUrl}/rest/v1/hzmanifest_requests?select=app_id,steam_url,requester,webhook_url,discord_message_id,requested_at";
-                using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.Add("apikey", SupabaseConfig.SupabaseKey);
-                request.Headers.Add("Authorization", $"Bearer {SupabaseConfig.SupabaseKey}");
-                request.Headers.Add("Accept", "application/json");
-
-                using var response = await _httpClient.SendAsync(request);
-                if (!response.IsSuccessStatusCode)
-                {
-                    Logger.Log($"[RequestGameModalView] Failed to fetch pending requests from Supabase: {response.StatusCode}");
-                    return new List<ManifestRequestRecord>();
-                }
-
-                var content = await response.Content.ReadAsStringAsync();
-                var result = JsonSerializer.Deserialize<List<ManifestRequestRecord>>(content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                return result ?? new List<ManifestRequestRecord>();
+                throw new InvalidOperationException("Supabase configuration is required to check duplicate game requests.");
             }
-            catch (Exception ex)
+
+            string url = $"{SupabaseConfig.SupabaseUrl}/rest/v1/hzmanifest_requests?app_id=eq.{appId}&select=app_id,requester&limit=1";
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add("apikey", SupabaseConfig.SupabaseKey);
+            request.Headers.Add("Authorization", $"Bearer {SupabaseConfig.SupabaseKey}");
+            request.Headers.Add("Accept", "application/json");
+
+            using var response = await _httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
             {
-                Logger.Log($"[RequestGameModalView] Error fetching pending requests from Supabase: {ex.Message}");
-                return new List<ManifestRequestRecord>();
+                var responseContent = await response.Content.ReadAsStringAsync();
+                throw new HttpRequestException(
+                    $"Failed to check duplicate game requests (HTTP {(int)response.StatusCode}): {responseContent}");
             }
+
+            var content = await response.Content.ReadAsStringAsync();
+            var result = JsonSerializer.Deserialize<List<ManifestRequestRecord>>(
+                content,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            return result?.FirstOrDefault();
         }
 
         #endregion

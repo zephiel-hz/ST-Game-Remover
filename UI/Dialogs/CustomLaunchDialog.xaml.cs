@@ -1,466 +1,482 @@
-using System;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
-using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using SteamPluginManager.Models;
 using SteamPluginManager.Services.Steam;
 
 namespace SteamPluginManager.UI.Dialogs
 {
-    public partial class CustomLaunchDialog : Window
+    public partial class CustomLaunchDialog : Window, INotifyPropertyChanged
     {
         private readonly GameEntry _game;
-        private string? _resolvedGameIcon;
+        private readonly SteamLaunchOptionsService _service = SteamLaunchOptionsService.Shared;
+        private SteamLaunchState? _state;
+        private List<SteamLaunchOption> _baseline = new();
+        private bool _isLoading = true;
+        private bool _isDirty;
+        private bool _isReapplyPending;
+        private LaunchEntryEditor? _selected;
+        private readonly List<LaunchEntryEditor> _watchedEntries = new();
 
+        public event PropertyChangedEventHandler? PropertyChanged;
         public bool ConfigChanged { get; private set; }
+        public ObservableCollection<LaunchEntryEditor> Entries { get; } = new();
+        public IReadOnlyList<string> TypeOptions { get; } = new[] { "default", "none", "option1", "option2", "vr" };
+
+        public LaunchEntryEditor? Selected
+        {
+            get => _selected;
+            set
+            {
+                if (ReferenceEquals(_selected, value))
+                    return;
+                _selected = value;
+                OnPropertyChanged();
+                UpdateCommands();
+            }
+        }
+
+        public bool CanEdit => !_isLoading && _state != null;
+        public bool CanRemove => CanEdit && Selected != null;
+        public bool CanMoveUp => CanEdit && Selected != null && Entries.IndexOf(Selected) > 0;
+        public bool CanMoveDown => CanEdit && Selected != null && Entries.IndexOf(Selected) < Entries.Count - 1;
+        public bool CanSave => CanEdit && (_isDirty || _isReapplyPending);
+        public Visibility RestoreVisibility => _state?.IsModified == true ? Visibility.Visible : Visibility.Collapsed;
 
         public CustomLaunchDialog(GameEntry game)
         {
             InitializeComponent();
             _game = game ?? throw new ArgumentNullException(nameof(game));
-
-            GameNameBadge.Text = $"{_game.Name} ({_game.AppId})";
-            ShortcutNamePreview.Text = $"{string.Join("_", _game.Name.Split(Path.GetInvalidFileNameChars()))}.lnk";
-
+            DataContext = this;
+            GameNameText.Text = $"{_game.Name}  ·  AppID {_game.AppId}";
+            Entries.CollectionChanged += (_, _) =>
+            {
+                HookEntries();
+                RecomputeDirty();
+                UpdateCommands();
+            };
             Loaded += CustomLaunchDialog_Loaded;
         }
 
-        private void CustomLaunchDialog_Loaded(object sender, RoutedEventArgs e)
+        private async void CustomLaunchDialog_Loaded(object sender, RoutedEventArgs e)
         {
-            if (!_game.IsInstalled || string.IsNullOrWhiteSpace(_game.InstallationPath) || !Directory.Exists(_game.InstallationPath))
+            try
             {
-                ModernMessageBox.Show(
-                    $"Game '{_game.Name}' is not installed.\n\nPlease install the game first before configuring Custom Launch.",
-                    "Game Not Installed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
-                Close();
+                SetStatus("Reading Steam's appinfo cache...");
+                var state = await Task.Run(() => _service.Read(_game.AppId));
+                if (state == null)
+                {
+                    ShowError($"AppID {_game.AppId} was not found in Steam's appinfo cache.");
+                    return;
+                }
+
+                _state = state;
+                var staged = _service.GetStagedDesired(_game.AppId);
+                var displayed = staged ?? state.Current;
+                Entries.Clear();
+                foreach (var option in displayed)
+                    Entries.Add(new LaunchEntryEditor(option));
+
+                Selected = Entries.FirstOrDefault();
+                _baseline = Normalize(displayed);
+                _isDirty = false;
+                _isReapplyPending = staged != null && SteamLaunchOptionComparer.Differs(
+                    Normalize(state.Current), Normalize(staged));
+                OnPropertyChanged(nameof(RestoreVisibility));
+                SetStatus(state.InstallDirectory is null
+                    ? "Steam launch options loaded."
+                    : $"Steam install directory: {state.InstallDirectory}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[CustomLaunchDialog] Could not load Steam launch options for {_game.AppId}: {ex}");
+                ShowError(ex.Message);
+            }
+            finally
+            {
+                _isLoading = false;
+                UpdateCommands();
+            }
+        }
+
+        private void AddEntry_Click(object sender, RoutedEventArgs e)
+        {
+            var entry = new LaunchEntryEditor(new SteamLaunchOption
+            {
+                Index = Entries.Count.ToString(),
+                Type = "default",
+                OperatingSystems = "windows"
+            });
+            Entries.Add(entry);
+            Selected = entry;
+        }
+
+        private void RemoveEntry_Click(object sender, RoutedEventArgs e)
+        {
+            if (Selected == null)
+                return;
+            int position = Entries.IndexOf(Selected);
+            Entries.Remove(Selected);
+            Selected = Entries.Count == 0 ? null : Entries[Math.Min(position, Entries.Count - 1)];
+        }
+
+        private void MoveUp_Click(object sender, RoutedEventArgs e) => MoveSelected(-1);
+        private void MoveDown_Click(object sender, RoutedEventArgs e) => MoveSelected(1);
+
+        private void MoveSelected(int direction)
+        {
+            if (Selected == null)
+                return;
+            int oldIndex = Entries.IndexOf(Selected);
+            int newIndex = oldIndex + direction;
+            if (newIndex < 0 || newIndex >= Entries.Count)
+                return;
+            Entries.Move(oldIndex, newIndex);
+            UpdateCommands();
+        }
+
+        private void BrowseExecutable_Click(object sender, RoutedEventArgs e)
+        {
+            string? gameInstallPath = !string.IsNullOrWhiteSpace(_game.InstallationPath)
+                && Directory.Exists(_game.InstallationPath)
+                    ? _game.InstallationPath
+                    : SteamHelper.GetGameInstallationPath(_game.AppId, _game.Name);
+            var dialog = new OpenFileDialog
+            {
+                Title = $"Select launch file for {_game.Name}",
+                Filter = "Launch files (*.exe;*.bat;*.cmd)|*.exe;*.bat;*.cmd|Executable files (*.exe)|*.exe|Batch files (*.bat;*.cmd)|*.bat;*.cmd|All files (*.*)|*.*",
+                CheckFileExists = true
+            };
+            if (!string.IsNullOrWhiteSpace(gameInstallPath) && Directory.Exists(gameInstallPath))
+                dialog.InitialDirectory = gameInstallPath;
+
+            if (dialog.ShowDialog(this) != true || Selected == null)
+                return;
+
+            bool isBatchFile = Path.GetExtension(dialog.FileName).Equals(".bat", StringComparison.OrdinalIgnoreCase)
+                || Path.GetExtension(dialog.FileName).Equals(".cmd", StringComparison.OrdinalIgnoreCase);
+            string arguments = Selected.Arguments;
+            bool wasBatchLaunch = !string.IsNullOrWhiteSpace(gameInstallPath)
+                && SteamBatchLaunchCommand.TryExtractArguments(
+                    Selected.Executable,
+                    Selected.Arguments,
+                    gameInstallPath,
+                    out arguments);
+
+            if (!isBatchFile)
+            {
+                Selected.Executable = dialog.FileName;
+                Selected.Arguments = arguments;
+                if (wasBatchLaunch)
+                    Selected.WorkingDirectory = string.Empty;
                 return;
             }
 
-            LoadConfigAndPopulateFiles();
-        }
+            if (string.IsNullOrWhiteSpace(gameInstallPath) || !Directory.Exists(gameInstallPath))
+            {
+                ShowError("The game must be installed before a batch file can be converted to a Steam launch entry.");
+                return;
+            }
 
-        private void LoadConfigAndPopulateFiles()
-        {
             try
             {
-                // Scan game folder for executables and batch scripts
-                var launchables = CustomLaunchService.FindGameLaunchables(_game.InstallationPath);
-                DetectedFilesComboBox.ItemsSource = launchables;
-
-                // Load existing configuration
-                var existingConfig = CustomLaunchService.GetConfig(_game.AppId, _game.InstallationPath);
-
-                if (existingConfig != null && existingConfig.IsEnabled && !string.IsNullOrWhiteSpace(existingConfig.ExecutablePath))
-                {
-                    CustomLaunchRadio.IsChecked = true;
-                    ExecutablePathTextBox.Text = existingConfig.ExecutablePath;
-                    ArgumentsTextBox.Text = existingConfig.Arguments;
-                    WorkingDirTextBox.Text = existingConfig.WorkingDirectory;
-
-                    // Match selection in ComboBox
-                    var matched = launchables.FirstOrDefault(l =>
-                        string.Equals(l.FullPath, existingConfig.ExecutablePath, StringComparison.OrdinalIgnoreCase) ||
-                        (!string.IsNullOrEmpty(existingConfig.RelativePath) && string.Equals(l.RelativePath, existingConfig.RelativePath, StringComparison.OrdinalIgnoreCase)));
-
-                    if (matched != null)
-                    {
-                        DetectedFilesComboBox.SelectedItem = matched;
-                    }
-                }
-                else
-                {
-                    DefaultLaunchRadio.IsChecked = true;
-
-                    // Pre-select primary file if user later switches to custom
-                    if (launchables.Count > 0)
-                    {
-                        DetectedFilesComboBox.SelectedIndex = 0;
-                    }
-                }
-
-                // Resolve game icon for shortcut preview
-                _resolvedGameIcon = CustomLaunchService.ResolveGameOriginalIcon(_game.AppId, _game.Name, _game.InstallationPath, existingConfig?.OriginalIconPath);
-                UpdateShortcutIconPreview();
-                UpdateUiState();
+                string relativeExecutable = Path.GetRelativePath(gameInstallPath, dialog.FileName);
+                var launchCommand = SteamBatchLaunchCommand.Create(
+                    dialog.FileName,
+                    relativeExecutable,
+                    arguments,
+                    gameInstallPath);
+                Selected.Executable = launchCommand.Executable;
+                Selected.Arguments = launchCommand.Arguments;
+                Selected.WorkingDirectory = launchCommand.WorkingDirectory;
             }
             catch (Exception ex)
             {
-                Logger.Log($"[CustomLaunchDialog] Error initializing: {ex.Message}");
+                Logger.Log($"[CustomLaunchDialog] Could not configure batch launch file for {_game.AppId}: {ex}");
+                ShowError(ex.Message);
             }
         }
 
-        private void UpdateShortcutIconPreview()
+        private void Save_Click(object sender, RoutedEventArgs e)
         {
+            if (_state == null || !CanSave)
+                return;
+
+            var desired = Normalize(Entries.Select(entry => entry.ToOption()));
+            if (desired.Any(option => string.IsNullOrWhiteSpace(option.Executable)))
+            {
+                ShowError("Each launch entry needs an executable.");
+                return;
+            }
+
             try
             {
-                if (!string.IsNullOrWhiteSpace(_resolvedGameIcon) && File.Exists(_resolvedGameIcon))
+                _service.Stage(_game.AppId, _state.ChangeNumber, _state.Current, desired);
+                ConfigChanged = true;
+                _state = _state with { IsModified = true };
+                _isReapplyPending = false;
+                OnPropertyChanged(nameof(RestoreVisibility));
+
+                var answer = ModernMessageBox.Show(
+                    "Steam must close before its launch options can be changed. Steam will reopen after the update. Apply now?",
+                    "Apply Steam Launch Options",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (answer == MessageBoxResult.Yes)
                 {
-                    string ext = Path.GetExtension(_resolvedGameIcon).ToLowerInvariant();
-                    if (ext is ".ico" or ".png" or ".jpg" or ".jpeg")
+                    SetStatus("Updating Steam's launch options...");
+                    SaveBtn.IsEnabled = false;
+                    Task.Run(() => _service.ApplyStaged(_game.AppId)).ContinueWith(task =>
                     {
-                        var bmp = new BitmapImage();
-                        bmp.BeginInit();
-                        bmp.UriSource = new Uri(_resolvedGameIcon, UriKind.Absolute);
-                        bmp.CacheOption = BitmapCacheOption.OnLoad;
-                        bmp.EndInit();
-                        ShortcutIconPreview.Source = bmp;
-                        return;
-                    }
-                    else if (ext is ".exe")
-                    {
-                        IntPtr hIcon = ExtractIcon(IntPtr.Zero, _resolvedGameIcon, 0);
-                        if (hIcon != IntPtr.Zero)
-                        {
-                            try
-                            {
-                                var source = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
-                                    hIcon,
-                                    Int32Rect.Empty,
-                                    BitmapSizeOptions.FromEmptyOptions());
-                                source.Freeze();
-                                ShortcutIconPreview.Source = source;
-                                return;
-                            }
-                            finally
-                            {
-                                DestroyIcon(hIcon);
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"[CustomLaunchDialog] Error loading icon preview: {ex.Message}");
-            }
-
-            // Fallback placeholder
-            ShortcutIconPreview.Source = null;
-        }
-
-        [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
-        private static extern IntPtr ExtractIcon(IntPtr hInst, string lpszExeFileName, int nIconIndex);
-
-        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
-        private static extern bool DestroyIcon(IntPtr hIcon);
-
-        private void UpdateUiState()
-        {
-            bool isCustom = CustomLaunchRadio.IsChecked == true;
-            CustomConfigPanel.IsEnabled = isCustom;
-            CustomConfigPanel.Opacity = isCustom ? 1.0 : 0.45;
-
-            // Highlight active card border
-            if (isCustom)
-            {
-                CustomModeCard.BorderBrush = (Brush)FindResource("AccentBrush");
-                CustomModeCard.Background = new SolidColorBrush(Color.FromArgb(20, 249, 115, 22));
-
-                DefaultModeCard.BorderBrush = (Brush)FindResource("BorderBrush");
-                DefaultModeCard.Background = (Brush)FindResource("BackgroundBrush");
-            }
-            else
-            {
-                DefaultModeCard.BorderBrush = (Brush)FindResource("AccentBrush");
-                DefaultModeCard.Background = new SolidColorBrush(Color.FromArgb(20, 249, 115, 22));
-
-                CustomModeCard.BorderBrush = (Brush)FindResource("BorderBrush");
-                CustomModeCard.Background = (Brush)FindResource("BackgroundBrush");
-            }
-        }
-
-        private void LaunchModeRadio_Changed(object sender, RoutedEventArgs e)
-        {
-            UpdateUiState();
-        }
-
-        private void DefaultModeCard_Click(object sender, MouseButtonEventArgs e)
-        {
-            DefaultLaunchRadio.IsChecked = true;
-        }
-
-        private void CustomModeCard_Click(object sender, MouseButtonEventArgs e)
-        {
-            CustomLaunchRadio.IsChecked = true;
-        }
-
-        private void DetectedFilesComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-        {
-            if (DetectedFilesComboBox.SelectedItem is LaunchableFileInfo selected)
-            {
-                ExecutablePathTextBox.Text = selected.FullPath;
-                if (string.IsNullOrWhiteSpace(WorkingDirTextBox.Text))
-                {
-                    WorkingDirTextBox.Text = Path.GetDirectoryName(selected.FullPath) ?? "";
-                }
-            }
-        }
-
-        private static string? GetSafeDirectoryPath(params string?[] candidatePaths)
-        {
-            foreach (var raw in candidatePaths)
-            {
-                if (string.IsNullOrWhiteSpace(raw)) continue;
-                try
-                {
-                    string clean = raw.Trim().Replace('/', '\\');
-                    if (Directory.Exists(clean))
-                    {
-                        return Path.GetFullPath(clean);
-                    }
-                }
-                catch { }
-            }
-            return null;
-        }
-
-        private void BrowseFileBtn_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                string? initialDir = GetSafeDirectoryPath(
-                    !string.IsNullOrWhiteSpace(ExecutablePathTextBox.Text) ? Path.GetDirectoryName(ExecutablePathTextBox.Text.Trim()) : null,
-                    _game.InstallationPath);
-
-                var dialog = new OpenFileDialog
-                {
-                    Title = $"Select Game Executable or Script for {_game.Name}",
-                    Filter = "Launchable Files (*.exe;*.bat;*.cmd)|*.exe;*.bat;*.cmd|Executable Files (*.exe)|*.exe|Batch Files (*.bat;*.cmd)|*.bat;*.cmd|All Files (*.*)|*.*",
-                };
-
-                if (!string.IsNullOrWhiteSpace(initialDir))
-                {
-                    dialog.InitialDirectory = initialDir;
-                }
-
-                bool? result;
-                try
-                {
-                    result = dialog.ShowDialog(this);
-                }
-                catch (ArgumentException)
-                {
-                    // Fallback if Windows Shell rejects the initial directory (e.g. COM shell path error)
-                    dialog.InitialDirectory = null;
-                    result = dialog.ShowDialog(this);
-                }
-
-                if (result == true)
-                {
-                    ExecutablePathTextBox.Text = dialog.FileName;
-                    if (string.IsNullOrWhiteSpace(WorkingDirTextBox.Text))
-                    {
-                        WorkingDirTextBox.Text = Path.GetDirectoryName(dialog.FileName) ?? "";
-                    }
-
-                    if (DetectedFilesComboBox.ItemsSource is System.Collections.Generic.List<LaunchableFileInfo> list)
-                    {
-                        var matched = list.FirstOrDefault(x => string.Equals(x.FullPath, dialog.FileName, StringComparison.OrdinalIgnoreCase));
-                        if (matched != null)
-                        {
-                            DetectedFilesComboBox.SelectedItem = matched;
-                        }
-                        else
-                        {
-                            var newItem = new LaunchableFileInfo
-                            {
-                                DisplayName = Path.GetFileName(dialog.FileName),
-                                FullPath = dialog.FileName,
-                                RelativePath = !string.IsNullOrWhiteSpace(_game.InstallationPath) && dialog.FileName.StartsWith(_game.InstallationPath, StringComparison.OrdinalIgnoreCase)
-                                    ? Path.GetRelativePath(_game.InstallationPath, dialog.FileName)
-                                    : Path.GetFileName(dialog.FileName),
-                                IsBatch = dialog.FileName.EndsWith(".bat", StringComparison.OrdinalIgnoreCase) || dialog.FileName.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase),
-                                IsPrimary = false
-                            };
-                            var updatedList = new System.Collections.Generic.List<LaunchableFileInfo>(list) { newItem };
-                            DetectedFilesComboBox.ItemsSource = updatedList;
-                            DetectedFilesComboBox.SelectedItem = newItem;
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                ModernMessageBox.Show($"Failed to open file picker: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void BrowseWorkingDirBtn_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                string? initialDir = GetSafeDirectoryPath(
-                    WorkingDirTextBox.Text,
-                    !string.IsNullOrWhiteSpace(ExecutablePathTextBox.Text) ? Path.GetDirectoryName(ExecutablePathTextBox.Text.Trim()) : null,
-                    _game.InstallationPath);
-
-                var dialog = new OpenFolderDialog
-                {
-                    Title = "Select Working Directory"
-                };
-
-                if (!string.IsNullOrWhiteSpace(initialDir))
-                {
-                    dialog.InitialDirectory = initialDir;
-                }
-
-                bool? result;
-                try
-                {
-                    result = dialog.ShowDialog(this);
-                }
-                catch (ArgumentException)
-                {
-                    // Fallback if Windows Shell rejects the initial directory
-                    dialog.InitialDirectory = null;
-                    result = dialog.ShowDialog(this);
-                }
-
-                if (result == true)
-                {
-                    WorkingDirTextBox.Text = dialog.FolderName;
-                }
-            }
-            catch (Exception ex)
-            {
-                ModernMessageBox.Show($"Failed to open folder picker: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void TestLaunchBtn_Click(object sender, RoutedEventArgs e)
-        {
-            if (CustomLaunchRadio.IsChecked == true)
-            {
-                string path = ExecutablePathTextBox.Text.Trim();
-                if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-                {
-                    ModernMessageBox.Show("Please select a valid executable or batch file first.", "Invalid File", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        Dispatcher.Invoke(() => CompleteApply(task));
+                    });
                     return;
                 }
 
-                // Temporarily build test config
-                var testConfig = new GameCustomLaunchConfig
-                {
-                    AppId = _game.AppId,
-                    IsEnabled = true,
-                    ExecutablePath = path,
-                    Arguments = ArgumentsTextBox.Text.Trim(),
-                    WorkingDirectory = WorkingDirTextBox.Text.Trim()
-                };
-
-                CustomLaunchService.SaveConfig(testConfig, _game.InstallationPath);
-                var (success, msg) = CustomLaunchService.LaunchGame(_game.AppId, _game.InstallationPath);
-
-                if (!success)
-                {
-                    ModernMessageBox.Show($"Failed to test launch: {msg}", "Launch Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
+                SetStatus("Changes staged. Reopen this editor and use Save & Apply when you are ready.");
+                DialogResult = true;
             }
-            else
+            catch (Exception ex)
             {
-                SteamHelper.PlayGame(_game.AppId);
+                Logger.Log($"[CustomLaunchDialog] Could not save launch options for {_game.AppId}: {ex}");
+                ShowError(ex.Message);
             }
         }
 
-        private void ResetDefaultBtn_Click(object sender, RoutedEventArgs e)
+        private void CompleteApply(Task<SteamLaunchApplyResult> task)
         {
-            var result = ModernMessageBox.Show(
-                $"Reset launch configuration for '{_game.Name}' to Steam default?",
-                "Reset Launch Configuration",
+            if (task.IsFaulted)
+            {
+                ShowError(task.Exception?.GetBaseException().Message ?? "Steam launch options could not be applied.");
+                SaveBtn.IsEnabled = CanSave;
+                return;
+            }
+
+            SteamLaunchApplyResult result = task.Result;
+            if (!result.Success)
+            {
+                ShowError(result.Error ?? "Steam launch options could not be applied.");
+                SaveBtn.IsEnabled = CanSave;
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(result.RestartWarning))
+                SetStatus($"Options were applied, but Steam could not be restarted: {result.RestartWarning}");
+            else
+                SetStatus(result.SteamWasRunning
+                    ? "Options applied. Steam has been restarted."
+                    : "Options applied. Start Steam to use them.");
+            DialogResult = true;
+        }
+
+        private void Restore_Click(object sender, RoutedEventArgs e)
+        {
+            if (_state?.IsModified != true)
+                return;
+
+            var answer = ModernMessageBox.Show(
+                "Restore the launch entries saved before this app first changed them? Steam must close and reopen.",
+                "Restore Original Launch Options",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
+            if (answer != MessageBoxResult.Yes)
+                return;
 
-            if (result == MessageBoxResult.Yes)
+            RestoreButton.IsEnabled = false;
+            SetStatus("Restoring original Steam launch options...");
+            Task.Run(() => _service.Restore(_game.AppId)).ContinueWith(task =>
             {
-                CustomLaunchService.RemoveConfig(_game.AppId);
-                ConfigChanged = true;
-                DefaultLaunchRadio.IsChecked = true;
-                ExecutablePathTextBox.Text = string.Empty;
-                ArgumentsTextBox.Text = string.Empty;
-                WorkingDirTextBox.Text = string.Empty;
-                UpdateUiState();
-                ModernMessageBox.Show("Custom launch has been reset to Steam default.", "Reset Complete", MessageBoxButton.OK, MessageBoxImage.Information);
-                Close();
+                Dispatcher.Invoke(() =>
+                {
+                    if (task.IsFaulted)
+                    {
+                        ShowError(task.Exception?.GetBaseException().Message ?? "Restore failed.");
+                        RestoreButton.IsEnabled = true;
+                    }
+                    else if (!task.Result.Success)
+                    {
+                        ShowError(task.Result.Error ?? "Restore failed.");
+                        RestoreButton.IsEnabled = true;
+                    }
+                    else
+                    {
+                        ConfigChanged = true;
+                        SetStatus(task.Result.SteamWasRunning
+                            ? "Original launch options restored. Steam has been restarted."
+                            : "Original launch options restored.");
+                        DialogResult = true;
+                    }
+                });
+            });
+        }
+
+        private void HookEntries()
+        {
+            foreach (var oldEntry in _watchedEntries)
+                oldEntry.PropertyChanged -= Entry_PropertyChanged;
+            _watchedEntries.Clear();
+            foreach (var entry in Entries)
+            {
+                entry.PropertyChanged += Entry_PropertyChanged;
+                _watchedEntries.Add(entry);
             }
         }
 
-        private void SaveBtn_Click(object sender, RoutedEventArgs e)
+        private void Entry_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (CustomLaunchRadio.IsChecked == true)
-            {
-                if (!_game.IsInstalled || string.IsNullOrWhiteSpace(_game.InstallationPath) || !Directory.Exists(_game.InstallationPath))
-                {
-                    ModernMessageBox.Show(
-                        $"Cannot configure custom launch because '{_game.Name}' is not installed.",
-                        "Game Not Installed",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
-                    return;
-                }
-
-                string targetPath = ExecutablePathTextBox.Text.Trim();
-                if (string.IsNullOrWhiteSpace(targetPath) || !File.Exists(targetPath))
-                {
-                    ModernMessageBox.Show("Please select a valid .exe, .bat, or .cmd file.", "File Required", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                var config = new GameCustomLaunchConfig
-                {
-                    AppId = _game.AppId,
-                    IsEnabled = true,
-                    ExecutablePath = targetPath,
-                    Arguments = ArgumentsTextBox.Text.Trim(),
-                    WorkingDirectory = WorkingDirTextBox.Text.Trim(),
-                    OriginalIconPath = _resolvedGameIcon
-                };
-
-                CustomLaunchService.SaveConfig(config, _game.InstallationPath);
-                ConfigChanged = true;
-
-                ModernMessageBox.Show(
-                    $"Custom launch configured for '{_game.Name}'!\n\nTarget: {Path.GetFileName(targetPath)}\nPLAY button and Shortcut will now follow this configuration.",
-                    "Configuration Saved",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-            }
-            else
-            {
-                CustomLaunchService.RemoveConfig(_game.AppId);
-                ConfigChanged = true;
-
-                ModernMessageBox.Show(
-                    $"Launch configured for '{_game.Name}' using Steam default.",
-                    "Configuration Saved",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-            }
-
-            DialogResult = true;
-            Close();
+            RecomputeDirty();
+            UpdateCommands();
         }
 
-        private void CancelBtn_Click(object sender, RoutedEventArgs e)
+        private void RecomputeDirty()
         {
-            Close();
+            if (_state == null)
+                return;
+            var current = Normalize(Entries.Select(entry => entry.ToOption()));
+            bool dirty = SteamLaunchOptionComparer.Differs(_baseline, current);
+            if (_isDirty == dirty)
+                return;
+            _isDirty = dirty;
+            OnPropertyChanged(nameof(CanSave));
         }
 
-        private void CloseButton_Click(object sender, RoutedEventArgs e)
+        private static List<SteamLaunchOption> Normalize(IEnumerable<SteamLaunchOption> options)
         {
-            Close();
+            var result = options.Select(option => option.Copy()).ToList();
+            for (int i = 0; i < result.Count; i++)
+                result[i].Index = i.ToString();
+            return result;
         }
+
+        private void UpdateCommands()
+        {
+            OnPropertyChanged(nameof(CanEdit));
+            OnPropertyChanged(nameof(CanRemove));
+            OnPropertyChanged(nameof(CanMoveUp));
+            OnPropertyChanged(nameof(CanMoveDown));
+            OnPropertyChanged(nameof(CanSave));
+        }
+
+        private void SetStatus(string text)
+        {
+            StatusText.Text = text;
+            ErrorText.Visibility = Visibility.Collapsed;
+        }
+
+        private void ShowError(string text)
+        {
+            ErrorText.Text = text;
+            ErrorText.Visibility = Visibility.Visible;
+            StatusText.Text = "Launch options could not be loaded or applied.";
+        }
+
+        private void Cancel_Click(object sender, RoutedEventArgs e) => Close();
+        private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
 
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (e.LeftButton == MouseButtonState.Pressed)
-            {
                 DragMove();
+        }
+
+        private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
+        public sealed class LaunchEntryEditor : INotifyPropertyChanged
+        {
+            private readonly SteamLaunchOption _option;
+            private string _executable = string.Empty;
+            private string _arguments = string.Empty;
+            private string _workingDirectory = string.Empty;
+            private string _description = string.Empty;
+            private string _type = string.Empty;
+            private string _operatingSystems = string.Empty;
+            private string _architecture = string.Empty;
+            private string _betaBranch = string.Empty;
+            private string _ownsDlc = string.Empty;
+            public event PropertyChangedEventHandler? PropertyChanged;
+
+            public string Title => string.IsNullOrWhiteSpace(Description) ? Executable : Description;
+            public string Summary => string.Join("  ·  ", new[]
+            {
+                Executable,
+                Arguments,
+                OperatingSystems
+            }.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+            public string Executable { get => _executable; set => Set(ref _executable, value); }
+            public string Arguments { get => _arguments; set => Set(ref _arguments, value); }
+            public string WorkingDirectory { get => _workingDirectory; set => Set(ref _workingDirectory, value); }
+            public string Description { get => _description; set => Set(ref _description, value, nameof(Title)); }
+            public string Type { get => _type; set => Set(ref _type, value); }
+            public string OperatingSystems { get => _operatingSystems; set => Set(ref _operatingSystems, value); }
+            public string Architecture { get => _architecture; set => Set(ref _architecture, value); }
+            public string BetaBranch { get => _betaBranch; set => Set(ref _betaBranch, value); }
+            public string OwnsDlc { get => _ownsDlc; set => Set(ref _ownsDlc, value); }
+
+            public LaunchEntryEditor(SteamLaunchOption option)
+            {
+                _option = option.Copy();
+                _executable = _option.Executable;
+                _arguments = _option.Arguments;
+                _workingDirectory = _option.WorkingDirectory;
+                _description = _option.Description;
+                _type = _option.Type;
+                _operatingSystems = _option.OperatingSystems;
+                _architecture = _option.Architecture;
+                _betaBranch = _option.BetaBranch;
+                _ownsDlc = _option.OwnsDlc;
+            }
+
+            public SteamLaunchOption ToOption() => new()
+            {
+                Index = _option.Index,
+                SourceIndex = _option.SourceIndex,
+                Executable = Executable,
+                Arguments = Arguments,
+                WorkingDirectory = WorkingDirectory,
+                Description = Description,
+                Type = Type,
+                OperatingSystems = OperatingSystems,
+                Architecture = Architecture,
+                BetaBranch = BetaBranch,
+                OwnsDlc = OwnsDlc
+            };
+
+            private void Set(ref string field, string? value, string? related = null)
+            {
+                value ??= string.Empty;
+                if (field == value)
+                    return;
+                field = value;
+                if (related == nameof(Title)) PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Title)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(null));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Summary)));
+            }
+        }
+
+        private static class SteamLaunchOptionComparer
+        {
+            public static bool Differs(IReadOnlyList<SteamLaunchOption> left, IReadOnlyList<SteamLaunchOption> right)
+            {
+                if (left.Count != right.Count)
+                    return true;
+                for (int i = 0; i < left.Count; i++)
+                {
+                    var a = left[i];
+                    var b = right[i];
+                    if (a.Executable != b.Executable || a.Arguments != b.Arguments
+                        || a.WorkingDirectory != b.WorkingDirectory || a.Description != b.Description
+                        || a.Type != b.Type || a.OperatingSystems != b.OperatingSystems
+                        || a.Architecture != b.Architecture || a.BetaBranch != b.BetaBranch
+                        || a.OwnsDlc != b.OwnsDlc)
+                        return true;
+                }
+                return false;
             }
         }
     }

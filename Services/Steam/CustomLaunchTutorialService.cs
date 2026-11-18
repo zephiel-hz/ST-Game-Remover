@@ -131,12 +131,18 @@ namespace SteamPluginManager.Services.Steam
         public static async Task<bool> ApplyAdminConfiguredTutorialToLocalGameAsync(
             int appId,
             string platform,
-            string gameInstallPath)
+            string gameInstallPath,
+            Func<bool>? confirmApply = null,
+            Action<CustomLaunchTutorial>? onTutorialFound = null,
+            Action<SteamLaunchProgress>? onProgress = null)
         {
             if (appId <= 0 || string.IsNullOrWhiteSpace(gameInstallPath) || !Directory.Exists(gameInstallPath))
+            {
+                Logger.Log($"[CustomLaunchTutorialService] Cannot apply admin launch options for AppID {appId}: game installation path is invalid.");
                 return false;
+            }
 
-            var allTutorials = await GetAllTutorialsAsync();
+            var allTutorials = await GetAllTutorialsAsync(forceRefresh: true);
             bool isFallback;
             lock (_lock)
             {
@@ -144,7 +150,10 @@ namespace SteamPluginManager.Services.Steam
             }
 
             if (isFallback)
+            {
+                Logger.Log($"[CustomLaunchTutorialService] Cannot apply admin launch options for AppID {appId}: only built-in fallback tutorials are available.");
                 return false;
+            }
 
             var tutorial = allTutorials.FirstOrDefault(t =>
                 t.AppId == appId &&
@@ -153,17 +162,25 @@ namespace SteamPluginManager.Services.Steam
                  string.Equals(t.ApplicableTo, platform, StringComparison.OrdinalIgnoreCase)));
 
             if (tutorial == null)
-                return false;
-
-            if (string.IsNullOrWhiteSpace(tutorial.RecommendedExecutable))
             {
-                Logger.Log($"[CustomLaunchTutorialService] Admin tutorial for AppID {appId} has no recommended executable; automatic Custom Launch was skipped.");
+                Logger.Log($"[CustomLaunchTutorialService] No admin tutorial matches AppID {appId} and platform '{platform}'.");
                 return false;
             }
 
-            bool applied = ApplyTutorialToLocalGame(appId, tutorial, gameInstallPath);
+            if (string.IsNullOrWhiteSpace(tutorial.RecommendedExecutable))
+            {
+                Logger.Log($"[CustomLaunchTutorialService] Admin tutorial for AppID {appId} has no recommended executable; applying Steam launch options was skipped.");
+                return false;
+            }
+
+            onTutorialFound?.Invoke(tutorial);
+
+            if (confirmApply != null && !confirmApply())
+                return false;
+
+            bool applied = await ApplyTutorialToLocalGameAsync(appId, tutorial, gameInstallPath, onProgress);
             if (!applied)
-                Logger.Log($"[CustomLaunchTutorialService] Failed to apply admin Custom Launch tutorial for AppID {appId}.");
+                Logger.Log($"[CustomLaunchTutorialService] Failed to apply admin Steam launch options for AppID {appId}.");
 
             return applied;
         }
@@ -269,58 +286,87 @@ namespace SteamPluginManager.Services.Steam
             }
         }
 
-        /// <summary>
-        /// Automatically applies the recommended executable and arguments to the local game's Custom Launch configuration
-        /// </summary>
-        public static bool ApplyTutorialToLocalGame(int appId, CustomLaunchTutorial tutorial, string gameInstallPath)
+        public static async Task<bool> ApplyTutorialToLocalGameAsync(
+            int appId,
+            CustomLaunchTutorial tutorial,
+            string gameInstallPath,
+            Action<SteamLaunchProgress>? onProgress = null)
         {
             if (appId <= 0 || tutorial == null || string.IsNullOrWhiteSpace(gameInstallPath) || !Directory.Exists(gameInstallPath))
                 return false;
 
-            string targetExePath = string.Empty;
             string relativePath = (tutorial.RecommendedExecutable ?? string.Empty).Trim().Replace('/', '\\');
+            if (string.IsNullOrWhiteSpace(relativePath))
+                return false;
 
-            if (!string.IsNullOrWhiteSpace(relativePath))
+            string executablePath = Path.Combine(gameInstallPath, relativePath);
+            if (!File.Exists(executablePath))
             {
-                string combined = Path.Combine(gameInstallPath, relativePath);
-                if (File.Exists(combined))
+                string exeName = Path.GetFileName(relativePath);
+                try
                 {
-                    targetExePath = combined;
-                }
-                else
-                {
-                    // Search recursively in game directory
-                    string exeName = Path.GetFileName(relativePath);
-                    try
+                    string? found = Directory.GetFiles(gameInstallPath, exeName, SearchOption.AllDirectories).FirstOrDefault();
+                    if (found == null)
                     {
-                        var found = Directory.GetFiles(gameInstallPath, exeName, SearchOption.AllDirectories).FirstOrDefault();
-                        if (!string.IsNullOrEmpty(found))
-                        {
-                            targetExePath = found;
-                            relativePath = Path.GetRelativePath(gameInstallPath, found);
-                        }
+                        Logger.Log($"[CustomLaunchTutorialService] Tutorial executable was not found for AppID {appId}: {relativePath}");
+                        onProgress?.Invoke(new SteamLaunchProgress(2, false, "Custom launch executable not found", $"Could not find '{relativePath}' in the game folder.", Failed: true));
+                        return false;
                     }
-                    catch { }
+                    executablePath = found;
+                    relativePath = Path.GetRelativePath(gameInstallPath, found);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[CustomLaunchTutorialService] Could not resolve tutorial executable for AppID {appId}: {ex.Message}");
+                    return false;
                 }
             }
 
-            var existingConfig = CustomLaunchService.GetConfig(appId, gameInstallPath) ?? new GameCustomLaunchConfig
+            try
             {
-                AppId = appId
-            };
+                var service = SteamLaunchOptionsService.Shared;
+                var state = await Task.Run(() => service.Read(appId));
+                if (state == null)
+                {
+                    Logger.Log($"[CustomLaunchTutorialService] Steam appinfo entry {appId} was not found.");
+                    onProgress?.Invoke(new SteamLaunchProgress(2, false, "Steam launch data not found", $"Steam has no appinfo entry for AppID {appId}.", Failed: true));
+                    return false;
+                }
 
-            existingConfig.IsEnabled = true;
-            if (!string.IsNullOrEmpty(targetExePath))
-            {
-                existingConfig.ExecutablePath = targetExePath;
-                existingConfig.RelativePath = relativePath;
+                var desired = service.GetStagedDesired(appId)?.Select(option => option.Copy()).ToList()
+                    ?? state.Current.Select(option => option.Copy()).ToList();
+                if (desired.Count == 0)
+                    desired.Add(new SteamLaunchOption { Index = "0", Type = "default" });
+
+                var launchCommand = SteamBatchLaunchCommand.Create(
+                    executablePath,
+                    relativePath,
+                    tutorial.RecommendedArguments ?? string.Empty,
+                    gameInstallPath);
+                desired[0].Executable = launchCommand.Executable;
+                desired[0].Arguments = launchCommand.Arguments;
+                desired[0].WorkingDirectory = launchCommand.WorkingDirectory;
+                desired[0].SourceIndex = state.Current.FirstOrDefault()?.SourceIndex ?? string.Empty;
+                for (int i = 0; i < desired.Count; i++)
+                    desired[i].Index = i.ToString();
+
+                service.Stage(appId, state.ChangeNumber, state.Current, desired);
+                var result = await Task.Run(() => service.ApplyStaged(appId, onProgress));
+                if (!result.Success)
+                {
+                    Logger.Log($"[CustomLaunchTutorialService] Steam launch options were staged but not applied for AppID {appId}: {result.Error}");
+                    return false;
+                }
+
+                Logger.Log($"[CustomLaunchTutorialService] Applied Steam launch options for AppID {appId}: executable='{launchCommand.Executable}', arguments='{launchCommand.Arguments}'.");
+                return true;
             }
-            existingConfig.Arguments = tutorial.RecommendedArguments ?? string.Empty;
-            existingConfig.WorkingDirectory = gameInstallPath;
-
-            CustomLaunchService.SaveConfig(existingConfig, gameInstallPath);
-            Logger.Log($"[CustomLaunchTutorialService] Applied custom launch config for AppID {appId}: Exe='{existingConfig.ExecutablePath}', Args='{existingConfig.Arguments}'");
-            return true;
+            catch (Exception ex)
+            {
+                Logger.Log($"[CustomLaunchTutorialService] Could not apply Steam launch options for AppID {appId}: {ex}");
+                onProgress?.Invoke(new SteamLaunchProgress(2, false, "Could not apply custom launch", ex.Message, Failed: true));
+                return false;
+            }
         }
 
         /// <summary>

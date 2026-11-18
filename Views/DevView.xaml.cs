@@ -20,6 +20,7 @@ using SteamPluginManager.Models;
 using SteamPluginManager.Services.API;
 using SteamPluginManager.Services.Profile;
 using SteamPluginManager.Services.Steam;
+using SteamPluginManager.Services.Security;
 using SteamPluginManager;
 
 namespace SteamPluginManager.Views
@@ -103,7 +104,8 @@ namespace SteamPluginManager.Views
                     LoadActiveBroadcastAsync(),
                     LoadSidebarVisibilityAsync(),
                     LoadStorageDataAsync(),
-                    LoadTutorialsAsync()
+                    LoadTutorialsAsync(),
+                    LoadRequestSourceCredentialsAsync()
                 );
 
                 LogConsole("[DevConsole] All console datasets successfully refreshed.");
@@ -168,6 +170,79 @@ namespace SteamPluginManager.Views
             }
         }
 
+        private async Task LoadRequestSourceCredentialsAsync()
+        {
+            if (_currentAdminProfile?.IsAdmin != true)
+            {
+                RequestCredentialsStatusText.Text = "Only an administrator can read request source credentials.";
+                SaveRequestCredentialsButton.IsEnabled = false;
+                return;
+            }
+
+            RefreshRequestCredentialsButton.IsEnabled = false;
+            SaveRequestCredentialsButton.IsEnabled = false;
+            RequestCredentialsStatusText.Text = "Loading credentials...";
+            try
+            {
+                var credentials = await RequestSourceCredentialsService.LoadAsync(DeviceIdentifier.GetDeviceId());
+                HubcapApiKeyTextBox.Text = credentials.HubcapApiKey;
+                LuaToolsCookieTextBox.Text = credentials.LuaToolsCookie;
+                RequestCredentialsStatusText.Text =
+                    string.IsNullOrWhiteSpace(credentials.HubcapApiKey) ||
+                    string.IsNullOrWhiteSpace(credentials.LuaToolsCookie)
+                        ? "Credentials loaded. One or more values are empty."
+                        : "Credentials loaded from private Supabase storage.";
+                LogConsole("[Request Sources] Credentials loaded.");
+            }
+            catch (Exception ex)
+            {
+                RequestCredentialsStatusText.Text = $"Unable to load credentials: {ex.Message}";
+                LogConsole($"[Request Sources] Failed to load credentials: {ex.Message}");
+            }
+            finally
+            {
+                RefreshRequestCredentialsButton.IsEnabled = true;
+                SaveRequestCredentialsButton.IsEnabled = _currentAdminProfile?.IsAdmin == true;
+            }
+        }
+
+        private async void RefreshRequestCredentials_Click(object sender, RoutedEventArgs e)
+        {
+            await LoadRequestSourceCredentialsAsync();
+        }
+
+        private async void SaveRequestCredentials_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentAdminProfile?.IsAdmin != true)
+            {
+                RequestCredentialsStatusText.Text = "Only an administrator can update request source credentials.";
+                return;
+            }
+
+            RefreshRequestCredentialsButton.IsEnabled = false;
+            SaveRequestCredentialsButton.IsEnabled = false;
+            RequestCredentialsStatusText.Text = "Saving credentials...";
+            try
+            {
+                await RequestSourceCredentialsService.SaveAsync(
+                    DeviceIdentifier.GetDeviceId(),
+                    HubcapApiKeyTextBox.Text.Trim(),
+                    LuaToolsCookieTextBox.Text.Trim());
+                RequestCredentialsStatusText.Text = "Credentials saved to private Supabase storage.";
+                LogConsole("[Request Sources] Credentials saved.");
+            }
+            catch (Exception ex)
+            {
+                RequestCredentialsStatusText.Text = $"Unable to save credentials: {ex.Message}";
+                LogConsole($"[Request Sources] Failed to save credentials: {ex.Message}");
+            }
+            finally
+            {
+                RefreshRequestCredentialsButton.IsEnabled = true;
+                SaveRequestCredentialsButton.IsEnabled = _currentAdminProfile?.IsAdmin == true;
+            }
+        }
+
         #region 1. Game Catalog & Multi-Select Purge
 
         private async Task LoadGamesAsync()
@@ -228,37 +303,66 @@ namespace SteamPluginManager.Views
             await LoadGamesAsync();
         }
 
-        private async void ReplaceLuaManifestButton_Click(object sender, RoutedEventArgs e)
+        private int? GetSelectedLuaManifestAppId()
+        {
+            var selectedGame = _allGames.FirstOrDefault(g => g.IsSelected) ?? (GamesDataGrid?.SelectedItem as DevManifestGame);
+            if (selectedGame != null)
+            {
+                return selectedGame.AppId;
+            }
+
+            if (StorageDataGrid?.SelectedItem is DevStorageFileItem storageFile)
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(storageFile.Key, @"^(\d+)");
+                if (match.Success && int.TryParse(match.Groups[1].Value, out int storageAppId))
+                {
+                    return storageAppId;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(GameSearchTextBox?.Text) &&
+                int.TryParse(GameSearchTextBox.Text.Trim(), out int searchAppId))
+            {
+                return searchAppId;
+            }
+
+            return null;
+        }
+
+        private int? GetContextGameAppId(object sender)
+        {
+            if (sender is MenuItem menuItem)
+            {
+                if (menuItem.DataContext is DevManifestGame game)
+                {
+                    return game.AppId;
+                }
+                if (menuItem.Parent is ContextMenu contextMenu &&
+                    contextMenu.PlacementTarget is DataGridRow row &&
+                    row.DataContext is DevManifestGame rowGame)
+                {
+                    return rowGame.AppId;
+                }
+            }
+
+            return GamesDataGrid?.SelectedItem is DevManifestGame selectedGame
+                ? selectedGame.AppId
+                : GetSelectedLuaManifestAppId();
+        }
+
+        private async Task ShowLuaManifestDialogAsync(int? appId)
         {
             try
             {
-                int? prefilledAppId = null;
-                var selectedGame = _allGames.FirstOrDefault(g => g.IsSelected) ?? (GamesDataGrid?.SelectedItem as DevManifestGame);
-                if (selectedGame != null)
-                {
-                    prefilledAppId = selectedGame.AppId;
-                }
-                else if (StorageDataGrid?.SelectedItem is DevStorageFileItem sfi)
-                {
-                    var match = System.Text.RegularExpressions.Regex.Match(sfi.Key, @"^(\d+)");
-                    if (match.Success && int.TryParse(match.Groups[1].Value, out int sAppId))
-                    {
-                        prefilledAppId = sAppId;
-                    }
-                }
-                else if (!string.IsNullOrWhiteSpace(GameSearchTextBox?.Text) && int.TryParse(GameSearchTextBox.Text.Trim(), out int searchId))
-                {
-                    prefilledAppId = searchId;
-                }
-
-                var dialog = new UI.Dialogs.DevReplaceLuaManifestDialog(_allGames, prefilledAppId)
+                var dialog = new UI.Dialogs.DevReplaceLuaManifestDialog(_allGames, appId)
                 {
                     Owner = Window.GetWindow(this)
                 };
 
-                if (dialog.ShowDialog() == true && dialog.ReplaceSucceeded)
+                if (dialog.ShowDialog() == true && dialog.OperationSucceeded)
                 {
-                    LogConsole($"[DevConsole] Replaced Lua & Manifest files for AppID {dialog.TargetAppId} ({dialog.ReplacedFilesCount} files, {SupabaseStorageService.FormatSize(dialog.ReplacedTotalBytes)}).");
+                    string operation = dialog.ReplaceExistingFiles ? "Replaced" : "Uploaded";
+                    LogConsole($"[DevConsole] {operation} Lua & Manifest files for AppID {dialog.TargetAppId} ({dialog.UploadedFilesCount} files, {SupabaseStorageService.FormatSize(dialog.UploadedTotalBytes)}).");
                     await LoadGamesAsync();
 
                     DashboardView.InvalidateCache();
@@ -268,51 +372,18 @@ namespace SteamPluginManager.Views
             }
             catch (Exception ex)
             {
-                LogConsole($"[DevConsole] Error opening replace dialog: {ex.Message}");
+                LogConsole($"[DevConsole] Error opening Lua/manifest dialog: {ex}");
             }
         }
 
-        private async void GameRowReplaceLuaManifest_Click(object sender, RoutedEventArgs e)
+        private async void LuaManifestActionsButton_Click(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                int? targetAppId = null;
-                if (sender is MenuItem mi)
-                {
-                    if (mi.DataContext is DevManifestGame game)
-                    {
-                        targetAppId = game.AppId;
-                    }
-                    else if (mi.Parent is ContextMenu cm && cm.PlacementTarget is DataGridRow row && row.DataContext is DevManifestGame rGame)
-                    {
-                        targetAppId = rGame.AppId;
-                    }
-                }
+            await ShowLuaManifestDialogAsync(GetSelectedLuaManifestAppId());
+        }
 
-                if (targetAppId == null && GamesDataGrid?.SelectedItem is DevManifestGame sel)
-                {
-                    targetAppId = sel.AppId;
-                }
-
-                var dialog = new UI.Dialogs.DevReplaceLuaManifestDialog(_allGames, targetAppId)
-                {
-                    Owner = Window.GetWindow(this)
-                };
-
-                if (dialog.ShowDialog() == true && dialog.ReplaceSucceeded)
-                {
-                    LogConsole($"[DevConsole] Replaced Lua & Manifest files for AppID {dialog.TargetAppId} ({dialog.ReplacedFilesCount} files, {SupabaseStorageService.FormatSize(dialog.ReplacedTotalBytes)}).");
-                    await LoadGamesAsync();
-
-                    DashboardView.InvalidateCache();
-                    HZManifestView.InvalidateCache();
-                    _ = DashboardView.RefreshNewestManifestsAsync();
-                }
-            }
-            catch (Exception ex)
-            {
-                LogConsole($"[DevConsole] Error opening row replace dialog: {ex}");
-            }
+        private async void GameRowLuaManifestActions_Click(object sender, RoutedEventArgs e)
+        {
+            await ShowLuaManifestDialogAsync(GetContextGameAppId(sender));
         }
 
         private void SelectAllGames_Click(object sender, RoutedEventArgs e)

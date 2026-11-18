@@ -302,7 +302,7 @@
                                         Visibility="Collapsed"
                                         Cursor="Hand"
                                         MouseLeftButtonDown="CustomLaunchIndicatorBadge_Click"
-                                        ToolTip="Custom Launch is active. Click to modify or reset.">
+                                        ToolTip="Steam launch options are edited. Click to modify or restore the original entries.">
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                         <TextBlock Text="&#xE9CE;" FontFamily="Segoe MDL2 Assets" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
                                         <TextBlock x:Name="CustomLaunchBadgeText" Text="Custom launch" FontSize="11" FontWeight="Bold" Foreground="#10B981" VerticalAlignment="Center"/>
@@ -438,16 +438,16 @@
                                     </StackPanel>
                                 </Button>
 
-                                <!-- Custom Launch Config Button (Hidden if not installed or running) -->
+                                <!-- Launch options can be edited before installation; unsafe Steam states disable the action. -->
                                 <Button x:Name="CustomLaunchBtn"
                                         Style="{StaticResource LauncherQuickActionButton}"
                                         Margin="0,0,8,10"
-                                        Visibility="Collapsed"
+                                        Visibility="Visible"
                                         Click="CustomLaunch_Click"
-                                        ToolTip="Configure custom launch executable or batch script">
+                                        ToolTip="Edit the launch entries Steam uses for this game, even before installation">
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                         <TextBlock Text="&#xE7AC;" FontFamily="Segoe MDL2 Assets" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
-                                        <TextBlock x:Name="CustomLaunchBtnText" Text="Custom Launch" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="CustomLaunchBtnText" Text="Launch Options" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
                                         <Border x:Name="CustomLaunchActiveDot"
                                                 Width="6" Height="6"
                                                 CornerRadius="3"
@@ -458,7 +458,7 @@
                                     </StackPanel>
                                 </Button>
 
-                                <!-- Uninstall Button (Only visible if installed and not running) -->
+                                <!-- Uninstall is available while download progress is active. -->
                                 <Button x:Name="UninstallBtn"
                                         Style="{StaticResource LauncherQuickActionButton}"
                                         Margin="0,0,8,10"

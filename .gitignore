@@ -61,6 +61,12 @@ logs/
 Database/*
 !Database/create_community_message_reactions.sql
 !Database/migrate_device_tpm_identity.sql
+!Database/create_request_source_credentials_table.sql
+!Documentation/
+Documentation/*
+!Documentation/REQUEST_SOURCE_SETUP.md
+!supabase/functions/request-source-credentials/
+!supabase/functions/request-source-credentials/index.ts
 hubcap_app.js
 
 # Logs and diagnostic output

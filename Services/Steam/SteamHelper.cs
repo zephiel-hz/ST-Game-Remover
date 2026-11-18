@@ -110,8 +110,17 @@ namespace SteamPluginManager
 
         public static void PlayGame(int appId)
         {
+            if (!TryPlayGame(appId, out string error))
+                Logger.Log($"[SteamHelper] Error playing game {appId}: {error}");
+        }
+
+        public static bool TryPlayGame(int appId, out string error)
+        {
             try
             {
+                if (appId <= 0)
+                    throw new ArgumentOutOfRangeException(nameof(appId));
+
                 LaunchSteam();
                 Process.Start(new ProcessStartInfo
                 {
@@ -121,12 +130,13 @@ namespace SteamPluginManager
                 string msg = $"[SteamHelper] Launched game via steam://rungameid/{appId}";
                 System.Diagnostics.Debug.WriteLine(msg);
                 Logger.Log(msg);
+                error = string.Empty;
+                return true;
             }
             catch (Exception ex)
             {
-                string errMsg = $"[SteamHelper] Error playing game {appId}: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine(errMsg);
-                Logger.Log(errMsg);
+                error = ex.Message;
+                return false;
             }
         }
 
@@ -925,31 +935,6 @@ namespace SteamPluginManager
                     }
                 }
 
-                // Also map any games configured via CustomLaunchService (non-Steam or external launchers)
-                try
-                {
-                    var customConfigs = CustomLaunchService.LoadAllConfigs();
-                    if (customConfigs != null)
-                    {
-                        foreach (var kvp in customConfigs)
-                        {
-                            var cfg = kvp.Value;
-                            if (cfg != null && cfg.IsEnabled && !string.IsNullOrWhiteSpace(cfg.ExecutablePath) && File.Exists(cfg.ExecutablePath))
-                            {
-                                string gameDir = !string.IsNullOrWhiteSpace(cfg.WorkingDirectory) && Directory.Exists(cfg.WorkingDirectory)
-                                    ? cfg.WorkingDirectory
-                                    : Path.GetDirectoryName(cfg.ExecutablePath) ?? "";
-
-                                if (!string.IsNullOrWhiteSpace(gameDir) && Directory.Exists(gameDir) && !map.ContainsKey(kvp.Key))
-                                {
-                                    map[kvp.Key] = gameDir;
-                                }
-                            }
-                        }
-                    }
-                }
-                catch { }
-
                 // Also map any games tracked via OnlineFixTrackerService
                 try
                 {
@@ -1060,19 +1045,6 @@ namespace SteamPluginManager
                         return installRecord.TargetFolder;
                     }
 
-                    // 4. Check Custom Launch config if enabled
-                    var customCfg = CustomLaunchService.GetConfig(appId);
-                    if (customCfg != null && customCfg.IsEnabled && !string.IsNullOrWhiteSpace(customCfg.ExecutablePath) && File.Exists(customCfg.ExecutablePath))
-                    {
-                        string customDir = !string.IsNullOrWhiteSpace(customCfg.WorkingDirectory) && Directory.Exists(customCfg.WorkingDirectory)
-                            ? customCfg.WorkingDirectory
-                            : Path.GetDirectoryName(customCfg.ExecutablePath) ?? "";
-                        if (!string.IsNullOrWhiteSpace(customDir) && Directory.Exists(customDir))
-                        {
-                            Logger.Log($"[SteamHelper] Found installation folder for AppID {appId} via CustomLaunch: {customDir}");
-                            return customDir;
-                        }
-                    }
                 }
 
                 // Note: Do NOT match unmanifested steamapps/common residual folders by folder name alone.

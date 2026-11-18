@@ -23,7 +23,7 @@
 
         <!-- Primary Action Button -->
         <Style x:Key="DialogPrimaryBtn" TargetType="Button">
-            <Setter Property="Background" Value="#EC4899"/>
+            <Setter Property="Background" Value="#BE185D"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="FontSize" Value="12.5"/>
@@ -39,13 +39,18 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#DB2777"/>
+                                <Setter TargetName="bd" Property="Background" Value="#9D174D"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="bd" Property="Opacity" Value="0.8"/>
                             </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="bd" Property="BorderBrush" Value="#F8FAFC"/>
+                                <Setter TargetName="bd" Property="BorderThickness" Value="2"/>
+                            </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="bd" Property="Opacity" Value="0.35"/>
+                                <Setter Property="Cursor" Value="No"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -76,8 +81,13 @@
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="bd" Property="Opacity" Value="0.8"/>
                             </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="bd" Property="BorderBrush" Value="#F8FAFC"/>
+                                <Setter TargetName="bd" Property="BorderThickness" Value="2"/>
+                            </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="bd" Property="Opacity" Value="0.35"/>
+                                <Setter Property="Cursor" Value="No"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -109,6 +119,14 @@
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="bd" Property="Opacity" Value="0.8"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="bd" Property="BorderBrush" Value="#F8FAFC"/>
+                                <Setter TargetName="bd" Property="BorderThickness" Value="2"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.35"/>
+                                <Setter Property="Cursor" Value="No"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -153,12 +171,12 @@
                 </Grid.ColumnDefinitions>
 
                 <Border Grid.Column="0" Width="36" Height="36" CornerRadius="9" Background="#261022" BorderBrush="{StaticResource AccentPinkBrush}" BorderThickness="1" Margin="0,0,12,0" VerticalAlignment="Center">
-                    <TextBlock Text="🔄" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="HeaderIcon" Text="🔄" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
 
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                    <TextBlock Text="Replace Lua &amp; Manifest Files" FontSize="15" FontWeight="Bold" Foreground="#F8FAFC"/>
-                    <TextBlock Text="Clean-wipe cloud folder {appId}/ on Supabase Storage and upload new files" FontSize="11" Foreground="#94A3B8" Margin="0,2,0,0"/>
+                <TextBlock x:Name="HeaderTitleText" Text="Replace Lua &amp; Manifest Files" FontSize="15" FontWeight="Bold" Foreground="#F8FAFC"/>
+                <TextBlock x:Name="HeaderSubtitleText" Text="Clean-wipe cloud folder {appId}/ on Supabase Storage and upload new files" FontSize="11" Foreground="#94A3B8" Margin="0,2,0,0"/>
                 </StackPanel>
 
                 <Button Grid.Column="2" Width="30" Height="30" Click="CloseButton_Click" Background="Transparent" BorderThickness="0" Cursor="Hand" VerticalAlignment="Center">
@@ -217,7 +235,34 @@
             <!-- 2: Source Type Selection & File Picker -->
             <Border Grid.Row="2" Background="{StaticResource DialogCardBrush}" BorderBrush="{StaticResource DialogBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="14,12" Margin="0,0,0,12">
                 <StackPanel>
-                    <TextBlock Text="REPLACEMENT SOURCE:" FontSize="10.5" FontWeight="Bold" Foreground="#94A3B8" Margin="0,0,0,8"/>
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="CLOUD ACTION:" FontSize="10.5" FontWeight="Bold" Foreground="#94A3B8" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <RadioButton x:Name="OperationUploadRadio"
+                                         Content="Upload only (keep existing files)"
+                                         GroupName="CloudOperationMode"
+                                         IsChecked="True"
+                                         Checked="OperationModeRadio_Checked"
+                                         Cursor="Hand"
+                                         FontSize="11.5"
+                                         FontWeight="SemiBold"
+                                         Foreground="#F8FAFC"
+                                         Margin="0,0,18,0"/>
+                            <RadioButton x:Name="OperationReplaceRadio"
+                                         Content="Replace all (delete folder first)"
+                                         GroupName="CloudOperationMode"
+                                         Checked="OperationModeRadio_Checked"
+                                         Cursor="Hand"
+                                         FontSize="11.5"
+                                         FontWeight="SemiBold"
+                                         Foreground="#F8FAFC"/>
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock x:Name="SourceSectionTitleText" Text="REPLACEMENT SOURCE:" FontSize="10.5" FontWeight="Bold" Foreground="#94A3B8" Margin="0,0,0,8"/>
 
                     <!-- Radio Buttons -->
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
@@ -355,21 +400,21 @@
                     </DataGrid>
 
                     <Border Grid.Row="2" Margin="4,6,4,0" Padding="0,4,0,0">
-                        <TextBlock x:Name="TotalStagedSizeText" Text="Total replacement payload: 0 B" FontSize="11" Foreground="#94A3B8" HorizontalAlignment="Right"/>
+                        <TextBlock x:Name="TotalStagedSizeText" Text="Total upload payload: 0 B" FontSize="11" Foreground="#94A3B8" HorizontalAlignment="Right"/>
                     </Border>
                 </Grid>
             </Border>
 
             <!-- 4: Danger Warning Alert -->
-            <Border Grid.Row="4" Background="#260D12" BorderBrush="#DC2626" BorderThickness="1.2" CornerRadius="8" Padding="12,10" Margin="0,0,0,12">
+            <Border Grid.Row="4" x:Name="OperationNoticePanel" Background="#260D12" BorderBrush="#DC2626" BorderThickness="1.2" CornerRadius="8" Padding="12,10" Margin="0,0,0,12">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="⚠️" FontSize="16" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="0" x:Name="OperationNoticeIcon" Text="⚠️" FontSize="16" Margin="0,0,10,0" VerticalAlignment="Center"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="WARNING: PERMANENT CLOUD REPLACEMENT" FontWeight="Bold" FontSize="11" Foreground="#F87171"/>
+                        <TextBlock x:Name="OperationNoticeTitleText" Text="WARNING: PERMANENT CLOUD REPLACEMENT" FontWeight="Bold" FontSize="11" Foreground="#F87171"/>
                         <TextBlock x:Name="WarningDetailText" Text="Executing this will wipe all existing files in Supabase Storage folder '{appId}/' before uploading the staged replacement files." FontSize="10.5" Foreground="#FCA5A5" TextWrapping="Wrap" Margin="0,2,0,0"/>
                     </StackPanel>
                 </Grid>

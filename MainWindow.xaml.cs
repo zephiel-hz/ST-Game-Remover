@@ -284,7 +284,7 @@ namespace SteamPluginManager
             ApplyLanguageResources(_currentLanguage);
             
             // Set ComboBox selection after UI is loaded
-            this.Loaded += (_, __) => {
+            this.Loaded += async (_, __) => {
                 SetLanguageComboBoxSelection(_currentLanguage);
                 // ShowWelcomeScreenIfNeeded() is now handled in App.xaml.cs during startup
                 
@@ -309,9 +309,9 @@ namespace SteamPluginManager
                 UpdateNavButtonStates("Library");
                 _currentView = "Library";
                 
-                // Auto-check for updates on startup
-                _ = CheckForUpdatesOnStartupAsync();
-                
+                await CheckForUpdatesOnStartupAsync();
+                await CheckSteamLaunchOptionsAsync();
+
                 // Start periodic auto-update check (every 2 hours)
                 _ = StartAutoUpdateCheckAsync();
             };
@@ -1929,9 +1929,8 @@ namespace SteamPluginManager
                                         }
                                     }
 
-                                    // Clean tracking records and custom launch settings
+                                    // Clean tracking records
                                     OnlineFixTrackerService.DeleteInstallRecord(game.AppId);
-                                    CustomLaunchService.RemoveConfig(game.AppId);
                                 }
                                 else
                                 {
@@ -2042,9 +2041,8 @@ namespace SteamPluginManager
                                         }
                                     }
 
-                                    // Clean tracking records and custom launch settings
+                                    // Clean tracking records
                                     OnlineFixTrackerService.DeleteInstallRecord(game.AppId);
-                                    CustomLaunchService.RemoveConfig(game.AppId);
                                 }
                                 else
                                 {
@@ -3288,6 +3286,93 @@ namespace SteamPluginManager
         }
 
         // ================= Auto-Check for Updates on Startup =================
+        private async Task CheckSteamLaunchOptionsAsync()
+        {
+            try
+            {
+                var service = SteamLaunchOptionsService.Shared;
+                int legacyCount = await Task.Run(service.GetLegacyConfigurationCount);
+                if (legacyCount > 0)
+                {
+                    var choice = ModernMessageBox.Show(
+                        $"Found {legacyCount} old direct-launch setting(s). These are no longer used. Import them as Steam launch options now? Steam will close and reopen, and a copy of the old settings will be kept.",
+                        "Import Legacy Launch Settings",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+                    if (choice == MessageBoxResult.Yes)
+                    {
+                        var migration = await Task.Run(service.MigrateLegacyConfigurations);
+                        if (!migration.ApplyResult.Success)
+                        {
+                            ModernMessageBox.Show(
+                                $"Legacy launch settings could not be imported: {migration.ApplyResult.Error}",
+                                "Launch Settings Import Failed",
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Error);
+                        }
+                        else if (migration.Imported > 0)
+                        {
+                            string skipped = migration.SkippedAppIds.Count == 0
+                                ? string.Empty
+                                : $"\n\nSkipped AppIDs: {string.Join(", ", migration.SkippedAppIds)}";
+                            string restart = string.IsNullOrWhiteSpace(migration.ApplyResult.RestartWarning)
+                                ? string.Empty
+                                : $"\n\nSteam restart notice: {migration.ApplyResult.RestartWarning}";
+                            ModernMessageBox.Show(
+                                $"Imported {migration.Imported} launch setting(s).{skipped}{restart}",
+                                "Launch Settings Imported",
+                                MessageBoxButton.OK,
+                                migration.SkippedAppIds.Count == 0 ? MessageBoxImage.Information : MessageBoxImage.Warning);
+                        }
+                    }
+                }
+
+                IReadOnlyList<int> drifted = await Task.Run(service.FindDrifted);
+                if (drifted.Count == 0)
+                    return;
+
+                string titles = string.Join(", ", drifted.Select(appId =>
+                {
+                    var game = Games.FirstOrDefault(entry => entry.AppId == appId);
+                    return game == null ? appId.ToString() : $"{game.Name} ({appId})";
+                }));
+                var reapply = ModernMessageBox.Show(
+                    $"Steam changed launch options previously edited by this app for:\n{titles}\n\nRe-apply the saved launch options now? Steam will close and reopen.",
+                    "Steam Launch Options Changed",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (reapply != MessageBoxResult.Yes)
+                    return;
+
+                var result = await Task.Run(() => service.Reapply(drifted));
+                if (!result.Success)
+                {
+                    ModernMessageBox.Show(
+                        $"Saved launch options could not be re-applied: {result.Error}",
+                        "Launch Options Apply Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                }
+                else if (!string.IsNullOrWhiteSpace(result.RestartWarning))
+                {
+                    ModernMessageBox.Show(
+                        $"Launch options were re-applied, but Steam could not be restarted: {result.RestartWarning}",
+                        "Steam Restart Notice",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[MainWindow] Steam launch-option startup check failed: {ex}");
+                ModernMessageBox.Show(
+                    $"Steam launch options could not be checked: {ex.Message}",
+                    "Launch Options Check Failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+        }
+
         private async Task CheckForUpdatesOnStartupAsync()
         {
             try

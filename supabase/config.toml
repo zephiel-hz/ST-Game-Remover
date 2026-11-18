@@ -3,3 +3,9 @@ verify_jwt = false
 
 [functions.discord-forum]
 verify_jwt = false
+
+[functions.request-source-credentials]
+verify_jwt = false
+
+[functions.request-game-assets]
+verify_jwt = false

@@ -2,6 +2,20 @@
 
 ---
 
+## [3.1.9] - 2026-11-18
+
+### Added
+* **Admin Steam Launch Options After Apply:** Applying a Bypass or Online Fix automatically applies the matching admin-recommended Steam launch entry. During setup, the modal shows the executable and arguments, then tracks Steam closing, launch option saving, and Steam restarting until the Steam process is running again. `.bat` and `.cmd` entries are routed through a `cmd.exe` path relative to the Steam game directory. Applying either item keeps the user on its current detail view.
+* **Detail View Launch Guide Removal:** Removed the separate Launch Guide cards from Game Bypass and Online Fix details because their launch options are applied as part of the apply flow.
+* **Steam Launch Options Editor:** Replaced direct custom-process launching with an editor for ordered Steam launch entries in `appcache/appinfo.vdf`, including executable, arguments, working directory, description, type, OS, architecture, beta branch, and DLC fields. Changes can be restored, backed up, and re-applied if Steam overwrites them; existing direct-launch settings can be imported.
+* **Launch Options Before Installation:** The game detail view keeps the Steam Launch Options action available for uninstalled games whose AppID is present in Steam's appinfo cache.
+* **Actions During Download Progress:** The game detail view keeps Steam launch options and uninstall available while download progress is active.
+* **Lua/Manifest Actions:** DevView uses one Lua/manifest action dialog to upload multiple files without deleting existing files or explicitly replace the AppID cloud folder.
+* **Managed Request Source Credentials:** Admins can read and update Hubcap API and lua.tools cookie credentials from DevView; game requests use server-side source routing and notify admins when a credential is rejected.
+* **Early Duplicate Request Check:** Pending game requests are checked before Steam validation or contacting any manifest source. Missing games are reported in the same Discord request webhook.
+
+---
+
 ## [3.1.8] - 2026-11-17
 
 ### Added

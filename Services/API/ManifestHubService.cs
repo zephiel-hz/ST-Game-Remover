@@ -415,14 +415,19 @@ namespace SteamPluginManager
             Action<string>? statusCallback = null,
             string? fallbackGameName = null)
         {
-            // Enforce requirement: non-Denuvo games must only have Lua files uploaded
+            if (files == null || files.Count == 0)
+            {
+                return (false, "No valid files to upload.", string.Empty);
+            }
+
+            // Enforce requirement: non-Denuvo games must only have Lua files uploaded.
             bool isDenuvo = await IsDenuvoGameAsync(appId);
             if (!isDenuvo)
             {
                 files = files.Where(f => f.FileName.EndsWith(".lua", StringComparison.OrdinalIgnoreCase)).ToList();
             }
 
-            if (files == null || files.Count == 0)
+            if (files.Count == 0)
             {
                 return (false, "No valid files to upload.", string.Empty);
             }
@@ -438,7 +443,6 @@ namespace SteamPluginManager
             }
 
             long totalBytes = 0;
-
             // 1. Upload each file to Supabase Storage folder: {appId}/{fileName}
             for (int i = 0; i < files.Count; i++)
             {
@@ -479,6 +483,30 @@ namespace SteamPluginManager
                 }
 
                 Logger.Log($"[ManifestHubService] ✓ Uploaded {storagePath} ({file.Bytes.Length} bytes)");
+            }
+
+            return await RegisterUploadedFolderAsync(appId, totalBytes, statusCallback, fallbackGameName);
+        }
+
+        public static async Task<(bool success, string message, string gameName)> RegisterUploadedFolderAsync(
+            int appId,
+            long totalBytes,
+            Action<string>? statusCallback = null,
+            string? fallbackGameName = null)
+        {
+            if (appId <= 0)
+            {
+                return (false, "Invalid AppID.", string.Empty);
+            }
+
+            var client = SharedHttpClient.Instance;
+            string supabaseUrl = SupabaseConfig.SupabaseUrl;
+            string serviceKey = SupabaseConfig.SupabaseKey;
+            string bucketName = SupabaseConfig.StorageBucketName;
+
+            if (string.IsNullOrWhiteSpace(supabaseUrl) || string.IsNullOrWhiteSpace(serviceKey) || string.IsNullOrWhiteSpace(bucketName))
+            {
+                return (false, "Supabase service configuration is missing.", string.Empty);
             }
 
             // 2. Fetch Steam game details (name, description, genre, requirements, adult rating)

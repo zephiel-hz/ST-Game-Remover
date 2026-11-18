@@ -82,11 +82,13 @@ namespace SteamPluginManager.Views
                 ResultNotification.Visibility = Visibility.Collapsed;
                 ProgressDetail.Visibility = Visibility.Collapsed;
                 ProgressDetail.Text = string.Empty;
+                ProgressStatus.Foreground = FindResource("ForegroundBrush") as Brush ?? Brushes.White;
                 ProgressCard.Visibility = Visibility.Visible;
                 ProgressBar.Visibility = Visibility.Visible;
                 ProgressBar.IsIndeterminate = true;
                 ProgressBar.Value = 0;
                 ProgressPercentageText.Text = "0%";
+                ProgressPercentageText.Visibility = Visibility.Visible;
                 StepsBorder.Visibility = Visibility.Visible;
                 StepsPanel.Visibility = Visibility.Visible;
                 DismissButton.Visibility = Visibility.Collapsed;
@@ -165,11 +167,14 @@ namespace SteamPluginManager.Views
             });
         }
 
-        public void UpdateStatus(string status, string detail = "")
+        public void UpdateStatus(string status, string detail = "", bool isError = false)
         {
             Dispatcher.Invoke(() =>
             {
                 ProgressStatus.Text = status;
+                ProgressStatus.Foreground = isError
+                    ? FindResource("DangerButtonBrush") as Brush ?? Brushes.Crimson
+                    : FindResource("ForegroundBrush") as Brush ?? Brushes.White;
                 if (!string.IsNullOrWhiteSpace(detail))
                 {
                     ProgressDetail.Text = detail;
@@ -182,12 +187,13 @@ namespace SteamPluginManager.Views
             });
         }
 
-        public void UpdateProgressStep(int stepNumber, bool completed = false)
+        public void UpdateProgressStep(int stepNumber, bool completed = false, bool failed = false)
         {
             Dispatcher.Invoke(() =>
             {
                 var successBrush = FindResource("SuccessButtonBrush") as Brush ?? Brushes.MediumSeaGreen;
                 var accentBrush = FindResource("AccentBrush") as Brush ?? Brushes.DodgerBlue;
+                var dangerBrush = FindResource("DangerButtonBrush") as Brush ?? Brushes.Crimson;
                 var borderBrush = FindResource("BorderBrush") as Brush ?? Brushes.Gray;
                 var buttonBg = FindResource("ButtonBackgroundBrush") as Brush ?? Brushes.DarkSlateGray;
                 var mutedBrush = FindResource("MutedForegroundBrush") as Brush ?? Brushes.Gray;
@@ -217,6 +223,24 @@ namespace SteamPluginManager.Views
                         if (labels[i] != null)
                         {
                             labels[i].Foreground = successBrush;
+                            labels[i].FontWeight = FontWeights.Bold;
+                        }
+                    }
+                    else if (step == stepNumber && failed)
+                    {
+                        if (circles[i] != null)
+                        {
+                            circles[i].Background = dangerBrush;
+                            circles[i].BorderBrush = dangerBrush;
+                        }
+                        if (icons[i] != null)
+                        {
+                            icons[i].Text = "\uE711";
+                            icons[i].Foreground = Brushes.White;
+                        }
+                        if (labels[i] != null)
+                        {
+                            labels[i].Foreground = dangerBrush;
                             labels[i].FontWeight = FontWeights.Bold;
                         }
                     }
@@ -300,6 +324,16 @@ namespace SteamPluginManager.Views
                     double pct = maximum > 0 ? (value / maximum) * 100 : 0;
                     ProgressPercentageText.Text = $"{Math.Round(pct)}%";
                 }
+            });
+        }
+
+        public void SetProgressIndicatorVisibility(bool isVisible)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                var visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
+                ProgressBar.Visibility = visibility;
+                ProgressPercentageText.Visibility = visibility;
             });
         }
 

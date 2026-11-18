@@ -289,7 +289,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- Stage 1: Steam -->
+                        <!-- Stage 1: Duplicate request check -->
                         <StackPanel Grid.Column="0" HorizontalAlignment="Center">
                             <Border x:Name="Stage1Circle" Width="26" Height="26" CornerRadius="13"
                                     Background="{DynamicResource InputBackgroundBrush}"
@@ -299,7 +299,7 @@
                                            Foreground="{DynamicResource MutedForegroundBrush}"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
-                            <TextBlock x:Name="Stage1Label" Text="Steam" FontSize="9.5" FontWeight="SemiBold"
+                            <TextBlock x:Name="Stage1Label" Text="Queue" FontSize="9.5" FontWeight="SemiBold"
                                        Foreground="{DynamicResource MutedForegroundBrush}"
                                        HorizontalAlignment="Center" Margin="0,4,0,0"/>
                         </StackPanel>
@@ -309,7 +309,7 @@
                                 Background="{DynamicResource BorderBrush}"
                                 VerticalAlignment="Center" Margin="0,0,0,16"/>
 
-                        <!-- Stage 2: Hubcap & DRM -->
+                        <!-- Stage 2: Steam validation -->
                         <StackPanel Grid.Column="2" HorizontalAlignment="Center">
                             <Border x:Name="Stage2Circle" Width="26" Height="26" CornerRadius="13"
                                     Background="{DynamicResource InputBackgroundBrush}"
@@ -319,7 +319,7 @@
                                            Foreground="{DynamicResource MutedForegroundBrush}"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
-                            <TextBlock x:Name="Stage2Label" Text="DRM" FontSize="9.5" FontWeight="SemiBold"
+                            <TextBlock x:Name="Stage2Label" Text="Steam" FontSize="9.5" FontWeight="SemiBold"
                                        Foreground="{DynamicResource MutedForegroundBrush}"
                                        HorizontalAlignment="Center" Margin="0,4,0,0"/>
                         </StackPanel>
@@ -329,7 +329,7 @@
                                 Background="{DynamicResource BorderBrush}"
                                 VerticalAlignment="Center" Margin="0,0,0,16"/>
 
-                        <!-- Stage 3: Repositories -->
+                        <!-- Stage 3: Denuvo routing and source download -->
                         <StackPanel Grid.Column="4" HorizontalAlignment="Center">
                             <Border x:Name="Stage3Circle" Width="26" Height="26" CornerRadius="13"
                                     Background="{DynamicResource InputBackgroundBrush}"
@@ -339,7 +339,7 @@
                                            Foreground="{DynamicResource MutedForegroundBrush}"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
-                            <TextBlock x:Name="Stage3Label" Text="Repo" FontSize="9.5" FontWeight="SemiBold"
+                            <TextBlock x:Name="Stage3Label" Text="Source" FontSize="9.5" FontWeight="SemiBold"
                                        Foreground="{DynamicResource MutedForegroundBrush}"
                                        HorizontalAlignment="Center" Margin="0,4,0,0"/>
                         </StackPanel>
@@ -349,7 +349,7 @@
                                 Background="{DynamicResource BorderBrush}"
                                 VerticalAlignment="Center" Margin="0,0,0,16"/>
 
-                        <!-- Stage 4: Deploy Manifest -->
+                        <!-- Stage 4: Upload or request notification -->
                         <StackPanel Grid.Column="6" HorizontalAlignment="Center">
                             <Border x:Name="Stage4Circle" Width="26" Height="26" CornerRadius="13"
                                     Background="{DynamicResource InputBackgroundBrush}"
@@ -359,7 +359,7 @@
                                            Foreground="{DynamicResource MutedForegroundBrush}"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
-                            <TextBlock x:Name="Stage4Label" Text="Manifest" FontSize="9.5" FontWeight="SemiBold"
+                            <TextBlock x:Name="Stage4Label" Text="Result" FontSize="9.5" FontWeight="SemiBold"
                                        Foreground="{DynamicResource MutedForegroundBrush}"
                                        HorizontalAlignment="Center" Margin="0,4,0,0"/>
                         </StackPanel>

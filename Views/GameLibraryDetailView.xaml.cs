@@ -141,6 +141,7 @@ namespace SteamPluginManager.Views
             CreateShortcutBtn.IsEnabled = true;
             CustomLaunchBtn.Visibility = Visibility.Visible;
             CustomLaunchBtn.IsEnabled = true;
+            CustomLaunchBtn.ToolTip = "Edit the launch entries Steam uses for this game";
             UninstallBtn.Visibility = Visibility.Visible;
 
             InstalledStatusBadge.Background = new SolidColorBrush(Color.FromArgb(45, 16, 185, 129));
@@ -165,7 +166,7 @@ namespace SteamPluginManager.Views
             {
                 Task.Run(() =>
                 {
-                    var names = CustomLaunchService.GetGameExecutableNames(foundPath);
+                    var names = GameProcessService.GetGameExecutableNames(foundPath);
                     Dispatcher.Invoke(() => _cachedGameExeNames = names);
                 });
             }
@@ -187,8 +188,9 @@ namespace SteamPluginManager.Views
             BrowseFilesBtn.Visibility = Visibility.Collapsed;
             VerifyFilesBtn.Visibility = Visibility.Collapsed;
             CreateShortcutBtn.Visibility = Visibility.Collapsed;
-            CustomLaunchBtn.Visibility = Visibility.Collapsed;
-            CustomLaunchIndicatorBadge.Visibility = Visibility.Collapsed;
+            CustomLaunchBtn.Visibility = Visibility.Visible;
+            CustomLaunchBtn.IsEnabled = true;
+            CustomLaunchBtn.ToolTip = "Edit the launch entries Steam uses for this game, even before installation";
             UninstallBtn.Visibility = Visibility.Collapsed;
 
             InstalledStatusBadge.Background = new SolidColorBrush(Color.FromArgb(45, 156, 163, 175));
@@ -200,6 +202,7 @@ namespace SteamPluginManager.Views
 
             InstallLocationPanel.Visibility = Visibility.Collapsed;
             SpecInstallPath.Text = "Not Installed";
+            UpdateCustomLaunchVisualState();
         }
 
         private void ApplyDownloadingState(SteamDownloadProgress progress)
@@ -211,19 +214,22 @@ namespace SteamPluginManager.Views
             InstallButton.Visibility = Visibility.Collapsed;
             DownloadProgressPanel.Visibility = Visibility.Visible;
 
-            // Completely hide unneeded buttons during active download
+            // Keep Steam launch and uninstall actions available while download progress is active.
             BrowseFilesBtn.Visibility = Visibility.Collapsed;
             VerifyFilesBtn.Visibility = Visibility.Collapsed;
             CreateShortcutBtn.Visibility = Visibility.Collapsed;
-            CustomLaunchBtn.Visibility = Visibility.Collapsed;
+            CustomLaunchBtn.Visibility = Visibility.Visible;
+            CustomLaunchBtn.IsEnabled = true;
+            CustomLaunchBtn.ToolTip = "Edit the launch entries Steam uses for this game";
             CustomLaunchIndicatorBadge.Visibility = Visibility.Collapsed;
-            UninstallBtn.Visibility = Visibility.Collapsed;
+            UninstallBtn.Visibility = Visibility.Visible;
 
             InstallLocationPanel.Visibility = Visibility.Collapsed;
             SpecInstallPath.Text = progress.State == SteamAppState.Paused ? "Download Paused" : "Downloading...";
 
             _totalBytes = progress.BytesTotal;
             _currentAppState = progress.State;
+            UpdateCustomLaunchVisualState();
 
             if (progress.BytesDownloaded > _liveBytesDownloaded || _liveBytesDownloaded == 0)
             {
@@ -837,7 +843,7 @@ namespace SteamPluginManager.Views
                 return;
             }
 
-            bool isRunning = CustomLaunchService.IsGameRunning(
+            bool isRunning = GameProcessService.IsGameRunning(
                 _game.AppId,
                 _game.ParentAppId,
                 _game.InstallationPath,
@@ -866,9 +872,12 @@ namespace SteamPluginManager.Views
                 PlayButton.ToolTip = "Stop running game";
                 PlayButton.IsEnabled = true;
 
-                // Hide actions that cannot/should not be performed while game is running
+                // Keep launch options visible, but do not modify Steam while the game is running.
                 VerifyFilesBtn.Visibility = Visibility.Collapsed;
-                CustomLaunchBtn.Visibility = Visibility.Collapsed;
+                CustomLaunchBtn.Visibility = Visibility.Visible;
+                CustomLaunchBtn.IsEnabled = false;
+                CustomLaunchBtn.ToolTip = "Close the game before editing launch options";
+                CustomLaunchIndicatorBadge.Visibility = Visibility.Collapsed;
                 UninstallBtn.Visibility = Visibility.Collapsed;
 
                 // Status badge
@@ -893,6 +902,8 @@ namespace SteamPluginManager.Views
                 // Restore actions when game stops
                 VerifyFilesBtn.Visibility = Visibility.Visible;
                 CustomLaunchBtn.Visibility = Visibility.Visible;
+                CustomLaunchBtn.IsEnabled = true;
+                CustomLaunchBtn.ToolTip = "Edit the launch entries Steam uses for this game";
                 UninstallBtn.Visibility = Visibility.Visible;
 
                 // Status badge
@@ -929,7 +940,7 @@ namespace SteamPluginManager.Views
 
                 await Task.Run(() =>
                 {
-                    CustomLaunchService.StopGame(
+                    GameProcessService.StopGame(
                         _game.AppId,
                         _game.ParentAppId,
                         _game.InstallationPath,
@@ -951,8 +962,8 @@ namespace SteamPluginManager.Views
                 PlayButton.IsEnabled = false;
                 PlayButtonText.Text = "Launching...";
 
-                var (success, msg, proc) = await Task.Run(() =>
-                    CustomLaunchService.LaunchGameWithProcess(_game.AppId, _game.InstallationPath));
+                var (success, msg) = await Task.Run(() =>
+                    GameProcessService.LaunchGame(_game.AppId));
 
                 if (!success)
                 {
@@ -961,19 +972,7 @@ namespace SteamPluginManager.Views
                     return;
                 }
 
-                _runningProcess = proc;
-                if (_runningProcess != null)
-                {
-                    try
-                    {
-                        _runningProcess.EnableRaisingEvents = true;
-                        _runningProcess.Exited += (s, args) =>
-                        {
-                            Dispatcher.Invoke(() => CheckAndUpdateRunningState());
-                        };
-                    }
-                    catch { }
-                }
+                _runningProcess = null;
 
                 await Task.Delay(600);
                 CheckAndUpdateRunningState();
@@ -1020,7 +1019,7 @@ namespace SteamPluginManager.Views
 
         private void CreateShortcut_Click(object sender, RoutedEventArgs e)
         {
-            var (success, msg) = CustomLaunchService.CreateDesktopShortcut(_game.AppId, _game.Name, _game.InstallationPath);
+            var (success, msg) = GameProcessService.CreateDesktopShortcut(_game.AppId, _game.Name);
             if (success)
             {
                 ModernMessageBox.Show(msg, "Shortcut Created", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -1045,16 +1044,6 @@ namespace SteamPluginManager.Views
         {
             try
             {
-                if (!_game.IsInstalled || string.IsNullOrWhiteSpace(_game.InstallationPath) || !Directory.Exists(_game.InstallationPath))
-                {
-                    ModernMessageBox.Show(
-                        $"Game '{_game.Name}' is not installed.\n\nPlease install the game first before configuring Custom Launch.",
-                        "Game Not Installed",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
-                    return;
-                }
-
                 var window = Window.GetWindow(this);
                 var dialog = new CustomLaunchDialog(_game)
                 {
@@ -1071,6 +1060,11 @@ namespace SteamPluginManager.Views
             catch (Exception ex)
             {
                 Logger.Log($"[GameLibraryDetailView] Error opening custom launch dialog: {ex.Message}");
+                ModernMessageBox.Show(
+                    $"Steam launch options could not be opened: {ex.Message}",
+                    "Launch Options Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
             }
         }
 
@@ -1078,31 +1072,31 @@ namespace SteamPluginManager.Views
         {
             try
             {
-                var config = CustomLaunchService.GetConfig(_game.AppId, _game.InstallationPath);
-                bool isCustomActive = config != null && config.IsEnabled && !string.IsNullOrWhiteSpace(config.ExecutablePath);
+                bool isCustomActive = SteamLaunchOptionsService.Shared.IsModified(_game.AppId);
 
-                if (isCustomActive && _game.IsInstalled)
+                if (isCustomActive)
                 {
-                    string fileName = Path.GetFileName(config!.ExecutablePath);
+                    CustomLaunchBtn.Visibility = Visibility.Visible;
                     CustomLaunchIndicatorBadge.Visibility = Visibility.Visible;
-                    CustomLaunchBadgeText.Text = $"Custom: {fileName}";
+                    CustomLaunchBadgeText.Text = "Steam launch edited";
                     CustomLaunchActiveDot.Visibility = Visibility.Visible;
-                    CustomLaunchBtnText.Text = "Custom Launch";
+                    CustomLaunchBtnText.Text = "Launch Options";
 
                     if (!_isGameRunning)
                     {
-                        PlayButton.ToolTip = $"Launch {_game.Name} via custom target ({fileName})";
+                        PlayButton.ToolTip = $"Launch {_game.Name} with its edited Steam launch options";
                     }
                 }
                 else
                 {
+                    CustomLaunchBtn.Visibility = Visibility.Visible;
                     CustomLaunchIndicatorBadge.Visibility = Visibility.Collapsed;
                     CustomLaunchActiveDot.Visibility = Visibility.Collapsed;
-                    CustomLaunchBtnText.Text = "Custom Launch";
+                    CustomLaunchBtnText.Text = "Launch Options";
 
                     if (!_isGameRunning)
                     {
-                        PlayButton.ToolTip = "Launch game immediately via Steam";
+                        PlayButton.ToolTip = "Launch game using Steam's current launch entries";
                     }
                 }
             }
@@ -1150,9 +1144,8 @@ namespace SteamPluginManager.Views
                             SteamHelper.DeleteGameFolderCleanly(gameFolder);
                         }
 
-                        // Clean tracking records and custom launch settings
+                        // Clean tracking records
                         OnlineFixTrackerService.DeleteInstallRecord(appId);
-                        CustomLaunchService.RemoveConfig(appId);
 
                         Logger.Log($"[GameLibraryDetailView] Game {appId} uninstalled and folder cleaned.");
                     }

@@ -378,7 +378,7 @@ namespace SteamPluginManager
             return req;
         }
 
-        private static void ProcessPayload(byte[] bytes, string mediaType, string defaultFileName, List<DownloadedGameFile> result)
+        internal static void ProcessPayload(byte[] bytes, string mediaType, string defaultFileName, List<DownloadedGameFile> result)
         {
             if (bytes == null || bytes.Length == 0)
                 return;

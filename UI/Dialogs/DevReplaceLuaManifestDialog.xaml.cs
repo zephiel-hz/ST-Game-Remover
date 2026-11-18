@@ -19,20 +19,26 @@ namespace SteamPluginManager.UI.Dialogs
         private readonly List<ReplacementFileInfo> _stagedFiles = new();
         private readonly List<ReplacementFileInfo> _allExtractedZipFiles = new();
         private readonly List<ReplacementFileInfo> _directFiles = new();
+        private bool _replaceExistingFiles;
         private string _activeTempDir = string.Empty;
         private bool _isExecuting = false;
         private bool _isInitialized = false;
 
-        public bool ReplaceSucceeded { get; private set; }
+        public bool OperationSucceeded { get; private set; }
+        public bool ReplaceExistingFiles => _replaceExistingFiles;
         public int TargetAppId { get; private set; }
-        public int ReplacedFilesCount { get; private set; }
-        public long ReplacedTotalBytes { get; private set; }
+        public int UploadedFilesCount { get; private set; }
+        public long UploadedTotalBytes { get; private set; }
 
-        public DevReplaceLuaManifestDialog(IEnumerable<DevManifestGame>? knownGames = null, int? initialAppId = null)
+        public DevReplaceLuaManifestDialog(
+            IEnumerable<DevManifestGame>? knownGames = null,
+            int? initialAppId = null)
         {
             InitializeComponent();
             _knownGames = knownGames?.ToList() ?? new List<DevManifestGame>();
             _isInitialized = true;
+            _replaceExistingFiles = OperationReplaceRadio.IsChecked == true;
+            ConfigureOperationMode();
 
             if (initialAppId.HasValue && initialAppId.Value > 0)
             {
@@ -41,6 +47,77 @@ namespace SteamPluginManager.UI.Dialogs
             else
             {
                 ValidateForm();
+            }
+        }
+
+        private void ConfigureOperationMode()
+        {
+            if (_replaceExistingFiles)
+            {
+                Title = "Replace Lua & Manifest Files";
+                HeaderTitleText.Text = "Replace Lua & Manifest Files";
+                HeaderSubtitleText.Text = "Delete all files in the AppID folder, then upload the selected files";
+                HeaderIcon.Text = "🔄";
+                SourceSectionTitleText.Text = "REPLACEMENT SOURCE:";
+                OperationNoticePanel.Background = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(38, 13, 18));
+                OperationNoticePanel.BorderBrush = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(220, 38, 38));
+                OperationNoticeIcon.Text = "⚠️";
+                OperationNoticeIcon.Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(248, 113, 113));
+                OperationNoticeTitleText.Text = "WARNING: PERMANENT CLOUD REPLACEMENT";
+                OperationNoticeTitleText.Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(248, 113, 113));
+                WarningDetailText.Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(252, 165, 165));
+                ExecuteReplaceButton.Content = "EXECUTE REPLACE (DELETE & UPLOAD)";
+                ExecuteReplaceButton.Style = (Style)FindResource("DialogDangerExecuteBtn");
+            }
+            else
+            {
+                Title = "Upload Lua & Manifest Files";
+                HeaderTitleText.Text = "Upload Lua & Manifest Files";
+                HeaderSubtitleText.Text = "Upload files to the AppID folder without deleting existing cloud files";
+                HeaderIcon.Text = "↑";
+                SourceSectionTitleText.Text = "UPLOAD SOURCE:";
+                OperationNoticePanel.Background = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(12, 26, 46));
+                OperationNoticePanel.BorderBrush = (System.Windows.Media.Brush)FindResource("AccentCyanBrush");
+                OperationNoticeIcon.Text = "i";
+                OperationNoticeIcon.Foreground = (System.Windows.Media.Brush)FindResource("AccentCyanBrush");
+                OperationNoticeTitleText.Text = "UPLOAD WITHOUT DELETING EXISTING FILES";
+                OperationNoticeTitleText.Foreground = (System.Windows.Media.Brush)FindResource("AccentCyanBrush");
+                WarningDetailText.Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(186, 230, 253));
+                ExecuteReplaceButton.Content = "UPLOAD FILES";
+                ExecuteReplaceButton.Style = (Style)FindResource("DialogPrimaryBtn");
+            }
+
+            UpdateOperationNotice();
+        }
+
+        private void OperationModeRadio_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!_isInitialized) return;
+
+            _replaceExistingFiles = OperationReplaceRadio.IsChecked == true;
+            ConfigureOperationMode();
+        }
+
+        private void UpdateOperationNotice()
+        {
+            if (_replaceExistingFiles)
+            {
+                WarningDetailText.Text = TargetAppId > 0
+                    ? $"Executing this will wipe all existing files in Supabase Storage folder '{TargetAppId}/' before uploading the staged replacement files."
+                    : "Executing this will wipe all existing files in the AppID folder before uploading the staged replacement files.";
+            }
+            else
+            {
+                WarningDetailText.Text = TargetAppId > 0
+                    ? $"Selected files will be uploaded to Supabase Storage folder '{TargetAppId}/' and the game catalog will be updated. Existing cloud files will not be deleted."
+                    : "Selected files will be uploaded to the AppID folder and the game catalog will be updated. Existing cloud files will not be deleted.";
             }
         }
 
@@ -56,7 +133,8 @@ namespace SteamPluginManager.UI.Dialogs
         {
             if (_isExecuting)
             {
-                if (!ModernMessageBox.ShowConfirm("Replace operation is currently in progress. Are you sure you want to cancel?", "Cancel Replace", isDestructive: true, owner: this))
+                string operation = _replaceExistingFiles ? "Replace" : "Upload";
+                if (!ModernMessageBox.ShowConfirm($"{operation} operation is currently in progress. Are you sure you want to cancel?", $"Cancel {operation}", isDestructive: _replaceExistingFiles, owner: this))
                 {
                     return;
                 }
@@ -89,7 +167,7 @@ namespace SteamPluginManager.UI.Dialogs
             if (int.TryParse(text, out int appId) && appId > 0)
             {
                 TargetAppId = appId;
-                WarningDetailText.Text = $"Executing this will wipe all existing files in Supabase Storage folder '{appId}/' before uploading the staged replacement files.";
+                UpdateOperationNotice();
 
                 var matched = _knownGames.FirstOrDefault(g => g.AppId == appId);
                 if (matched != null)
@@ -113,7 +191,7 @@ namespace SteamPluginManager.UI.Dialogs
             {
                 TargetAppId = 0;
                 if (GameMatchBanner != null) GameMatchBanner.Visibility = Visibility.Collapsed;
-                WarningDetailText.Text = "Executing this will wipe all existing files in Supabase Storage folder '{appId}/' before uploading the staged replacement files.";
+                UpdateOperationNotice();
             }
 
             ValidateForm();
@@ -419,7 +497,7 @@ namespace SteamPluginManager.UI.Dialogs
             long totalBytes = _stagedFiles.Sum(f => f.FileSizeBytes);
             if (TotalStagedSizeText != null)
             {
-                TotalStagedSizeText.Text = $"Total replacement payload: {SupabaseStorageService.FormatSize(totalBytes)}";
+                TotalStagedSizeText.Text = $"Total upload payload: {SupabaseStorageService.FormatSize(totalBytes)}";
             }
         }
 
@@ -466,15 +544,20 @@ namespace SteamPluginManager.UI.Dialogs
 
             long totalBytes = _stagedFiles.Sum(f => f.FileSizeBytes);
             string formattedTotal = SupabaseStorageService.FormatSize(totalBytes);
+            string confirmationMessage = _replaceExistingFiles
+                ? $"Are you sure you want to replace all files for AppID {TargetAppId}?\n\n" +
+                  $"1. All existing files in cloud folder '{TargetAppId}/' will be PERMANENTLY DELETED.\n" +
+                  $"2. {_stagedFiles.Count} new file(s) ({formattedTotal}) will be uploaded.\n" +
+                  $"3. The catalog record in 'hzmanifest_files' will be updated.\n\n" +
+                  "Do you want to proceed?"
+                : $"Upload {_stagedFiles.Count} file(s) ({formattedTotal}) for AppID {TargetAppId}?\n\n" +
+                  $"Files will be added to or overwrite matching files in cloud folder '{TargetAppId}/'.\n" +
+                  "Other files in the folder will not be deleted. The game catalog will be updated.";
 
             bool confirmed = ModernMessageBox.ShowConfirm(
-                $"Are you sure you want to replace all files for AppID {TargetAppId}?\n\n" +
-                $"1. All existing files in cloud folder '{TargetAppId}/' will be PERMANENTLY DELETED.\n" +
-                $"2. {_stagedFiles.Count} new file(s) ({formattedTotal}) will be uploaded.\n" +
-                $"3. The catalog record in 'hzmanifest_files' will be updated.\n\n" +
-                $"Do you want to proceed?",
-                "Confirm Cloud Replacement",
-                isDestructive: true,
+                confirmationMessage,
+                _replaceExistingFiles ? "Confirm Cloud Replacement" : "Confirm Lua/Manifest Upload",
+                isDestructive: _replaceExistingFiles,
                 owner: this);
 
             if (!confirmed) return;
@@ -486,6 +569,8 @@ namespace SteamPluginManager.UI.Dialogs
             CheckCloudBtn.IsEnabled = false;
             SourceZipRadio.IsEnabled = false;
             SourceFilesRadio.IsEnabled = false;
+            OperationUploadRadio.IsEnabled = false;
+            OperationReplaceRadio.IsEnabled = false;
             BrowseZipBtn.IsEnabled = false;
             BrowseFilesBtn.IsEnabled = false;
             BrowseFolderBtn.IsEnabled = false;
@@ -493,61 +578,115 @@ namespace SteamPluginManager.UI.Dialogs
             ProgressPanel.Visibility = Visibility.Visible;
             ExecutionProgressBar.Value = 0;
             ProgressPercentText.Text = "0%";
-            ProgressStatusLabel.Text = $"Purging old files from cloud folder '{TargetAppId}/'...";
+            ProgressStatusLabel.Text = _replaceExistingFiles
+                ? $"Purging old files from cloud folder '{TargetAppId}/'..."
+                : $"Preparing {_stagedFiles.Count} file(s) for upload...";
 
             try
             {
-                // Step 1: Clean wipe old files in {appId}/
-                var (delOk, delCount, delMsg) = await SupabaseStorageService.DeleteAppIdFolderFilesAsync(TargetAppId);
-                if (!delOk)
-                {
-                    throw new InvalidOperationException($"Cloud folder purge failed: {delMsg}");
-                }
+                int deletedCount = 0;
+                int uploadedCount;
+                long uploadedBytes;
 
-                ExecutionProgressBar.Value = 25;
-                ProgressPercentText.Text = "25%";
-                ProgressStatusLabel.Text = $"Purged {delCount} old file(s). Uploading {_stagedFiles.Count} replacement file(s)...";
-
-                // Step 2: Upload new replacement files
-                var progress = new Progress<(int current, int total, string fileName)>(info =>
+                if (_replaceExistingFiles)
                 {
-                    Dispatcher.Invoke(() =>
+                    var (delOk, delCount, delMsg) = await SupabaseStorageService.DeleteAppIdFolderFilesAsync(TargetAppId);
+                    if (!delOk)
+                    {
+                        throw new InvalidOperationException($"Cloud folder purge failed: {delMsg}");
+                    }
+
+                    deletedCount = delCount;
+                    ExecutionProgressBar.Value = 25;
+                    ProgressPercentText.Text = "25%";
+                    ProgressStatusLabel.Text = $"Purged {delCount} old file(s). Uploading {_stagedFiles.Count} replacement file(s)...";
+
+                    var replacementProgress = new Progress<(int current, int total, string fileName)>(info =>
                     {
                         double uploadPct = 25.0 + ((info.current / (double)info.total) * 65.0);
                         ExecutionProgressBar.Value = uploadPct;
                         ProgressPercentText.Text = $"{(int)uploadPct}%";
                         ProgressStatusLabel.Text = $"Uploading ({info.current}/{info.total}): {info.fileName}...";
                     });
-                });
 
-                var (upOk, upCount, uploadedBytes, upMsg) = await SupabaseStorageService.UploadReplacementFilesAsync(TargetAppId, _stagedFiles, progress);
-                if (!upOk)
+                    var (upOk, upCount, bytes, upMsg) = await SupabaseStorageService.UploadReplacementFilesAsync(TargetAppId, _stagedFiles, replacementProgress);
+                    if (!upOk)
+                    {
+                        throw new InvalidOperationException($"Upload failed: {upMsg}");
+                    }
+
+                    ExecutionProgressBar.Value = 92;
+                    ProgressPercentText.Text = "92%";
+                    ProgressStatusLabel.Text = "Updating catalog metadata...";
+
+                    if (!await SupabaseStorageService.UpdateCatalogMetadataAsync(TargetAppId, bytes))
+                    {
+                        throw new InvalidOperationException("Files were uploaded, but catalog metadata could not be updated.");
+                    }
+
+                    uploadedCount = upCount;
+                    uploadedBytes = bytes;
+                }
+                else
                 {
-                    throw new InvalidOperationException($"Upload failed: {upMsg}");
+                    var uploadProgress = new Progress<(int current, int total, string fileName)>(info =>
+                    {
+                        double uploadPct = info.current / (double)info.total * 80.0;
+                        ExecutionProgressBar.Value = uploadPct;
+                        ProgressPercentText.Text = $"{(int)uploadPct}%";
+                        ProgressStatusLabel.Text = $"Uploading ({info.current}/{info.total}): {info.fileName}...";
+                    });
+
+                    var (uploadOk, uploadCount, bytes, uploadMessage) =
+                        await SupabaseStorageService.UploadReplacementFilesAsync(TargetAppId, _stagedFiles, uploadProgress);
+                    if (!uploadOk)
+                    {
+                        throw new InvalidOperationException(uploadMessage);
+                    }
+
+                    string? fallbackGameName = _knownGames.FirstOrDefault(game => game.AppId == TargetAppId)?.Name;
+                    var (catalogUpdated, catalogMessage, gameName) = await ManifestHubService.RegisterUploadedFolderAsync(
+                        TargetAppId,
+                        bytes,
+                        status => Dispatcher.Invoke(() =>
+                        {
+                            ExecutionProgressBar.Value = status.StartsWith("Fetching", StringComparison.Ordinal) ? 88 : 95;
+                            ProgressPercentText.Text = $"{(int)ExecutionProgressBar.Value}%";
+                            ProgressStatusLabel.Text = status;
+                        }),
+                        fallbackGameName);
+                    if (!catalogUpdated)
+                    {
+                        throw new InvalidOperationException($"Files were uploaded, but catalog registration failed: {catalogMessage}");
+                    }
+
+                    ProgressStatusLabel.Text = $"Catalog updated for {gameName}.";
+                    uploadedCount = uploadCount;
+                    uploadedBytes = bytes;
                 }
 
-                // Step 3: Update catalog record in hzmanifest_files
-                ExecutionProgressBar.Value = 92;
-                ProgressPercentText.Text = "92%";
-                ProgressStatusLabel.Text = "Updating catalog database...";
-
-                await SupabaseStorageService.UpdateCatalogMetadataAsync(TargetAppId, uploadedBytes);
-
-                // Step 4: Complete
                 ExecutionProgressBar.Value = 100;
                 ProgressPercentText.Text = "100%";
-                ProgressStatusLabel.Text = "Replacement completed successfully!";
+                ProgressStatusLabel.Text = _replaceExistingFiles
+                    ? "Replacement completed successfully!"
+                    : "Upload completed successfully!";
 
-                ReplaceSucceeded = true;
-                ReplacedFilesCount = upCount;
-                ReplacedTotalBytes = uploadedBytes;
+                OperationSucceeded = true;
+                UploadedFilesCount = uploadedCount;
+                UploadedTotalBytes = uploadedBytes;
+
+                string completionMessage = _replaceExistingFiles
+                    ? $"Successfully replaced Lua & Manifest files for AppID {TargetAppId}!\n\n" +
+                      $"• Purged old files: {deletedCount}\n" +
+                      $"• Uploaded new files: {uploadedCount} ({SupabaseStorageService.FormatSize(uploadedBytes)})\n" +
+                      "• Catalog metadata: Updated"
+                    : $"Successfully uploaded {uploadedCount} Lua/manifest file(s) for AppID {TargetAppId}.\n\n" +
+                      $"Total size: {SupabaseStorageService.FormatSize(uploadedBytes)}\n" +
+                      "Other files in the cloud folder were not deleted. The game catalog was updated.";
 
                 ModernMessageBox.ShowInformation(
-                    $"Successfully replaced Lua & Manifest files for AppID {TargetAppId}!\n\n" +
-                    $"• Purged old files: {delCount}\n" +
-                    $"• Uploaded new files: {upCount} ({SupabaseStorageService.FormatSize(uploadedBytes)})\n" +
-                    $"• Catalog metadata: Updated",
-                    "Replacement Complete",
+                    completionMessage,
+                    _replaceExistingFiles ? "Replacement Complete" : "Upload Complete",
                     owner: this);
 
                 Cleanup();
@@ -558,7 +697,8 @@ namespace SteamPluginManager.UI.Dialogs
             {
                 _isExecuting = false;
                 NoticeText.Text = $"Error: {ex.Message}";
-                ModernMessageBox.ShowError($"Replacement failed: {ex.Message}", "Replacement Failed", owner: this);
+                string operation = _replaceExistingFiles ? "Replacement" : "Upload";
+                ModernMessageBox.ShowError($"{operation} failed: {ex.Message}", $"{operation} Failed", owner: this);
 
                 ProgressPanel.Visibility = Visibility.Collapsed;
                 ExecuteReplaceButton.IsEnabled = true;
@@ -567,6 +707,8 @@ namespace SteamPluginManager.UI.Dialogs
                 CheckCloudBtn.IsEnabled = true;
                 SourceZipRadio.IsEnabled = true;
                 SourceFilesRadio.IsEnabled = true;
+                OperationUploadRadio.IsEnabled = true;
+                OperationReplaceRadio.IsEnabled = true;
                 BrowseZipBtn.IsEnabled = true;
                 BrowseFilesBtn.IsEnabled = true;
                 BrowseFolderBtn.IsEnabled = true;

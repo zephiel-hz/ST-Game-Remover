@@ -215,21 +215,6 @@ namespace SteamPluginManager.Views
                         installPath = parentPath;
                     }
 
-                    // Fallback check specifically for Custom Launch if config was enabled recently:
-                    // Only consider installed if the physical executable file exists. Never rely on bare residual directory presence!
-                    if (!isInstalled)
-                    {
-                        var customCfg = CustomLaunchService.GetConfig(game.AppId);
-                        if (customCfg != null && customCfg.IsEnabled && !string.IsNullOrWhiteSpace(customCfg.ExecutablePath) && File.Exists(customCfg.ExecutablePath))
-                        {
-                            isInstalled = true;
-                            installPath = !string.IsNullOrWhiteSpace(customCfg.WorkingDirectory) && Directory.Exists(customCfg.WorkingDirectory)
-                                ? customCfg.WorkingDirectory
-                                : Path.GetDirectoryName(customCfg.ExecutablePath);
-                            installedMap[game.AppId] = installPath ?? "";
-                        }
-                    }
-
                     if (game.IsInstalled != isInstalled || game.InstallationPath != installPath)
                     {
                         game.IsInstalled = isInstalled;
