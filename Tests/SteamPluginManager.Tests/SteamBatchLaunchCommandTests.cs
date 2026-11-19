@@ -29,7 +29,7 @@ public sealed class SteamBatchLaunchCommandTests
     }
 
     [Fact]
-    public void UsesRelativeWorkingDirectoryForBatchInSubfolder()
+    public void LeavesWorkingDirectoryEmptyForBatchInSubfolder()
     {
         string gameDirectory = Path.Combine(Path.GetTempPath(), "HZ Game");
         string batchPath = Path.Combine(gameDirectory, "scripts", "Launcher.bat");
@@ -40,7 +40,7 @@ public sealed class SteamBatchLaunchCommandTests
             string.Empty,
             gameDirectory);
 
-        Assert.Equal("scripts", option.WorkingDirectory);
+        Assert.Empty(option.WorkingDirectory);
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public sealed class SteamBatchLaunchCommandTests
     }
 
     [Fact]
-    public void LeavesExecutableLaunchOptionsUnchanged()
+    public void LeavesExecutableLaunchWorkingDirectoryEmpty()
     {
         string gameDirectory = Path.Combine(Path.GetTempPath(), "HZ Game");
 
@@ -77,6 +77,6 @@ public sealed class SteamBatchLaunchCommandTests
 
         Assert.Equal("bin\\game.exe", option.Executable);
         Assert.Equal("-safe", option.Arguments);
-        Assert.Equal(gameDirectory, option.WorkingDirectory);
+        Assert.Empty(option.WorkingDirectory);
     }
 }

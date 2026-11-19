@@ -20,7 +20,7 @@ internal static class SteamBatchLaunchCommand
             {
                 Executable = relativeExecutable,
                 Arguments = arguments,
-                WorkingDirectory = workingDirectory
+                WorkingDirectory = string.Empty
             };
         }
 
@@ -34,13 +34,11 @@ internal static class SteamBatchLaunchCommand
         }
 
         string batchArguments = string.IsNullOrWhiteSpace(arguments) ? string.Empty : $" {arguments}";
-        string batchDirectory = Path.GetDirectoryName(batchPath) ?? workingDirectory;
-        string relativeWorkingDirectory = Path.GetRelativePath(workingDirectory, batchDirectory);
         return new SteamLaunchOption
         {
             Executable = relativeInterpreter,
             Arguments = $"/D /S /C \"\"{batchPath}\"{batchArguments}\"",
-            WorkingDirectory = relativeWorkingDirectory == "." ? string.Empty : relativeWorkingDirectory
+            WorkingDirectory = string.Empty
         };
     }
 

@@ -114,7 +114,6 @@ namespace SteamPluginManager.Services.Steam
                     var original = ReadOptions(body);
                     string executable = config.ExecutablePath;
                     string arguments = config.Arguments ?? string.Empty;
-                    string workingDirectory = config.WorkingDirectory ?? string.Empty;
                     string? installPath = SteamHelper.GetGameInstallationPath(appId, null);
                     if (!string.IsNullOrWhiteSpace(installPath) && Directory.Exists(installPath))
                     {
@@ -125,8 +124,6 @@ namespace SteamPluginManager.Services.Steam
                         if (File.Exists(resolved))
                         {
                             executable = relative;
-                            if (string.IsNullOrWhiteSpace(workingDirectory))
-                                workingDirectory = installPath;
                         }
                     }
 
@@ -138,8 +135,6 @@ namespace SteamPluginManager.Services.Steam
                         executable = Path.Combine(Environment.SystemDirectory, "cmd.exe");
                         string batchArguments = string.IsNullOrWhiteSpace(arguments) ? string.Empty : $" {arguments}";
                         arguments = $"/D /S /C \"\"{batchPath}\"{batchArguments}\"";
-                        if (string.IsNullOrWhiteSpace(workingDirectory))
-                            workingDirectory = Path.GetDirectoryName(batchPath) ?? string.Empty;
                     }
 
                     var desired = new List<SteamLaunchOption>
@@ -149,7 +144,7 @@ namespace SteamPluginManager.Services.Steam
                             Index = "0",
                             Executable = executable,
                             Arguments = arguments,
-                            WorkingDirectory = workingDirectory,
+                            WorkingDirectory = string.Empty,
                             Type = "default"
                         }
                     };
@@ -370,11 +365,10 @@ namespace SteamPluginManager.Services.Steam
                 if (steamWasRunning && restartSteam)
                 {
                     onProgress?.Invoke(new SteamLaunchProgress(3, false, "Starting Steam", "Reopening Steam after saving the custom launch."));
+                    onProgress?.Invoke(new SteamLaunchProgress(3, false, "Waiting for Steam to start", "Waiting for Steam to remain active before finishing the launch option update."));
                     try
                     {
-                        StartSteam();
-                        onProgress?.Invoke(new SteamLaunchProgress(3, false, "Waiting for Steam to start", "Steam was launched. Waiting for its process to become available."));
-                        WaitForSteamToStart();
+                        StartSteamAndWait();
                         onProgress?.Invoke(new SteamLaunchProgress(3, true, "Steam restarted", "Steam has been started with the updated launch options."));
                     }
                     catch (Exception ex)
@@ -523,26 +517,62 @@ namespace SteamPluginManager.Services.Steam
         private static void StartSteam()
         {
             string? steamPath = SteamHelper.GetSteamPath();
-            string executable = string.IsNullOrWhiteSpace(steamPath)
-                ? string.Empty
-                : Path.Combine(steamPath, "steam.exe");
+            if (string.IsNullOrWhiteSpace(steamPath))
+                throw new DirectoryNotFoundException("Steam could not be restarted because its installation folder could not be found.");
+
+            string executable = Path.Combine(steamPath, "steam.exe");
             if (!File.Exists(executable))
                 throw new FileNotFoundException("Steam could not be restarted because steam.exe was not found.", executable);
-            Process.Start(new ProcessStartInfo(executable) { UseShellExecute = true });
+
+            using Process? process = Process.Start(new ProcessStartInfo(executable)
+            {
+                WorkingDirectory = steamPath,
+                UseShellExecute = true
+            });
+            if (process is null)
+                throw new InvalidOperationException("Windows did not start the Steam process.");
+        }
+
+        private static void StartSteamAndWait()
+        {
+            for (int attempt = 1; attempt <= 2; attempt++)
+            {
+                StartSteam();
+                try
+                {
+                    WaitForSteamToStart();
+                    return;
+                }
+                catch (TimeoutException) when (attempt == 1 && !SteamHelper.IsSteamRunning())
+                {
+                    Logger.Log("[SteamLaunchOptionsService] Steam exited during startup. Retrying once.");
+                    Thread.Sleep(1000);
+                }
+            }
         }
 
         private static void WaitForSteamToStart()
         {
             DateTime deadline = DateTime.UtcNow.AddSeconds(30);
+            DateTime? runningSince = null;
+            TimeSpan stableDuration = TimeSpan.FromSeconds(3);
             while (DateTime.UtcNow < deadline)
             {
                 if (SteamHelper.IsSteamRunning())
-                    return;
+                {
+                    runningSince ??= DateTime.UtcNow;
+                    if (DateTime.UtcNow - runningSince.Value >= stableDuration)
+                        return;
+                }
+                else
+                {
+                    runningSince = null;
+                }
 
                 Thread.Sleep(500);
             }
 
-            throw new TimeoutException("Steam was launched but did not return to a running state within 30 seconds.");
+            throw new TimeoutException("Steam was launched but did not remain running for 3 seconds within the 30-second startup window.");
         }
 
         private static void SaveBackup(string path)

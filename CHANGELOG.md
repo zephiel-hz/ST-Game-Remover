@@ -2,6 +2,13 @@
 
 ---
 
+## [3.1.10] - 2026-11-19
+
+### Fixed
+* **Steam Launch Options:** Browsed executable paths are stored relative to the game installation, and custom EXE/BAT/CMD entries leave the working directory empty. Steam restarts from its installation directory, startup is checked for a stable process, and one retry is made if Steam exits during startup. Restart failures remain visible in the launch options editor, and async completion safely ignores a dialog closed before Restore finishes.
+
+---
+
 ## [3.1.9] - 2026-11-18
 
 ### Added

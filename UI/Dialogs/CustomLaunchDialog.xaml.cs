@@ -160,8 +160,8 @@ namespace SteamPluginManager.UI.Dialogs
             bool isBatchFile = Path.GetExtension(dialog.FileName).Equals(".bat", StringComparison.OrdinalIgnoreCase)
                 || Path.GetExtension(dialog.FileName).Equals(".cmd", StringComparison.OrdinalIgnoreCase);
             string arguments = Selected.Arguments;
-            bool wasBatchLaunch = !string.IsNullOrWhiteSpace(gameInstallPath)
-                && SteamBatchLaunchCommand.TryExtractArguments(
+            if (!string.IsNullOrWhiteSpace(gameInstallPath))
+                SteamBatchLaunchCommand.TryExtractArguments(
                     Selected.Executable,
                     Selected.Arguments,
                     gameInstallPath,
@@ -169,10 +169,25 @@ namespace SteamPluginManager.UI.Dialogs
 
             if (!isBatchFile)
             {
-                Selected.Executable = dialog.FileName;
+                string executable;
+                try
+                {
+                    executable = !string.IsNullOrWhiteSpace(gameInstallPath) && Directory.Exists(gameInstallPath)
+                        ? Path.GetRelativePath(gameInstallPath, dialog.FileName)
+                        : Path.GetFileName(dialog.FileName);
+                    if (Path.IsPathRooted(executable))
+                        throw new InvalidOperationException("The selected file must be on the same drive as the game folder.");
+                }
+                catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException or InvalidOperationException)
+                {
+                    Logger.Log($"[CustomLaunchDialog] Could not configure executable for {_game.AppId}: {ex}");
+                    ShowError(ex.Message);
+                    return;
+                }
+
+                Selected.Executable = executable;
                 Selected.Arguments = arguments;
-                if (wasBatchLaunch)
-                    Selected.WorkingDirectory = string.Empty;
+                Selected.WorkingDirectory = string.Empty;
                 return;
             }
 
@@ -249,6 +264,9 @@ namespace SteamPluginManager.UI.Dialogs
 
         private void CompleteApply(Task<SteamLaunchApplyResult> task)
         {
+            if (!IsVisible)
+                return;
+
             if (task.IsFaulted)
             {
                 ShowError(task.Exception?.GetBaseException().Message ?? "Steam launch options could not be applied.");
@@ -265,11 +283,15 @@ namespace SteamPluginManager.UI.Dialogs
             }
 
             if (!string.IsNullOrWhiteSpace(result.RestartWarning))
+            {
                 SetStatus($"Options were applied, but Steam could not be restarted: {result.RestartWarning}");
-            else
-                SetStatus(result.SteamWasRunning
-                    ? "Options applied. Steam has been restarted."
-                    : "Options applied. Start Steam to use them.");
+                SaveBtn.IsEnabled = CanSave;
+                return;
+            }
+
+            SetStatus(result.SteamWasRunning
+                ? "Options applied. Steam has been restarted."
+                : "Options applied. Start Steam to use them.");
             DialogResult = true;
         }
 
@@ -292,6 +314,9 @@ namespace SteamPluginManager.UI.Dialogs
             {
                 Dispatcher.Invoke(() =>
                 {
+                    if (!IsVisible)
+                        return;
+
                     if (task.IsFaulted)
                     {
                         ShowError(task.Exception?.GetBaseException().Message ?? "Restore failed.");
@@ -305,6 +330,13 @@ namespace SteamPluginManager.UI.Dialogs
                     else
                     {
                         ConfigChanged = true;
+                        if (!string.IsNullOrWhiteSpace(task.Result.RestartWarning))
+                        {
+                            SetStatus($"Original options were restored, but Steam could not be restarted: {task.Result.RestartWarning}");
+                            RestoreButton.IsEnabled = false;
+                            return;
+                        }
+
                         SetStatus(task.Result.SteamWasRunning
                             ? "Original launch options restored. Steam has been restarted."
                             : "Original launch options restored.");
