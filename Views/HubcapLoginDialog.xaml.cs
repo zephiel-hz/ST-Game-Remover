@@ -14,6 +14,8 @@ namespace SteamPluginManager.Views
         private bool _isKeyFound = false;
         private bool _isSilent = true;
         private bool _forceRegenerate = false;
+        private readonly bool _saveToRemoteConfig;
+        private readonly int? _browserProfileAccount;
         private string? _expiredKeyToAvoid = null;
         private bool _isJoiningDiscordServer = false;
         private bool _hasAttemptedAutoJoin = false;
@@ -39,11 +41,21 @@ namespace SteamPluginManager.Views
         public bool UserCanceled { get; private set; } = true;
         public bool InteractiveLoginShown { get; private set; } = false;
 
-        public HubcapLoginDialog(bool silentMode = true, bool forceRegenerate = false, string? expiredKeyToAvoid = null)
+        public HubcapLoginDialog(
+            bool silentMode = true,
+            bool forceRegenerate = false,
+            string? expiredKeyToAvoid = null,
+            int? browserProfileAccount = null,
+            bool saveToRemoteConfig = true)
         {
+            if (browserProfileAccount.HasValue && browserProfileAccount.Value is not (1 or 2))
+                throw new ArgumentOutOfRangeException(nameof(browserProfileAccount));
+
             InitializeComponent();
             _isSilent = silentMode;
             _forceRegenerate = forceRegenerate;
+            _browserProfileAccount = browserProfileAccount;
+            _saveToRemoteConfig = saveToRemoteConfig;
             _expiredKeyToAvoid = expiredKeyToAvoid;
 
             if (_isSilent)
@@ -77,11 +89,12 @@ namespace SteamPluginManager.Views
                 LoadingStatusText.Text = "Initializing browser environment...";
 
                 // Persist session cookies in AppData so Discord session is remembered across app launches
-                string userDataFolder = Path.Combine(
+                string appDataPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "HZLuaManager",
-                    "HubcapBrowserProfile"
-                );
+                    "HZLuaManager");
+                string userDataFolder = _browserProfileAccount == 2
+                    ? Path.Combine(appDataPath, "HubcapBrowserProfiles", "Account2")
+                    : Path.Combine(appDataPath, "HubcapBrowserProfile");
                 Directory.CreateDirectory(userDataFolder);
 
                 var environment = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
@@ -695,10 +708,12 @@ namespace SteamPluginManager.Views
             _safetyTimeoutTimer?.Stop();
 
             ExtractedApiKey = key;
-            StatusText.Text = "API Key retrieved successfully! Saving credentials...";
+            StatusText.Text = _saveToRemoteConfig
+                ? "API Key retrieved successfully! Saving credentials..."
+                : "API Key retrieved successfully.";
 
-            // Persist to local config and sync to Supabase
-            await RemoteConfigService.SaveHubcapApiKeyAsync(key);
+            if (_saveToRemoteConfig)
+                await RemoteConfigService.SaveHubcapApiKeyAsync(key);
 
             await Task.Delay(400);
             DialogResult = true;

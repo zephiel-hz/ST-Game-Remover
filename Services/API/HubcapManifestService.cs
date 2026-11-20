@@ -24,7 +24,7 @@ namespace SteamPluginManager
 
         /// <summary>
         /// Validates whether a given Hubcap API key is active and authorized.
-        /// Returns true if the key is valid, false if 401 Unauthorized or 403 Forbidden.
+        /// Only 401 Unauthorized and 403 Forbidden explicitly reject the key; other responses are inconclusive.
         /// </summary>
         public static async Task<bool> IsApiKeyValidAsync(string? apiKey)
         {
@@ -46,7 +46,12 @@ namespace SteamPluginManager
                     return false;
                 }
 
-                return res.IsSuccessStatusCode;
+                if (!res.IsSuccessStatusCode)
+                {
+                    Logger.Log($"[HubcapManifestService] API key validation returned HTTP {res.StatusCode}; the key was not explicitly rejected.");
+                }
+
+                return true;
             }
             catch (Exception ex)
             {
@@ -181,7 +186,13 @@ namespace SteamPluginManager
             {
                 if (string.IsNullOrWhiteSpace(apiKey))
                 {
-                    apiKey = await EnsureValidApiKeyAsync();
+                    apiKey = await RemoteConfigService.GetHubcapApiKeyAsync();
+                }
+
+                if (string.IsNullOrWhiteSpace(apiKey))
+                {
+                    Logger.Log("[HubcapManifestService] No stored Hubcap API key is available for the Denuvo check.");
+                    return null;
                 }
 
                 string url = $"https://hubcapmanifest.com/manifest-history/api/apps/{appId}/drm";

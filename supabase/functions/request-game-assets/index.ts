@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 type UpstreamFile = {
   fileName: string;
@@ -110,7 +110,7 @@ const multipartResponse = (files: UpstreamFile[], isDenuvo: boolean, source: str
         `Content-Type: ${contentType}\r\n` +
         `Content-Disposition: attachment; filename="${safeFileName(file.fileName, "download")}"\r\n\r\n`,
     ));
-    parts.push(file.content);
+    parts.push(new Uint8Array(file.content).buffer);
     parts.push(encoder.encode("\r\n"));
   }
   parts.push(encoder.encode(`--${boundary}--\r\n`));
@@ -128,7 +128,7 @@ const multipartResponse = (files: UpstreamFile[], isDenuvo: boolean, source: str
 };
 
 const getCredential = async (
-  admin: ReturnType<typeof createClient>,
+  admin: SupabaseClient<any, "public", "public", any, any>,
   key: string,
 ): Promise<string> => {
   const { data, error } = await admin
@@ -138,6 +138,26 @@ const getCredential = async (
     .maybeSingle();
   if (error) throw new Error(`Could not load ${key} from private configuration.`);
   return typeof data?.value === "string" ? data.value.trim() : "";
+};
+
+const getHubcapApiKeys = async (
+  admin: SupabaseClient<any, "public", "public", any, any>,
+): Promise<Array<{ accountNumber: 1 | 2; apiKey: string }>> => {
+  const { data, error } = await admin
+    .from("request_source_credentials")
+    .select("key,value")
+    .in("key", ["hubcap_api_key_1", "hubcap_api_key_2", "hubcap_api_key"]);
+  if (error) throw new Error("Could not load Hubcap API keys from private configuration.");
+
+  const values = new Map((data ?? []).map((row) => [row.key, row.value]));
+  const primaryKey = values.get("hubcap_api_key_1") || values.get("hubcap_api_key") || "";
+  const secondaryKey = values.get("hubcap_api_key_2") || "";
+  const credentials: Array<{ accountNumber: 1 | 2; apiKey: string }> = [];
+  if (primaryKey.trim())
+    credentials.push({ accountNumber: 1, apiKey: primaryKey.trim() });
+  if (secondaryKey.trim() && secondaryKey.trim() !== primaryKey.trim())
+    credentials.push({ accountNumber: 2, apiKey: secondaryKey.trim() });
+  return credentials;
 };
 
 const hubcapHeaders = (apiKey: string) => ({
@@ -222,7 +242,10 @@ const downloadHubcapFiles = async (
       { headers: hubcapHeaders(apiKey), signal: AbortSignal.timeout(20000) },
     );
     if (response.status === 401 || response.status === 403) {
-      return { credentialInvalid: true, files: [] as UpstreamFile[] };
+      return { accessDenied: true, rateLimited: false, files: [] as UpstreamFile[] };
+    }
+    if (response.status === 429) {
+      return { accessDenied: false, rateLimited: true, files: [] as UpstreamFile[] };
     }
     if (response.status === 404) continue;
     if (!response.ok) {
@@ -236,7 +259,7 @@ const downloadHubcapFiles = async (
     });
   }
 
-  return { credentialInvalid: false, files };
+  return { accessDenied: false, rateLimited: false, files };
 };
 
 Deno.serve(async (request: Request) => {
@@ -302,50 +325,129 @@ Deno.serve(async (request: Request) => {
       return jsonResponse(403, { error: "This device is not allowed to request game files." });
     }
 
-    const hubcapApiKey = await getCredential(admin, "hubcap_api_key");
-    if (!hubcapApiKey) {
-      return errorResponse(401, "hubcap_api_key_invalid", "Hubcap Manifest", "Hubcap API key is empty.");
-    }
-
-    const hubcapBaseUrl = (Deno.env.get("HUBCAP_BASE_URL") ??
-      "https://hubcapmanifest.com/api/v1").replace(/\/+$/, "");
-    const validationResponse = await fetch(`${hubcapBaseUrl}/lua/730`, {
-      headers: hubcapHeaders(hubcapApiKey),
-      signal: AbortSignal.timeout(15000),
-    });
-    if (validationResponse.status === 401 || validationResponse.status === 403) {
+    const hubcapApiKeys = await getHubcapApiKeys(admin);
+    if (hubcapApiKeys.length === 0) {
       return errorResponse(
         401,
         "hubcap_api_key_invalid",
         "Hubcap Manifest",
-        "Hubcap API key is invalid or expired.",
+        "No Hubcap API key is configured.",
       );
     }
-    if (!validationResponse.ok) {
-      console.error("Hubcap API key validation returned HTTP", validationResponse.status);
-      return jsonResponse(502, { error: "Could not validate the Hubcap API key." });
-    }
-    await validationResponse.body?.cancel();
 
-    const isDenuvo = await detectDenuvo(appId, hubcapApiKey);
-    if (isDenuvo === null) {
-      return jsonResponse(502, { error: "Could not determine whether the game uses Denuvo." });
-    }
-
-    const source = isDenuvo ? "Hubcap Manifest" : "lua.tools";
+    const hubcapBaseUrl = (Deno.env.get("HUBCAP_BASE_URL") ??
+      "https://hubcapmanifest.com/api/v1").replace(/\/+$/, "");
+    let hubcapApiKey: string | null = null;
+    let isDenuvo: boolean | null = null;
     let files: UpstreamFile[] = [];
+    let invalidKeyCount = 0;
+    let rateLimited = false;
+    let gameAccessDenied = false;
+    let denuvoDetectionFailed = false;
+    let selectedHubcapAccount: 1 | 2 | null = null;
 
-    if (isDenuvo) {
-      const result = await downloadHubcapFiles(appId, isDenuvo, hubcapApiKey, hubcapBaseUrl);
-      if (result.credentialInvalid) {
+    for (const { accountNumber, apiKey: candidateKey } of hubcapApiKeys) {
+      let validationResponse: Response;
+      try {
+        validationResponse = await fetch(`${hubcapBaseUrl}/lua/730`, {
+          headers: hubcapHeaders(candidateKey),
+          signal: AbortSignal.timeout(15000),
+        });
+      } catch (error) {
+        console.error("Could not validate a Hubcap API key:", error);
+        return jsonResponse(502, { error: "Could not validate the Hubcap API keys." });
+      }
+
+      if (validationResponse.status === 401 || validationResponse.status === 403) {
+        invalidKeyCount++;
+        await validationResponse.body?.cancel();
+        continue;
+      }
+      if (validationResponse.status === 429) {
+        rateLimited = true;
+        await validationResponse.body?.cancel();
+        continue;
+      }
+      if (!validationResponse.ok) {
+        console.error("Hubcap API key validation returned HTTP", validationResponse.status);
+        await validationResponse.body?.cancel();
+        return jsonResponse(502, { error: "Could not validate the Hubcap API keys." });
+      }
+      await validationResponse.body?.cancel();
+
+      const candidateIsDenuvo = await detectDenuvo(appId, candidateKey);
+      if (candidateIsDenuvo === null) {
+        denuvoDetectionFailed = true;
+        continue;
+      }
+
+      if (candidateIsDenuvo) {
+        let result: Awaited<ReturnType<typeof downloadHubcapFiles>>;
+        try {
+          result = await downloadHubcapFiles(appId, candidateIsDenuvo, candidateKey, hubcapBaseUrl);
+        } catch (error) {
+          console.error("Could not download game files from Hubcap:", error);
+          return jsonResponse(502, { error: "Could not download this game's files from Hubcap." });
+        }
+
+        if (result.accessDenied) {
+          gameAccessDenied = true;
+          continue;
+        }
+        if (result.rateLimited) {
+          rateLimited = true;
+          continue;
+        }
+
+        hubcapApiKey = candidateKey;
+        isDenuvo = true;
+        selectedHubcapAccount = accountNumber;
+        files = result.files;
+        break;
+      }
+
+      hubcapApiKey = candidateKey;
+      isDenuvo = false;
+      selectedHubcapAccount = accountNumber;
+      break;
+    }
+
+    if (hubcapApiKey === null || isDenuvo === null) {
+      if (invalidKeyCount === hubcapApiKeys.length) {
         return errorResponse(
           401,
           "hubcap_api_key_invalid",
-          source,
-          "Hubcap API key is invalid or expired.",
+          "Hubcap Manifest",
+          "All configured Hubcap API keys are invalid or expired.",
         );
       }
-      files = result.files;
+      if (gameAccessDenied) {
+        console.warn("Hubcap denied game-file access for all usable API keys.");
+        return errorResponse(
+          502,
+          "hubcap_game_access_denied",
+          "Hubcap Manifest",
+          "Hubcap denied access to this game's files for all usable accounts.",
+        );
+      }
+      if (rateLimited) {
+        return jsonResponse(502, { error: "All configured Hubcap accounts are rate limited." });
+      }
+      if (denuvoDetectionFailed) {
+        return jsonResponse(502, { error: "Could not determine whether the game uses Denuvo." });
+      }
+      return errorResponse(
+        502,
+        "hubcap_keys_unavailable",
+        "Hubcap Manifest",
+        "No configured Hubcap account could process this request.",
+      );
+    }
+
+    let source = isDenuvo ? "Hubcap Manifest" : "lua.tools";
+
+    if (isDenuvo) {
+      console.log(`Hubcap request completed using account ${selectedHubcapAccount}.`);
     } else {
       const luaToolsCookie = await getCredential(admin, "lua_tools_cookie");
       if (!luaToolsCookie.trim()) {
@@ -394,24 +496,75 @@ Deno.serve(async (request: Request) => {
           "lua.tools cookie is invalid or expired.",
         );
       }
-      if (response.status === 404) {
-        return errorResponse(
-          404,
-          "game_not_found",
-          source,
-          "Game was not found on lua.tools.",
-        );
-      }
-      if (!response.ok) {
+      let luaToolsFileMissing = response.status === 404;
+      if (!luaToolsFileMissing && !response.ok) {
         console.error("lua.tools returned HTTP", response.status);
         return jsonResponse(502, { error: `lua.tools returned HTTP ${response.status}.` });
       }
 
-      files.push({
-        fileName: fileNameFromResponse(response, `${appId}.lua`),
-        contentType: response.headers.get("content-type") ?? "application/octet-stream",
-        content: new Uint8Array(await response.arrayBuffer()),
-      });
+      if (!luaToolsFileMissing) {
+        const content = new Uint8Array(await response.arrayBuffer());
+        luaToolsFileMissing = content.length === 0;
+        if (!luaToolsFileMissing) {
+          files.push({
+            fileName: fileNameFromResponse(response, `${appId}.lua`),
+            contentType: response.headers.get("content-type") ?? "application/octet-stream",
+            content,
+          });
+        }
+      }
+
+      if (luaToolsFileMissing) {
+        let accessDeniedCount = 0;
+        let rateLimited = false;
+        let fallbackFailed = false;
+
+        for (const { accountNumber, apiKey: candidateKey } of hubcapApiKeys) {
+          let result: Awaited<ReturnType<typeof downloadHubcapFiles>>;
+          try {
+            result = await downloadHubcapFiles(appId, false, candidateKey, hubcapBaseUrl);
+          } catch (error) {
+            console.error("Could not check Hubcap fallback account:", error);
+            fallbackFailed = true;
+            continue;
+          }
+
+          const availableFiles = result.files.filter((file) => file.content.length > 0);
+          if (availableFiles.length > 0) {
+            files = availableFiles;
+            source = "Hubcap Manifest";
+            selectedHubcapAccount = accountNumber;
+            break;
+          }
+          if (result.accessDenied) accessDeniedCount++;
+          if (result.rateLimited) rateLimited = true;
+        }
+
+        if (files.length === 0) {
+          if (rateLimited) {
+            return jsonResponse(502, { error: "Hubcap fallback is rate limited." });
+          }
+          if (accessDeniedCount === hubcapApiKeys.length) {
+            return errorResponse(
+              502,
+              "hubcap_game_access_denied",
+              "Hubcap Manifest",
+              "Hubcap denied access to this game's files for all configured accounts.",
+            );
+          }
+          if (fallbackFailed || accessDeniedCount > 0) {
+            return errorResponse(
+              502,
+              "hubcap_keys_unavailable",
+              "Hubcap Manifest",
+              "Could not check this game's files with all configured Hubcap accounts.",
+            );
+          }
+          source = "lua.tools and Hubcap Manifest";
+        } else {
+          console.log(`Hubcap fallback completed using account ${selectedHubcapAccount}.`);
+        }
+      }
     }
 
     if (files.length === 0 || files.every((file) => file.content.length === 0)) {

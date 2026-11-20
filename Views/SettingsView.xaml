@@ -239,9 +239,10 @@
                             <Popup Name="PART_Popup"
                                    AllowsTransparency="True"
                                    IsOpen="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                   PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
                                    Placement="Bottom"
-                                   PopupAnimation="Fade"
-                                   Margin="0,3,0,0">
+                                   VerticalOffset="3"
+                                   PopupAnimation="Fade">
                                 <Border Background="{DynamicResource CardBackgroundBrush}"
                                         BorderBrush="{DynamicResource BorderBrush}"
                                         BorderThickness="1"
@@ -352,7 +353,11 @@
 
         <!-- Main Content Area -->
         <Grid DockPanel.Dock="Top">
-            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,6,0"
+            <ScrollViewer x:Name="SettingsContentScrollViewer"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Padding="0,0,6,0"
+                          ScrollChanged="SettingsContentScrollViewer_ScrollChanged"
                           helpers:SmoothScrollViewerHelper.EnableSmoothScrolling="True">
                 <Grid HorizontalAlignment="Stretch" MaxWidth="1100">
                     <Grid.RowDefinitions>
@@ -685,43 +690,6 @@
                                     </StackPanel>
                                 </Grid>
 
-                                <!-- Divider -->
-                                <Border Height="1" Background="{DynamicResource BorderBrush}" Opacity="0.3" Margin="0,8"/>
-
-                                <!-- Row: Hubcap Session & API Key -->
-                                <Grid Margin="0,6,0,6">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <Border Grid.Column="0" Width="34" Height="34" CornerRadius="8" Background="{DynamicResource ButtonBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Margin="0,0,12,0" VerticalAlignment="Center">
-                                        <TextBlock Text="&#xE72D;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
-                                        <TextBlock Text="Hubcap Session &amp; API Key" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundBrush}"/>
-                                        <TextBlock x:Name="HubcapSessionStatusText" Text="Clear Discord login session and saved Hubcap API key." FontSize="11" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
-                                    </StackPanel>
-
-                                    <Button x:Name="ClearHubcapSessionButton"
-                                            Grid.Column="2"
-                                            Height="32"
-                                            Padding="12,0"
-                                            Background="{DynamicResource DangerButtonBrush}"
-                                            Foreground="White"
-                                            BorderThickness="0"
-                                            FontWeight="SemiBold"
-                                            FontSize="10.5"
-                                            Click="ClearHubcapSessionButton_Click"
-                                            Cursor="Hand"
-                                            VerticalAlignment="Center"
-                                            Template="{StaticResource ModernButtonTemplate}"
-                                            Tag="{StaticResource Icon.Delete}">
-                                        <TextBlock VerticalAlignment="Center" HorizontalAlignment="Center" Text="RESET SESSION"/>
-                                    </Button>
-                                </Grid>
                             </StackPanel>
                         </Border>
 

@@ -1946,20 +1946,91 @@
                             Padding="16">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel>
-                                <TextBlock Text="Hubcap Manifest API key"
+                                <TextBlock Text="Hubcap Manifest API keys"
                                            FontSize="12"
                                            FontWeight="SemiBold"
-                                           Foreground="{DynamicResource ForegroundBrush}"
-                                           Margin="0,0,0,6"/>
-                                <TextBox x:Name="HubcapApiKeyTextBox"
-                                         MinHeight="38"
-                                         Padding="10,8"
-                                         Background="{DynamicResource InputBackgroundBrush}"
-                                         Foreground="{DynamicResource ForegroundBrush}"
-                                         BorderBrush="{DynamicResource BorderBrush}"
-                                         BorderThickness="1"
-                                         VerticalContentAlignment="Center"
-                                         AutomationProperties.Name="Hubcap Manifest API key"/>
+                                           Foreground="{DynamicResource ForegroundBrush}"/>
+                                <TextBlock Text="Each account uses its own Discord login session. Requests try Account 1 first, then Account 2 if needed."
+                                           FontSize="10.5"
+                                           Foreground="{DynamicResource MutedForegroundBrush}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,4,0,10"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0"
+                                            Background="{DynamicResource CardBackgroundBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="8"
+                                            Padding="12"
+                                            Margin="0,0,6,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Discord account 1 · Primary"
+                                                       FontSize="12"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource ForegroundBrush}"/>
+                                            <TextBox x:Name="HubcapApiKey1TextBox"
+                                                     MinHeight="38"
+                                                     Padding="10,8"
+                                                     Margin="0,8,0,8"
+                                                     Background="{DynamicResource InputBackgroundBrush}"
+                                                     Foreground="{DynamicResource ForegroundBrush}"
+                                                     BorderBrush="{DynamicResource BorderBrush}"
+                                                     BorderThickness="1"
+                                                     VerticalContentAlignment="Center"
+                                                     AutomationProperties.Name="Hubcap API key for Discord account 1"/>
+                                            <Button x:Name="HubcapApiKey1ActionButton"
+                                                    Content="Generate API key"
+                                                    Style="{StaticResource DevSecondaryButton}"
+                                                    HorizontalAlignment="Left"
+                                                    Click="GenerateHubcapApiKey1_Click"/>
+                                            <TextBlock x:Name="HubcapApiKey1StatusText"
+                                                       Text="Not loaded"
+                                                       FontSize="10.5"
+                                                       Foreground="{DynamicResource MutedForegroundBrush}"
+                                                       TextWrapping="Wrap"
+                                                       Margin="0,8,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Grid.Column="1"
+                                            Background="{DynamicResource CardBackgroundBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="8"
+                                            Padding="12"
+                                            Margin="6,0,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Discord account 2 · Fallback"
+                                                       FontSize="12"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource ForegroundBrush}"/>
+                                            <TextBox x:Name="HubcapApiKey2TextBox"
+                                                     MinHeight="38"
+                                                     Padding="10,8"
+                                                     Margin="0,8,0,8"
+                                                     Background="{DynamicResource InputBackgroundBrush}"
+                                                     Foreground="{DynamicResource ForegroundBrush}"
+                                                     BorderBrush="{DynamicResource BorderBrush}"
+                                                     BorderThickness="1"
+                                                     VerticalContentAlignment="Center"
+                                                     AutomationProperties.Name="Hubcap API key for Discord account 2"/>
+                                            <Button x:Name="HubcapApiKey2ActionButton"
+                                                    Content="Generate API key"
+                                                    Style="{StaticResource DevSecondaryButton}"
+                                                    HorizontalAlignment="Left"
+                                                    Click="GenerateHubcapApiKey2_Click"/>
+                                            <TextBlock x:Name="HubcapApiKey2StatusText"
+                                                       Text="Not loaded"
+                                                       FontSize="10.5"
+                                                       Foreground="{DynamicResource MutedForegroundBrush}"
+                                                       TextWrapping="Wrap"
+                                                       Margin="0,8,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
 
                                 <TextBlock Text="lua.tools Cookie"
                                            FontSize="12"

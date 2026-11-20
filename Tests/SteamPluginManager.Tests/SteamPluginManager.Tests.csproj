@@ -16,6 +16,8 @@
   <ItemGroup>
     <Compile Include="..\..\Services\Steam\SteamAppInfoCache.cs" Link="Services\Steam\SteamAppInfoCache.cs" />
     <Compile Include="..\..\Services\Steam\SteamBatchLaunchCommand.cs" Link="Services\Steam\SteamBatchLaunchCommand.cs" />
+    <Compile Include="..\..\Services\Steam\SteamtoolsVersionHelper.cs" Link="Services\Steam\SteamtoolsVersionHelper.cs" />
+    <Compile Include="..\..\Services\Steam\OpenSteamToolDeploymentService.cs" Link="Services\Steam\OpenSteamToolDeploymentService.cs" />
     <Compile Include="..\..\Models\SteamLaunchOption.cs" Link="Models\SteamLaunchOption.cs" />
   </ItemGroup>
 

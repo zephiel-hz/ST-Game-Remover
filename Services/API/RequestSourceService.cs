@@ -86,10 +86,7 @@ namespace SteamPluginManager.Services.API
                 if (error?.Code == "lua_tools_cookie_invalid")
                     throw new RequestSourceCredentialException("lua.tools cookie");
                 if (error?.Code == "lua_tools_cookie_format_invalid")
-                    throw new InvalidDataException(
-                        error.Error is not null && !string.IsNullOrWhiteSpace(error.Error)
-                            ? error.Error
-                            : "The saved lua.tools Netscape cookie export has no active matching cookies.");
+                    throw new RequestSourceCredentialException("lua.tools cookie");
             }
 
             if (response.StatusCode == HttpStatusCode.NotFound)
@@ -324,6 +321,8 @@ namespace SteamPluginManager.Services.API
 
     public sealed class RequestSourceCredentials
     {
+        public string HubcapApiKey1 { get; init; } = string.Empty;
+        public string HubcapApiKey2 { get; init; } = string.Empty;
         public string HubcapApiKey { get; init; } = string.Empty;
         public string LuaToolsCookie { get; init; } = string.Empty;
     }
@@ -334,6 +333,12 @@ namespace SteamPluginManager.Services.API
         {
             [JsonPropertyName("hubcapApiKey")]
             public string HubcapApiKey { get; set; } = string.Empty;
+
+            [JsonPropertyName("hubcapApiKey1")]
+            public string HubcapApiKey1 { get; set; } = string.Empty;
+
+            [JsonPropertyName("hubcapApiKey2")]
+            public string HubcapApiKey2 { get; set; } = string.Empty;
 
             [JsonPropertyName("luaToolsCookie")]
             public string LuaToolsCookie { get; set; } = string.Empty;
@@ -353,9 +358,31 @@ namespace SteamPluginManager.Services.API
 
             return new RequestSourceCredentials
             {
-                HubcapApiKey = credentials.HubcapApiKey,
+                HubcapApiKey1 = string.IsNullOrWhiteSpace(credentials.HubcapApiKey1)
+                    ? credentials.HubcapApiKey
+                    : credentials.HubcapApiKey1,
+                HubcapApiKey2 = credentials.HubcapApiKey2,
+                HubcapApiKey = string.IsNullOrWhiteSpace(credentials.HubcapApiKey)
+                    ? credentials.HubcapApiKey1
+                    : credentials.HubcapApiKey,
                 LuaToolsCookie = credentials.LuaToolsCookie
             };
+        }
+
+        public static async Task SaveAsync(
+            string deviceId,
+            string hubcapApiKey1,
+            string hubcapApiKey2,
+            string luaToolsCookie)
+        {
+            await SendAsync(new
+            {
+                action = "save",
+                deviceId,
+                hubcapApiKey1,
+                hubcapApiKey2,
+                luaToolsCookie
+            });
         }
 
         public static async Task SaveAsync(

@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using System.Linq;
 using System.Diagnostics;
 using Microsoft.Win32;
+using SteamPluginManager.Services.Steam;
 
 namespace SteamPluginManager.Views
 {
@@ -54,7 +55,6 @@ namespace SteamPluginManager.Views
                 RegisterTextElements();
                 _isInitialized = true;
             }
-            UpdateHubcapSessionStatus();
             try
             {
                 SettingsCurrentVersionBadge.Text = AppInfo.FormattedVersion;
@@ -70,6 +70,28 @@ namespace SteamPluginManager.Views
         {
             // Unsubscribe from language change event to prevent memory leak
             App.LanguageChanged -= LanguageChanged_Handler;
+        }
+
+        private void SettingsContentScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
+        {
+            if (e.VerticalChange == 0 && e.HorizontalChange == 0)
+                return;
+
+            RefreshDropDownPlacement(ThemeSelector);
+            RefreshDropDownPlacement(LangSelector);
+        }
+
+        private static void RefreshDropDownPlacement(ComboBox comboBox)
+        {
+            if (comboBox.Template.FindName("PART_Popup", comboBox) is not System.Windows.Controls.Primitives.Popup popup ||
+                !popup.IsOpen)
+            {
+                return;
+            }
+
+            double verticalOffset = popup.VerticalOffset;
+            popup.VerticalOffset = verticalOffset + 1;
+            popup.VerticalOffset = verticalOffset;
         }
 
         private void LanguageChanged_Handler(object? sender, EventArgs e)
@@ -172,21 +194,15 @@ namespace SteamPluginManager.Views
                     {
                         var installed = CheckSteamtoolsInstalled();
 
-                        // Get installed version if present, otherwise fall back to locally saved version
+                        // Prefer the newest known version because DLL metadata may lag behind the release tag.
                         try
                         {
-                            var detectedVersion = GetInstalledSteamtoolsVersion();
-                            if (!string.IsNullOrWhiteSpace(detectedVersion))
+                            _steamtoolsInstalledVersion = GetBestKnownSteamtoolsVersion();
+                            if (!string.IsNullOrWhiteSpace(_steamtoolsInstalledVersion))
                             {
-                                _steamtoolsInstalledVersion = detectedVersion;
-                                SaveSteamtoolsInstalledVersion(detectedVersion);
-                                Logger.Log($"[Steamtools] Installed version detected: {_steamtoolsInstalledVersion}");
+                                SaveSteamtoolsInstalledVersion(_steamtoolsInstalledVersion);
                             }
-                            else
-                            {
-                                _steamtoolsInstalledVersion = LoadSavedSteamtoolsInstalledVersion();
-                                Logger.Log($"[Steamtools] Loaded saved installed version: {_steamtoolsInstalledVersion}");
-                            }
+                            Logger.Log($"[Steamtools] Resolved installed version: {_steamtoolsInstalledVersion}");
                         }
                         catch (Exception ex)
                         {
@@ -302,7 +318,9 @@ namespace SteamPluginManager.Views
                 {
                     _steamtoolsLatestVersion = tagName?.Trim();
                     _steamtoolsLatestReleaseHtmlUrl = htmlUrl;
-                    _steamtoolsUpdateAvailable = _isSteamtoolsInstalled && (_steamtoolsInstalledVersion == null || IsSteamtoolsVersionLess(_steamtoolsInstalledVersion, _steamtoolsLatestVersion));
+                    _steamtoolsUpdateAvailable = _isSteamtoolsInstalled &&
+                        (string.IsNullOrWhiteSpace(_steamtoolsInstalledVersion) ||
+                         SteamtoolsVersionHelper.IsLess(_steamtoolsInstalledVersion, _steamtoolsLatestVersion));
 
                     Logger.Log($"[Steamtools] Installed version: {_steamtoolsInstalledVersion}");
                     Logger.Log($"[Steamtools] Latest release version: {_steamtoolsLatestVersion}");
@@ -422,59 +440,19 @@ namespace SteamPluginManager.Views
             return Path.Combine(appDataPath, "steamtools_installed_version.txt");
         }
 
-        private static string NormalizeSteamtoolsVersion(string version)
+        private string? GetBestKnownSteamtoolsVersion()
         {
-            if (string.IsNullOrWhiteSpace(version))
-                return string.Empty;
+            string? detectedVersion = GetInstalledSteamtoolsVersion();
+            string? savedVersion = LoadSavedSteamtoolsInstalledVersion();
 
-            version = version.Trim();
-            if (version.StartsWith("v", StringComparison.OrdinalIgnoreCase))
-                version = version.Substring(1);
+            if (string.IsNullOrWhiteSpace(detectedVersion))
+                return savedVersion;
+            if (string.IsNullOrWhiteSpace(savedVersion))
+                return detectedVersion;
 
-            version = version.Trim();
-            int suffixIndex = version.IndexOfAny(new[] { '+', '-' });
-            if (suffixIndex >= 0)
-                version = version.Substring(0, suffixIndex).Trim();
-
-            return version.Trim();
-        }
-
-        private static bool IsSteamtoolsVersionLess(string? installedVersion, string? latestVersion)
-        {
-            var installed = NormalizeSteamtoolsVersion(installedVersion ?? string.Empty);
-            var latest = NormalizeSteamtoolsVersion(latestVersion ?? string.Empty);
-
-            if (string.IsNullOrWhiteSpace(installed) || string.IsNullOrWhiteSpace(latest))
-                return false;
-
-            if (string.Equals(installed, latest, StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            if (Version.TryParse(installed, out var installedVer) && Version.TryParse(latest, out var latestVer))
-                return installedVer < latestVer;
-
-            // If parsing failed, compare normalized strings directly
-            return CompareVersionComponents(installed, latest) < 0;
-        }
-
-        private static int CompareVersionComponents(string installed, string latest)
-        {
-            var installedParts = installed.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
-            var latestParts = latest.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
-
-            var length = Math.Max(installedParts.Length, latestParts.Length);
-            for (int i = 0; i < length; i++)
-            {
-                int installedPart = i < installedParts.Length && int.TryParse(installedParts[i], out var ip) ? ip : 0;
-                int latestPart = i < latestParts.Length && int.TryParse(latestParts[i], out var lp) ? lp : 0;
-
-                if (installedPart < latestPart)
-                    return -1;
-                if (installedPart > latestPart)
-                    return 1;
-            }
-
-            return 0;
+            return SteamtoolsVersionHelper.IsLess(detectedVersion, savedVersion)
+                ? savedVersion
+                : detectedVersion;
         }
 
         private void UpdateSteamtoolsUi(bool installed)
@@ -540,6 +518,37 @@ namespace SteamPluginManager.Views
             }
         }
 
+        private void RefreshSteamtoolsStatusAfterInstall(
+            bool installed,
+            string? releaseTag,
+            bool installationSucceeded,
+            string operation)
+        {
+            _isSteamtoolsInstalled = installed;
+            if (installed)
+            {
+                if (installationSucceeded && !string.IsNullOrWhiteSpace(releaseTag))
+                {
+                    _steamtoolsInstalledVersion = releaseTag.Trim();
+                    _steamtoolsLatestVersion = releaseTag.Trim();
+                }
+                else
+                {
+                    string? bestKnownVersion = GetBestKnownSteamtoolsVersion();
+                    if (!string.IsNullOrWhiteSpace(bestKnownVersion))
+                        _steamtoolsInstalledVersion = bestKnownVersion;
+                }
+
+                SaveSteamtoolsInstalledVersion(_steamtoolsInstalledVersion);
+                Logger.Log($"[Steamtools] Saved installed version after {operation}: {_steamtoolsInstalledVersion}");
+            }
+
+            _steamtoolsUpdateAvailable = installed &&
+                (string.IsNullOrWhiteSpace(_steamtoolsInstalledVersion) ||
+                 SteamtoolsVersionHelper.IsLess(_steamtoolsInstalledVersion, _steamtoolsLatestVersion));
+            UpdateSteamtoolsUi(installed);
+        }
+
         private async void SteamtoolsActionButton_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -554,6 +563,8 @@ namespace SteamPluginManager.Views
                     var res = dlg.ShowDialog();
                     if (res == true)
                     {
+                        string? steamPathForRestart = null;
+                        bool uninstallCompleted = false;
                         try
                         {
                             _overlayWindow = new SteamtoolsOverlayWindow();
@@ -588,6 +599,7 @@ namespace SteamPluginManager.Views
                             {
                                 Logger.Log($"[Steamtools] Failed to read Steam path from registry: {ex.Message}");
                             }
+                            steamPathForRestart = steamPath;
 
                             // Kill Steam process if running
                             try
@@ -614,47 +626,19 @@ namespace SteamPluginManager.Views
                                 _overlayWindow?.SetStatus("Failed to stop Steam (continuing)");
                             }
 
-                            // Remove injected DLLs from Steam folder
-                            if (!string.IsNullOrEmpty(steamPath))
+                            if (string.IsNullOrWhiteSpace(steamPath))
+                                throw new InvalidOperationException("Steam install path was not found.");
+
+                            _overlayWindow?.SetStepInProgress(2);
+                            _overlayWindow?.SetStatus("Restoring Steam files...");
+                            if (!OpenSteamToolDeploymentService.RestoreOriginalState(steamPath))
                             {
-                                try
-                                {
-                                    _overlayWindow?.SetStepInProgress(2);
-                                    _overlayWindow?.SetStatus("Removing injected DLLs...");
-                                    
-                                    // Remove xinput1_4.dll
-                                    string xinputPath = Path.Combine(steamPath, "xinput1_4.dll");
-                                    if (File.Exists(xinputPath))
-                                    {
-                                        File.Delete(xinputPath);
-                                        Logger.Log($"[Steamtools] Removed {xinputPath}");
-                                    }
-
-                                    // Remove dwmapi.dll
-                                    string dwapiPath = Path.Combine(steamPath, "dwmapi.dll");
-                                    if (File.Exists(dwapiPath))
-                                    {
-                                        File.Delete(dwapiPath);
-                                        Logger.Log($"[Steamtools] Removed {dwapiPath}");
-                                    }
-
-                                    // Remove OpenSteamTool.dll
-                                    string openSteamToolPath = Path.Combine(steamPath, "OpenSteamTool.dll");
-                                    if (File.Exists(openSteamToolPath))
-                                    {
-                                        File.Delete(openSteamToolPath);
-                                        Logger.Log($"[Steamtools] Removed {openSteamToolPath}");
-                                    }
-                                    
-                                    _overlayWindow?.SetStepComplete(2);
-                                    _overlayWindow?.SetStatus("Injected DLLs removed");
-                                }
-                                catch (Exception ex)
-                                {
-                                    Logger.Log($"[Steamtools] Failed to remove DLLs: {ex.Message}");
-                                    _overlayWindow?.SetStatus("Failed to remove DLLs (continuing)");
-                                }
+                                throw new InvalidOperationException(
+                                    "No OpenSteamTools deployment record was found. To protect existing Steam files, no untracked files were removed.");
                             }
+                            uninstallCompleted = true;
+                            _overlayWindow?.SetStepComplete(2);
+                            _overlayWindow?.SetStatus("Steam files restored");
 
                             // Remove registry entries
                             try
@@ -727,6 +711,8 @@ namespace SteamPluginManager.Views
                         catch (Exception ex)
                         {
                             Logger.Log($"[Steamtools] Uninstall error: {ex.Message}");
+                            if (!string.IsNullOrWhiteSpace(steamPathForRestart))
+                                RestartSteamProcess(steamPathForRestart);
                             SteamtoolsOverlayGrid.Visibility = Visibility.Collapsed;
                             var errorMsg = new StyledMessageDialog("❌ Error", $"Uninstall error: {ex.Message}");
                             errorMsg.Owner = Window.GetWindow(this);
@@ -735,21 +721,26 @@ namespace SteamPluginManager.Views
                         finally
                         {
                             // Refresh status
-                            var installed = CheckSteamtoolsInstalled();
-                            if (!installed)
+                            if (uninstallCompleted)
                             {
                                 SaveSteamtoolsInstalledVersion(null);
                                 _steamtoolsInstalledVersion = null;
+                                _isSteamtoolsInstalled = false;
                                 Logger.Log("[Steamtools] Cleared saved installed version after uninstall");
+                                UpdateSteamtoolsUi(false);
                             }
-                            UpdateSteamtoolsUi(installed);
+                            else
+                            {
+                                UpdateSteamtoolsUi(CheckSteamtoolsInstalled());
+                            }
                         }
                     }
                 }
                 else
                 {
-                    // Install flow: set registry, download latest GitHub release, extract ZIP, copy DLLs, setup config\lua, restart Steam
+                    // Install flow: set registry, download and deploy the full GitHub release, then restart Steam.
                     string? releaseTag = null;
+                    bool installationSucceeded = false;
                     try
                     {
                         _overlayWindow = new SteamtoolsOverlayWindow();
@@ -760,7 +751,7 @@ namespace SteamPluginManager.Views
                         _overlayWindow.SetStepText(1, "Adding registry...");
                         _overlayWindow.SetStepText(2, "Downloading latest release...");
                         _overlayWindow.SetStepText(3, "Extracting release...");
-                        _overlayWindow.SetStepText(4, "Copying DLLs...");
+                        _overlayWindow.SetStepText(4, "Copying release files...");
                         _overlayWindow.SetStepText(5, "Preparing config\\lua...");
                         _overlayWindow.SetStepText(6, "Restarting Steam...");
 
@@ -866,41 +857,17 @@ namespace SteamPluginManager.Views
 
                             _overlayWindow?.SetStepComplete(3);
                             _overlayWindow?.SetStepInProgress(4);
-                            _overlayWindow?.SetStatus("Copying DLLs...");
-
-                            string[] targetFiles = ["OpenSteamTool.dll", "dwmapi.dll", "xinput1_4.dll"];
-                            foreach (var targetFile in targetFiles)
-                            {
-                                var sourceFile = Directory.GetFiles(extractDir, targetFile, SearchOption.AllDirectories).FirstOrDefault();
-                                if (string.IsNullOrWhiteSpace(sourceFile))
-                                {
-                                    Logger.Log($"[Steamtools] Missing file in extracted release: {targetFile}");
-                                    continue;
-                                }
-
-                                string targetPath = Path.Combine(steamPath, targetFile);
-                                File.Copy(sourceFile, targetPath, true);
-                                Logger.Log($"[Steamtools] Copied {sourceFile} -> {targetPath}");
-                            }
+                            _overlayWindow?.SetStatus("Copying all release files...");
+                            OpenSteamToolDeploymentService.Deploy(
+                                steamPath,
+                                extractDir,
+                                Path.Combine(steamPath, "config", "stplug-in"),
+                                Path.Combine("config", "lua"),
+                                synchronizeSupplementalFiles: true);
 
                             _overlayWindow?.SetStepComplete(4);
                             _overlayWindow?.SetStepInProgress(5);
-                            _overlayWindow?.SetStatus("Preparing config\\lua...");
-
-                            string configPath = Path.Combine(steamPath, "config");
-                            string luaPath = Path.Combine(configPath, "lua");
-                            Directory.CreateDirectory(luaPath);
-
-                            string stplugInPath = Path.Combine(configPath, "stplug-in");
-                            if (Directory.Exists(stplugInPath))
-                            {
-                                CopyDirectoryContents(stplugInPath, luaPath);
-                                Logger.Log($"[Steamtools] Copied contents from {stplugInPath} to {luaPath}");
-                            }
-                            else
-                            {
-                                Logger.Log($"[Steamtools] No {stplugInPath} folder found, skipping copy");
-                            }
+                            _overlayWindow?.SetStatus("OpenSteamTools files installed.");
 
                             _overlayWindow?.SetStepComplete(5);
                             _overlayWindow?.SetStepInProgress(6);
@@ -918,21 +885,7 @@ namespace SteamPluginManager.Views
 
                             _overlayWindow?.SetStepComplete(6);
                             _overlayWindow?.ShowResult("Steamtools installed successfully!", true);
-
-                            // If DLL metadata didn't provide a version, fall back to the release tag we downloaded
-                            try
-                            {
-                                if (string.IsNullOrWhiteSpace(_steamtoolsInstalledVersion) && !string.IsNullOrWhiteSpace(releaseTag))
-                                {
-                                    _steamtoolsInstalledVersion = releaseTag;
-                                    SaveSteamtoolsInstalledVersion(_steamtoolsInstalledVersion);
-                                    Logger.Log($"[Steamtools] Recorded installed version from release tag: {_steamtoolsInstalledVersion}");
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Logger.Log($"[Steamtools] Failed to record installed version from release tag: {ex.Message}");
-                            }
+                            installationSucceeded = true;
                         }
                         finally
                         {
@@ -950,45 +903,17 @@ namespace SteamPluginManager.Views
                     finally
                     {
                         var installed = CheckSteamtoolsInstalled();
-                        if (installed)
-                        {
-                            var detectedVersion = GetInstalledSteamtoolsVersion();
-                            if (!string.IsNullOrWhiteSpace(detectedVersion))
-                            {
-                                _steamtoolsInstalledVersion = detectedVersion;
-                            }
-                            else if (string.IsNullOrWhiteSpace(_steamtoolsInstalledVersion) && !string.IsNullOrWhiteSpace(releaseTag))
-                            {
-                                _steamtoolsInstalledVersion = releaseTag;
-                            }
-
-                            SaveSteamtoolsInstalledVersion(_steamtoolsInstalledVersion);
-                            Logger.Log($"[Steamtools] Saved installed version after install: {_steamtoolsInstalledVersion}");
-                        }
-                        UpdateSteamtoolsUi(installed);
+                        RefreshSteamtoolsStatusAfterInstall(
+                            installed,
+                            releaseTag,
+                            installationSucceeded,
+                            "install");
                     }
                 }
             }
             catch (Exception ex)
             {
                 Logger.Log($"[Steamtools] Action button error: {ex.Message}");
-            }
-        }
-
-        private void CopyDirectoryContents(string sourceDir, string targetDir)
-        {
-            Directory.CreateDirectory(targetDir);
-
-            foreach (var file in Directory.GetFiles(sourceDir))
-            {
-                string destPath = Path.Combine(targetDir, Path.GetFileName(file));
-                File.Copy(file, destPath, true);
-            }
-
-            foreach (var subDir in Directory.GetDirectories(sourceDir))
-            {
-                string childTargetDir = Path.Combine(targetDir, Path.GetFileName(subDir));
-                CopyDirectoryContents(subDir, childTargetDir);
             }
         }
 
@@ -1523,240 +1448,6 @@ namespace SteamPluginManager.Views
             }
         }
 
-        private void ClearHubcapSessionButton_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var result = ModernMessageBox.Show(
-                    "Reset Hubcap session and API key?\n\nThis will:\n" +
-                    "• Clear the stored Hubcap API key from local config\n" +
-                    "• Remove WebView2 Discord and Hubcap browser login data\n\n" +
-                    "Next time a game request needs Hubcap, you will be prompted to log in again.",
-                    "Reset Hubcap Session",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question
-                );
-
-                if (result != MessageBoxResult.Yes)
-                    return;
-
-                // 1. Reset in-memory config and cache
-                ServiceConfiguration.Current.Hubcap.ApiKey = string.Empty;
-                RemoteConfigService.InvalidateCache("hubcap_api_key");
-                HubcapManifestService.SetSessionCookieHeader(null);
-
-                // 2. Clear local credentials file and legacy config entries
-                try
-                {
-                    var credentialPaths = new[]
-                    {
-                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HZLuaManager", "hubcap_credentials.json"),
-                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SteamPluginManager", "hubcap_credentials.json")
-                    };
-
-                    foreach (var credFile in credentialPaths)
-                    {
-                        if (File.Exists(credFile))
-                        {
-                            File.Delete(credFile);
-                            Logger.Log($"[SettingsView] Deleted local Hubcap credentials file: {credFile}");
-                        }
-                    }
-
-                    var configFiles = new[]
-                    {
-                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "service-config.json"),
-                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "Config", "service-config.json")
-                    };
-                    foreach (var file in configFiles)
-                    {
-                        if (File.Exists(file))
-                        {
-                            var fullPath = Path.GetFullPath(file);
-                            var json = File.ReadAllText(fullPath);
-                            var doc = JsonSerializer.Deserialize<ServiceConfigModel>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                            if (doc?.Hubcap != null && !string.IsNullOrEmpty(doc.Hubcap.ApiKey))
-                            {
-                                doc.Hubcap.ApiKey = string.Empty;
-                                var updatedJson = JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true });
-                                File.WriteAllText(fullPath, updatedJson);
-                                Logger.Log($"[SettingsView] Cleared Hubcap API key in {fullPath}");
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log($"[SettingsView] Error clearing local credentials / config: {ex.Message}");
-                }
-
-                // 3. Clear WebView2 browser profile folder safely
-                try
-                {
-                    string userDataFolder = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        "HZLuaManager",
-                        "HubcapBrowserProfile"
-                    );
-
-                    // Terminate child msedgewebview2 processes associated with this profile so locks are released
-                    try
-                    {
-                        using var searcher = new System.Management.ManagementObjectSearcher(
-                            "SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name = 'msedgewebview2.exe'");
-                        foreach (var obj in searcher.Get())
-                        {
-                            var cmd = obj["CommandLine"]?.ToString() ?? "";
-                            if (cmd.Contains("HubcapBrowserProfile", StringComparison.OrdinalIgnoreCase))
-                            {
-                                var pid = Convert.ToInt32(obj["ProcessId"]);
-                                try
-                                {
-                                    var p = System.Diagnostics.Process.GetProcessById(pid);
-                                    p.Kill();
-                                    p.WaitForExit(500);
-                                }
-                                catch { }
-                            }
-                        }
-                    }
-                    catch { }
-
-                    // Resilient delete of files and directories (so locked cache files like journal.baj don't abort wiping cookies/session)
-                    TryDeleteDirectoryContents(userDataFolder);
-                    Logger.Log("[SettingsView] Cleared HubcapBrowserProfile cookies and session data");
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log($"[SettingsView] Error clearing HubcapBrowserProfile: {ex.Message}");
-                }
-
-                UpdateHubcapSessionStatus();
-
-                ModernMessageBox.Show(
-                    "Hubcap browser session and saved API key have been successfully cleared!",
-                    "Reset Complete",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information
-                );
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"[SettingsView] Failed to reset Hubcap session: {ex.Message}");
-                ModernMessageBox.Show(
-                    $"Failed to reset Hubcap session: {ex.Message}",
-                    "Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error
-                );
-            }
-        }
-
-        private static void TryDeleteDirectoryContents(string targetDirectory)
-        {
-            if (!Directory.Exists(targetDirectory)) return;
-
-            try
-            {
-                foreach (var file in Directory.GetFiles(targetDirectory))
-                {
-                    try
-                    {
-                        File.SetAttributes(file, FileAttributes.Normal);
-                        File.Delete(file);
-                    }
-                    catch { }
-                }
-            }
-            catch { }
-
-            try
-            {
-                foreach (var dir in Directory.GetDirectories(targetDirectory))
-                {
-                    TryDeleteDirectoryContents(dir);
-                    try
-                    {
-                        Directory.Delete(dir, false);
-                    }
-                    catch { }
-                }
-            }
-            catch { }
-
-            try
-            {
-                Directory.Delete(targetDirectory, false);
-            }
-            catch { }
-        }
-
-        private void UpdateHubcapSessionStatus()
-        {
-            try
-            {
-                string localKey = ServiceConfiguration.Current.Hubcap.ApiKey;
-                if (string.IsNullOrWhiteSpace(localKey))
-                {
-                    var credentialPaths = new[]
-                    {
-                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HZLuaManager", "hubcap_credentials.json"),
-                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SteamPluginManager", "hubcap_credentials.json")
-                    };
-                    foreach (var credFile in credentialPaths)
-                    {
-                        if (File.Exists(credFile))
-                        {
-                            try
-                            {
-                                var json = File.ReadAllText(credFile);
-                                using var doc = JsonDocument.Parse(json);
-                                if (doc.RootElement.TryGetProperty("apiKey", out var keyElem) && !string.IsNullOrWhiteSpace(keyElem.GetString()))
-                                {
-                                    localKey = keyElem.GetString()!;
-                                    break;
-                                }
-                            }
-                            catch { }
-                        }
-                    }
-                }
-
-                string userDataFolder = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "HZLuaManager",
-                    "HubcapBrowserProfile"
-                );
-                bool hasBrowserSession = File.Exists(Path.Combine(userDataFolder, "EBWebView", "Default", "Network", "Cookies")) ||
-                                         Directory.Exists(Path.Combine(userDataFolder, "EBWebView", "Default", "Local Storage"));
-                bool hasApiKey = !string.IsNullOrWhiteSpace(localKey);
-
-                if (hasApiKey && hasBrowserSession)
-                {
-                    HubcapSessionStatusText.Text = "API key configured & browser session active.";
-                }
-                else if (hasApiKey)
-                {
-                    HubcapSessionStatusText.Text = "API key configured (no browser session).";
-                }
-                else if (hasBrowserSession)
-                {
-                    HubcapSessionStatusText.Text = "Browser session active (no local API key).";
-                }
-                else
-                {
-                    HubcapSessionStatusText.Text = "No active session or API key stored.";
-                }
-            }
-            catch
-            {
-                if (HubcapSessionStatusText != null)
-                {
-                    HubcapSessionStatusText.Text = "Clear Discord login session and saved Hubcap API key.";
-                }
-            }
-        }
-
         private void BackToDashboard_Click(object sender, RoutedEventArgs e)
         {
             WindowNavigator.NavigateToDashboard();
@@ -1764,6 +1455,8 @@ namespace SteamPluginManager.Views
 
         private async Task PerformSteamtoolsInstallAsync(string title, bool copyStplugInToLua)
         {
+            string? releaseTag = null;
+            bool installationSucceeded = false;
             try
             {
                 _overlayWindow = new SteamtoolsOverlayWindow();
@@ -1774,7 +1467,7 @@ namespace SteamPluginManager.Views
                 _overlayWindow.SetStepText(1, "Adding registry...");
                 _overlayWindow.SetStepText(2, "Downloading latest release...");
                 _overlayWindow.SetStepText(3, "Extracting release...");
-                _overlayWindow.SetStepText(4, "Copying DLLs...");
+                _overlayWindow.SetStepText(4, "Copying release files...");
                 _overlayWindow.SetStepText(5, "Preparing config\\lua...");
                 _overlayWindow.SetStepText(6, "Restarting Steam...");
 
@@ -1787,7 +1480,6 @@ namespace SteamPluginManager.Views
                 };
 
                 string? steamPath = null;
-                string? releaseTag = null;
                 try
                 {
                     using (var regKey = Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam"))
@@ -1893,48 +1585,17 @@ namespace SteamPluginManager.Views
                     }
 
                     _overlayWindow?.SetStepInProgress(4);
-                    _overlayWindow?.SetStatus("Copying DLLs...");
-
-                    string[] targetFiles = ["OpenSteamTool.dll", "dwmapi.dll", "xinput1_4.dll"];
-                    foreach (var targetFile in targetFiles)
-                    {
-                        var sourceFile = Directory.GetFiles(extractDir, targetFile, SearchOption.AllDirectories).FirstOrDefault();
-                        if (string.IsNullOrWhiteSpace(sourceFile))
-                        {
-                            Logger.Log($"[Steamtools] Missing file in extracted release: {targetFile}");
-                            continue;
-                        }
-
-                        string targetPath = Path.Combine(steamPath, targetFile);
-                        File.Copy(sourceFile, targetPath, true);
-                        Logger.Log($"[Steamtools] Copied {sourceFile} -> {targetPath}");
-                    }
+                    _overlayWindow?.SetStatus("Copying all release files...");
+                    OpenSteamToolDeploymentService.Deploy(
+                        steamPath,
+                        extractDir,
+                        copyStplugInToLua ? Path.Combine(steamPath, "config", "stplug-in") : null,
+                        Path.Combine("config", "lua"),
+                        synchronizeSupplementalFiles: copyStplugInToLua);
 
                     _overlayWindow?.SetStepComplete(4);
                     _overlayWindow?.SetStepInProgress(5);
-                    _overlayWindow?.SetStatus("Preparing config\\lua...");
-
-                    string configPath = Path.Combine(steamPath, "config");
-                    string luaPath = Path.Combine(configPath, "lua");
-                    Directory.CreateDirectory(luaPath);
-
-                    if (copyStplugInToLua)
-                    {
-                        string stplugInPath = Path.Combine(configPath, "stplug-in");
-                        if (Directory.Exists(stplugInPath))
-                        {
-                            CopyDirectoryContents(stplugInPath, luaPath);
-                            Logger.Log($"[Steamtools] Copied contents from {stplugInPath} to {luaPath}");
-                        }
-                        else
-                        {
-                            Logger.Log($"[Steamtools] No {stplugInPath} folder found, skipping copy");
-                        }
-                    }
-                    else
-                    {
-                        Logger.Log("[Steamtools] Skipping stplug-in copy for update flow");
-                    }
+                    _overlayWindow?.SetStatus("OpenSteamTools files synchronized.");
 
                     _overlayWindow?.SetStepComplete(5);
                     _overlayWindow?.SetStepInProgress(6);
@@ -1952,20 +1613,7 @@ namespace SteamPluginManager.Views
 
                     _overlayWindow?.SetStepComplete(6);
                     _overlayWindow?.ShowResult(copyStplugInToLua ? "Steamtools installed successfully!" : "Steamtools updated successfully!", true);
-
-                    try
-                    {
-                        if (string.IsNullOrWhiteSpace(_steamtoolsInstalledVersion) && !string.IsNullOrWhiteSpace(releaseTag))
-                        {
-                            _steamtoolsInstalledVersion = releaseTag;
-                            SaveSteamtoolsInstalledVersion(_steamtoolsInstalledVersion);
-                            Logger.Log($"[Steamtools] Recorded installed version from release tag: {_steamtoolsInstalledVersion}");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Log($"[Steamtools] Failed to record installed version from release tag: {ex.Message}");
-                    }
+                    installationSucceeded = true;
                 }
                 finally
                 {
@@ -1983,17 +1631,11 @@ namespace SteamPluginManager.Views
             finally
             {
                 var installed = CheckSteamtoolsInstalled();
-                if (installed)
-                {
-                    var detectedVersion = GetInstalledSteamtoolsVersion();
-                    if (!string.IsNullOrWhiteSpace(detectedVersion))
-                    {
-                        _steamtoolsInstalledVersion = detectedVersion;
-                    }
-                    SaveSteamtoolsInstalledVersion(_steamtoolsInstalledVersion);
-                    Logger.Log($"[Steamtools] Saved installed version after {(copyStplugInToLua ? "install" : "update")}: {_steamtoolsInstalledVersion}");
-                }
-                UpdateSteamtoolsUi(installed);
+                RefreshSteamtoolsStatusAfterInstall(
+                    installed,
+                    releaseTag,
+                    installationSucceeded,
+                    copyStplugInToLua ? "install" : "update");
             }
         }
 

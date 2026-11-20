@@ -2,6 +2,22 @@
 
 ---
 
+## [3.1.11] - 2026-11-20
+
+### Added
+* **Dual Hubcap API Accounts:** DevView can generate or regenerate keys for two isolated Discord sessions, store them in private Supabase credentials, and use Account 2 as a request fallback.
+
+### Fixed
+* **Denuvo Check Without Login Popup:** Denuvo checks reuse the stored Hubcap API key and fall back to the existing DRM sources when no key is available, without opening WebView login.
+* **Hubcap Credential Notifications:** A game-specific Hubcap file access denial after successful API key validation is reported as an upstream access error instead of incorrectly notifying admins that the key is invalid.
+* **Hubcap Key Validation:** Non-authentication responses no longer cause active keys to be treated as invalid and regenerated.
+* **Game Request Source Fallback:** Non-Denuvo requests now try both configured Hubcap accounts if lua.tools has no file. An invalid or expired lua.tools cookie still stops the request and notifies the admin.
+* **Settings Cleanup:** Removed the obsolete local Hubcap session/API key reset action because request credentials are managed in Supabase; fixed dropdown placement to remain aligned while SettingsView scrolls.
+* **Steamtools Version Status:** Record the downloaded release tag after successful install/update and recalculate the update button from the refreshed installed version.
+* **OpenSteamTools File Management:** Install and update copy the full release archive with its directory structure. Managed files are backed up and tracked so uninstall removes installed files and restores overwritten Steam files.
+
+---
+
 ## [3.1.10] - 2026-11-19
 
 ### Fixed

@@ -44,6 +44,7 @@ namespace SteamPluginManager.Views
         private List<SidebarFeatureVisibility> _sidebarVisibilitySettings = new();
         private CustomLaunchTutorial? _selectedTutorial;
         private string _selectedTutorialPlatformFilter = "ALL";
+        private bool _requestCredentialsLoaded;
 
         private DevUserItem? _selectedUser;
         private UserProfile? _currentAdminProfile;
@@ -179,19 +180,31 @@ namespace SteamPluginManager.Views
                 return;
             }
 
+            _requestCredentialsLoaded = false;
             RefreshRequestCredentialsButton.IsEnabled = false;
             SaveRequestCredentialsButton.IsEnabled = false;
+            HubcapApiKey1ActionButton.IsEnabled = false;
+            HubcapApiKey2ActionButton.IsEnabled = false;
             RequestCredentialsStatusText.Text = "Loading credentials...";
             try
             {
                 var credentials = await RequestSourceCredentialsService.LoadAsync(DeviceIdentifier.GetDeviceId());
-                HubcapApiKeyTextBox.Text = credentials.HubcapApiKey;
+                HubcapApiKey1TextBox.Text = credentials.HubcapApiKey1;
+                HubcapApiKey2TextBox.Text = credentials.HubcapApiKey2;
                 LuaToolsCookieTextBox.Text = credentials.LuaToolsCookie;
-                RequestCredentialsStatusText.Text =
-                    string.IsNullOrWhiteSpace(credentials.HubcapApiKey) ||
-                    string.IsNullOrWhiteSpace(credentials.LuaToolsCookie)
-                        ? "Credentials loaded. One or more values are empty."
-                        : "Credentials loaded from private Supabase storage.";
+                _requestCredentialsLoaded = true;
+                UpdateHubcapApiKeyStatuses();
+                bool hasPrimaryKey = !string.IsNullOrWhiteSpace(credentials.HubcapApiKey1);
+                bool hasFallbackKey = !string.IsNullOrWhiteSpace(credentials.HubcapApiKey2);
+                RequestCredentialsStatusText.Text = hasPrimaryKey && hasFallbackKey
+                    ? "Both Hubcap API keys loaded from private Supabase storage."
+                    : hasPrimaryKey
+                        ? "Primary key loaded. The fallback account is not configured."
+                        : hasFallbackKey
+                            ? "Only the fallback account is configured."
+                            : "Credentials loaded, but no Hubcap API key is configured.";
+                if (string.IsNullOrWhiteSpace(credentials.LuaToolsCookie))
+                    RequestCredentialsStatusText.Text += " The lua.tools cookie is empty.";
                 LogConsole("[Request Sources] Credentials loaded.");
             }
             catch (Exception ex)
@@ -203,6 +216,8 @@ namespace SteamPluginManager.Views
             {
                 RefreshRequestCredentialsButton.IsEnabled = true;
                 SaveRequestCredentialsButton.IsEnabled = _currentAdminProfile?.IsAdmin == true;
+                HubcapApiKey1ActionButton.IsEnabled = _currentAdminProfile?.IsAdmin == true;
+                HubcapApiKey2ActionButton.IsEnabled = _currentAdminProfile?.IsAdmin == true;
             }
         }
 
@@ -221,13 +236,18 @@ namespace SteamPluginManager.Views
 
             RefreshRequestCredentialsButton.IsEnabled = false;
             SaveRequestCredentialsButton.IsEnabled = false;
+            HubcapApiKey1ActionButton.IsEnabled = false;
+            HubcapApiKey2ActionButton.IsEnabled = false;
             RequestCredentialsStatusText.Text = "Saving credentials...";
             try
             {
                 await RequestSourceCredentialsService.SaveAsync(
                     DeviceIdentifier.GetDeviceId(),
-                    HubcapApiKeyTextBox.Text.Trim(),
+                    HubcapApiKey1TextBox.Text.Trim(),
+                    HubcapApiKey2TextBox.Text.Trim(),
                     LuaToolsCookieTextBox.Text.Trim());
+                _requestCredentialsLoaded = true;
+                UpdateHubcapApiKeyStatuses();
                 RequestCredentialsStatusText.Text = "Credentials saved to private Supabase storage.";
                 LogConsole("[Request Sources] Credentials saved.");
             }
@@ -240,6 +260,103 @@ namespace SteamPluginManager.Views
             {
                 RefreshRequestCredentialsButton.IsEnabled = true;
                 SaveRequestCredentialsButton.IsEnabled = _currentAdminProfile?.IsAdmin == true;
+                HubcapApiKey1ActionButton.IsEnabled = _currentAdminProfile?.IsAdmin == true;
+                HubcapApiKey2ActionButton.IsEnabled = _currentAdminProfile?.IsAdmin == true;
+            }
+        }
+
+        private void UpdateHubcapApiKeyStatuses()
+        {
+            bool account1HasKey = !string.IsNullOrWhiteSpace(HubcapApiKey1TextBox.Text);
+            bool account2HasKey = !string.IsNullOrWhiteSpace(HubcapApiKey2TextBox.Text);
+            HubcapApiKey1ActionButton.Content = account1HasKey ? "Regenerate API key" : "Generate API key";
+            HubcapApiKey2ActionButton.Content = account2HasKey ? "Regenerate API key" : "Generate API key";
+            HubcapApiKey1StatusText.Text = account1HasKey ? "API key configured." : "No API key configured.";
+            HubcapApiKey2StatusText.Text = account2HasKey ? "API key configured." : "No API key configured.";
+        }
+
+        private async void GenerateHubcapApiKey1_Click(object sender, RoutedEventArgs e)
+        {
+            await GenerateHubcapApiKeyAsync(1);
+        }
+
+        private async void GenerateHubcapApiKey2_Click(object sender, RoutedEventArgs e)
+        {
+            await GenerateHubcapApiKeyAsync(2);
+        }
+
+        private async Task GenerateHubcapApiKeyAsync(int accountNumber)
+        {
+            if (_currentAdminProfile?.IsAdmin != true)
+            {
+                RequestCredentialsStatusText.Text = "Only an administrator can generate Hubcap API keys.";
+                return;
+            }
+            if (!_requestCredentialsLoaded)
+            {
+                RequestCredentialsStatusText.Text = "Reload credentials successfully before generating a key.";
+                return;
+            }
+
+            var actionButton = accountNumber == 1 ? HubcapApiKey1ActionButton : HubcapApiKey2ActionButton;
+            var accountStatus = accountNumber == 1 ? HubcapApiKey1StatusText : HubcapApiKey2StatusText;
+            var keyTextBox = accountNumber == 1 ? HubcapApiKey1TextBox : HubcapApiKey2TextBox;
+            string accountLabel = $"Discord account {accountNumber}";
+
+            actionButton.IsEnabled = false;
+            HubcapApiKey1ActionButton.IsEnabled = false;
+            HubcapApiKey2ActionButton.IsEnabled = false;
+            RefreshRequestCredentialsButton.IsEnabled = false;
+            SaveRequestCredentialsButton.IsEnabled = false;
+            accountStatus.Text = "Opening the isolated Discord session...";
+            RequestCredentialsStatusText.Text = $"Generating a Hubcap key for {accountLabel}...";
+
+            try
+            {
+                var dialog = new HubcapLoginDialog(
+                    silentMode: false,
+                    forceRegenerate: true,
+                    expiredKeyToAvoid: keyTextBox.Text.Trim(),
+                    browserProfileAccount: accountNumber,
+                    saveToRemoteConfig: false)
+                {
+                    Owner = Window.GetWindow(this)
+                };
+                dialog.Title = $"Hubcap API Key, Discord account {accountNumber}";
+
+                bool? result = dialog.ShowDialog();
+                if (result != true || string.IsNullOrWhiteSpace(dialog.ExtractedApiKey))
+                {
+                    accountStatus.Text = "Key generation was canceled or no key was returned.";
+                    RequestCredentialsStatusText.Text = $"{accountLabel} key was not changed.";
+                    return;
+                }
+
+                keyTextBox.Text = dialog.ExtractedApiKey;
+                await RequestSourceCredentialsService.SaveAsync(
+                    DeviceIdentifier.GetDeviceId(),
+                    HubcapApiKey1TextBox.Text.Trim(),
+                    HubcapApiKey2TextBox.Text.Trim(),
+                    LuaToolsCookieTextBox.Text.Trim());
+
+                UpdateHubcapApiKeyStatuses();
+                accountStatus.Text = "New API key generated and saved.";
+                RequestCredentialsStatusText.Text = $"{accountLabel} key saved to private Supabase storage.";
+                LogConsole($"[Request Sources] Hubcap key generated and saved for account {accountNumber}.");
+            }
+            catch (Exception ex)
+            {
+                accountStatus.Text = $"Unable to generate or save key: {ex.Message}";
+                RequestCredentialsStatusText.Text = $"{accountLabel} key generation failed.";
+                LogConsole($"[Request Sources] Hubcap key generation failed for account {accountNumber}: {ex.Message}");
+            }
+            finally
+            {
+                bool isAdmin = _currentAdminProfile?.IsAdmin == true;
+                HubcapApiKey1ActionButton.IsEnabled = isAdmin;
+                HubcapApiKey2ActionButton.IsEnabled = isAdmin;
+                RefreshRequestCredentialsButton.IsEnabled = true;
+                SaveRequestCredentialsButton.IsEnabled = isAdmin;
             }
         }
 

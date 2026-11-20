@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
+using SteamPluginManager.Services.Steam;
 
 namespace SteamPluginManager
 {
@@ -66,6 +67,15 @@ namespace SteamPluginManager
 
                 if (File.Exists(dllPath))
                 {
+                    if (OpenSteamToolDeploymentService.TryMoveManagedFile(
+                            steamPath,
+                            OpenSteamToolDllFileName,
+                            OpenSteamToolBakFileName))
+                    {
+                        Logger.Log("[Unlocker] Moved managed OpenSteamTool.dll to its tracked disabled state.");
+                        return;
+                    }
+
                     if (File.Exists(bakPath))
                         File.Delete(bakPath);
 
@@ -86,6 +96,9 @@ namespace SteamPluginManager
                 string? steamPath = SteamHelper.GetSteamPath();
                 if (string.IsNullOrWhiteSpace(steamPath))
                     return false;
+
+                if (OpenSteamToolDeploymentService.HasDeploymentRecord(steamPath))
+                    return true;
 
                 string[] candidateFiles = [OpenSteamToolDllFileName, "dwmapi.dll", "xinput1_4.dll"];
                 return candidateFiles.Any(file => File.Exists(Path.Combine(steamPath, file)))
@@ -175,31 +188,12 @@ namespace SteamPluginManager
                 Directory.CreateDirectory(extractDir);
                 ZipFile.ExtractToDirectory(tempZipPath, extractDir);
 
-                string[] targetFiles = ["OpenSteamTool.dll", "dwmapi.dll", "xinput1_4.dll"];
-                foreach (var targetFile in targetFiles)
-                {
-                    var sourceFile = Directory.GetFiles(extractDir, targetFile, SearchOption.AllDirectories).FirstOrDefault();
-                    if (string.IsNullOrWhiteSpace(sourceFile))
-                    {
-                        Logger.Log($"[Unlocker] Missing file in extracted release: {targetFile}");
-                        continue;
-                    }
-
-                    string targetPath = Path.Combine(steamPath, targetFile);
-                    File.Copy(sourceFile, targetPath, true);
-                    Logger.Log($"[Unlocker] Copied {sourceFile} -> {targetPath}");
-                }
-
-                string configPath = Path.Combine(steamPath, "config");
-                string luaPath = Path.Combine(configPath, "lua");
-                Directory.CreateDirectory(luaPath);
-
-                string stplugInPath = Path.Combine(configPath, "stplug-in");
-                if (Directory.Exists(stplugInPath))
-                {
-                    CopyDirectoryContents(stplugInPath, luaPath);
-                    Logger.Log($"[Unlocker] Copied contents from {stplugInPath} to {luaPath}");
-                }
+                OpenSteamToolDeploymentService.Deploy(
+                    steamPath,
+                    extractDir,
+                    Path.Combine(steamPath, "config", "stplug-in"),
+                    Path.Combine("config", "lua"),
+                    synchronizeSupplementalFiles: true);
 
                 string versionToSave = !string.IsNullOrWhiteSpace(releaseTag)
                     ? releaseTag.Trim()
@@ -264,21 +258,5 @@ namespace SteamPluginManager
             }
         }
 
-        private static void CopyDirectoryContents(string sourceDir, string targetDir)
-        {
-            Directory.CreateDirectory(targetDir);
-
-            foreach (var file in Directory.GetFiles(sourceDir))
-            {
-                string destPath = Path.Combine(targetDir, Path.GetFileName(file));
-                File.Copy(file, destPath, true);
-            }
-
-            foreach (var subDir in Directory.GetDirectories(sourceDir))
-            {
-                string childTargetDir = Path.Combine(targetDir, Path.GetFileName(subDir));
-                CopyDirectoryContents(subDir, childTargetDir);
-            }
-        }
     }
 }
